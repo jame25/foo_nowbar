@@ -92,9 +92,14 @@ public:
     // MiniPlayer state (for icon color)
     void set_miniplayer_active(bool active);
     
+    // Settings change notification
+    void on_settings_changed();
+    static void notify_all_settings_changed();
+    
 private:
     void update_layout(const RECT& rect);
     void invalidate();
+    void update_fonts();
     
     // Drawing helpers
     void draw_background(Gdiplus::Graphics& g, const RECT& rect);
