@@ -1,0 +1,28 @@
+#include "resource.h"
+#include <windows.h>
+#include <commctrl.h>
+
+IDD_NOWBAR_PREFERENCES DIALOGEX 0, 0, 340, 200
+STYLE DS_SETFONT | DS_FIXEDSYS | WS_CHILD
+FONT 8, "MS Shell Dlg", 0, 0, 0x0
+BEGIN
+    // Tab control at top
+    CONTROL         "", IDC_TAB_CONTROL, WC_TABCONTROL, 0, 4, 4, 332, 192
+    
+    // === General Tab Controls ===
+    LTEXT           "Theme Mode:", IDC_THEME_MODE_LABEL, 16, 32, 50, 12
+    COMBOBOX        IDC_THEME_MODE_COMBO, 70, 30, 120, 80, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    
+    // === Fonts Tab Controls ===
+    GROUPBOX        "Font Settings", IDC_FONTS_GROUP, 12, 26, 316, 130
+    
+    LTEXT           "Track Title:", IDC_TRACK_FONT_LABEL, 20, 44, 50, 12
+    LTEXT           "", IDC_TRACK_FONT_DISPLAY, 75, 44, 180, 12, SS_LEFTNOWORDWRAP | SS_PATHELLIPSIS
+    PUSHBUTTON      "Select...", IDC_TRACK_FONT_SELECT, 260, 42, 56, 14
+    
+    LTEXT           "Artist Name:", IDC_ARTIST_FONT_LABEL, 20, 64, 50, 12
+    LTEXT           "", IDC_ARTIST_FONT_DISPLAY, 75, 64, 180, 12, SS_LEFTNOWORDWRAP | SS_PATHELLIPSIS
+    PUSHBUTTON      "Select...", IDC_ARTIST_FONT_SELECT, 260, 62, 56, 14
+    
+    PUSHBUTTON      "Reset to Defaults", IDC_RESET_FONTS, 20, 130, 80, 14
+END
