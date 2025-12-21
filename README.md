@@ -12,7 +12,7 @@ A foobar2000 component that provides a "Now Playing" bar panel for both Default 
 - **Playback Controls**: Shuffle, Previous, Play/Pause, Next, and Repeat buttons
 - **Seek Bar**: Interactive progress bar with elapsed and remaining time display
 - **Volume Control**: Volume slider with mute toggle
-- **MiniPlayer Launch**: Quick access button to launch the MiniPlayer (requires foo_traycontrols)
+- **MiniPlayer Launch**: Quick access button to launch the MiniPlayer (requires [foo_traycontrols](https://github.com/jame25/foo_traycontrols))
 - **Dark/Light Mode**: Automatically adapts to foobar2000's theme
 - **DPI Aware**: Properly scales on high-DPI displays
 
