@@ -2,6 +2,8 @@
 
 A foobar2000 component that provides a "Now Playing" bar panel for both Default UI (DUI) and Columns UI (CUI).
 
+<img width="1287" height="172" alt="foo_nowbar" src="https://github.com/user-attachments/assets/7f1aefdd-ee54-41b6-8a0d-3ec63e173b53" />
+
 ## Features
 
 - **Dual UI Support**: Works with both Default UI and Columns UI
@@ -10,15 +12,13 @@ A foobar2000 component that provides a "Now Playing" bar panel for both Default 
 - **Playback Controls**: Shuffle, Previous, Play/Pause, Next, and Repeat buttons
 - **Seek Bar**: Interactive progress bar with elapsed and remaining time display
 - **Volume Control**: Volume slider with mute toggle
-- **MiniPlayer Launch**: Quick access button to launch the MiniPlayer (requires foo_traycontrols)
+- **MiniPlayer Launch**: Quick access button to launch the MiniPlayer (requires [foo_traycontrols](https://github.com/jame25/foo_traycontrols))
 - **Dark/Light Mode**: Automatically adapts to foobar2000's theme
 - **DPI Aware**: Properly scales on high-DPI displays
 
 ## Installation
 
 1. Copy `foo_nowbar.dll` to your foobar2000 `components` folder:
-   - 64-bit: Use the x64 build
-   - 32-bit: Use the Win32 build
 2. Restart foobar2000
 3. Add the panel:
    - **Default UI**: View → Layout → Add panel → "Nowbar Control Panel"

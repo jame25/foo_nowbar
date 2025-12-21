@@ -2,6 +2,9 @@
 #include "version.h"
 #include "guids.h"
 
+// Module instance handle for dialog creation
+HINSTANCE g_hInstance = nullptr;
+
 // Declare component version
 DECLARE_COMPONENT_VERSION(
     FOO_NOWBAR_DISPLAY_NAME,
@@ -32,4 +35,12 @@ namespace {
     };
     
     static initquit_factory_t<GdiplusInitializer> g_gdiplus_init;
+}
+
+// DllMain to capture module instance handle
+BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID /*reserved*/) {
+    if (reason == DLL_PROCESS_ATTACH) {
+        g_hInstance = hModule;
+    }
+    return TRUE;
 }

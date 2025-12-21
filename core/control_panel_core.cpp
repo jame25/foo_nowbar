@@ -1,13 +1,16 @@
 #include "pch.h"
 #include "control_panel_core.h"
+#include "../preferences.h"
 #include <vector>
 #include <algorithm>
 #include <memory>
+#include <mutex>
 
 namespace nowbar {
 
-// Static instance registry for theme change notifications
+// Static instance registry for theme/settings change notifications
 static std::vector<ControlPanelCore*> g_instances;
+static std::mutex g_instances_mutex;
 
 // Forward declare to allow use before full definition
 class theme_change_callback;
@@ -24,6 +27,7 @@ public:
 };
 
 void ControlPanelCore::register_instance(ControlPanelCore* instance) {
+    std::lock_guard<std::mutex> lock(g_instances_mutex);
     // Create theme callback on first registration
     if (!g_theme_callback && core_api::are_services_available()) {
         g_theme_callback = std::make_unique<theme_change_callback>();
@@ -32,10 +36,12 @@ void ControlPanelCore::register_instance(ControlPanelCore* instance) {
 }
 
 void ControlPanelCore::unregister_instance(ControlPanelCore* instance) {
+    std::lock_guard<std::mutex> lock(g_instances_mutex);
     g_instances.erase(std::remove(g_instances.begin(), g_instances.end(), instance), g_instances.end());
 }
 
 void ControlPanelCore::notify_theme_changed() {
+    std::lock_guard<std::mutex> lock(g_instances_mutex);
     bool dark = ui_config_manager::g_is_dark_mode();
     for (auto* instance : g_instances) {
         instance->set_dark_mode(dark);
@@ -97,22 +103,19 @@ ControlPanelCore::~ControlPanelCore() {
 
 void ControlPanelCore::initialize(HWND hwnd) {
     m_hwnd = hwnd;
-    
+
     // Get DPI
     HDC hdc = GetDC(hwnd);
     int dpi = GetDeviceCaps(hdc, LOGPIXELSX);
     ReleaseDC(hwnd, hdc);
     m_dpi_scale = dpi / 96.0f;
-    
+
     // Scale metrics
     m_metrics = LayoutMetrics();
     m_metrics.scale(m_dpi_scale);
-    
-    // Create fonts - Microsoft YaHei (title and artist increased by 40%)
-    Gdiplus::FontFamily fontFamily(L"Microsoft YaHei");
-    m_font_title.reset(new Gdiplus::Font(&fontFamily, 15.4f * m_dpi_scale, Gdiplus::FontStyleBold, Gdiplus::UnitPoint));
-    m_font_artist.reset(new Gdiplus::Font(&fontFamily, 12.6f * m_dpi_scale, Gdiplus::FontStyleRegular, Gdiplus::UnitPoint));
-    m_font_time.reset(new Gdiplus::Font(&fontFamily, 9.0f * m_dpi_scale, Gdiplus::FontStyleRegular, Gdiplus::UnitPoint));
+
+    // Apply theme mode and fonts from preferences
+    on_settings_changed();
 }
 
 void ControlPanelCore::set_dark_mode(bool dark) {
@@ -133,13 +136,10 @@ void ControlPanelCore::update_dpi(float scale) {
     m_dpi_scale = scale;
     m_metrics = LayoutMetrics();
     m_metrics.scale(scale);
-    
-    // Recreate fonts - Microsoft YaHei (title and artist increased by 40%)
-    Gdiplus::FontFamily fontFamily(L"Microsoft YaHei");
-    m_font_title.reset(new Gdiplus::Font(&fontFamily, 15.4f * m_dpi_scale, Gdiplus::FontStyleBold, Gdiplus::UnitPoint));
-    m_font_artist.reset(new Gdiplus::Font(&fontFamily, 12.6f * m_dpi_scale, Gdiplus::FontStyleRegular, Gdiplus::UnitPoint));
-    m_font_time.reset(new Gdiplus::Font(&fontFamily, 9.0f * m_dpi_scale, Gdiplus::FontStyleRegular, Gdiplus::UnitPoint));
-    
+
+    // Recreate fonts with new DPI
+    update_fonts();
+
     invalidate();
 }
 
@@ -158,6 +158,58 @@ void ControlPanelCore::set_miniplayer_active(bool active) {
         m_miniplayer_active = active;
         invalidate();
     }
+}
+
+void ControlPanelCore::notify_all_settings_changed() {
+    std::lock_guard<std::mutex> lock(g_instances_mutex);
+    for (auto* instance : g_instances) {
+        instance->on_settings_changed();
+    }
+}
+
+void ControlPanelCore::on_settings_changed() {
+    // Reload theme mode from preferences
+    int theme_mode = get_nowbar_theme_mode();
+
+    bool dark;
+    switch (theme_mode) {
+        case 1:  // Dark
+            dark = true;
+            break;
+        case 2:  // Light
+            dark = false;
+            break;
+        default:  // Auto (0) - follow system/foobar setting
+            dark = ui_config_manager::g_is_dark_mode();
+            break;
+    }
+
+    set_dark_mode(dark);
+
+    // Update fonts from preferences
+    update_fonts();
+}
+
+void ControlPanelCore::update_fonts() {
+    // Get font settings from preferences
+    LOGFONT lf_track = get_nowbar_use_custom_fonts() ? get_nowbar_track_font() : get_nowbar_default_font(false);
+    LOGFONT lf_artist = get_nowbar_use_custom_fonts() ? get_nowbar_artist_font() : get_nowbar_default_font(true);
+
+    // Create GDI+ fonts from LOGFONT
+    // Track title font
+    HDC hdc = GetDC(m_hwnd);
+    Gdiplus::Font* titleFont = new Gdiplus::Font(hdc, &lf_track);
+    Gdiplus::Font* artistFont = new Gdiplus::Font(hdc, &lf_artist);
+    ReleaseDC(m_hwnd, hdc);
+
+    m_font_title.reset(titleFont);
+    m_font_artist.reset(artistFont);
+
+    // Time font - always use default Microsoft YaHei
+    Gdiplus::FontFamily fontFamily(L"Microsoft YaHei");
+    m_font_time.reset(new Gdiplus::Font(&fontFamily, 9.0f * m_dpi_scale, Gdiplus::FontStyleRegular, Gdiplus::UnitPoint));
+
+    invalidate();
 }
 
 void ControlPanelCore::update_layout(const RECT& rect) {
