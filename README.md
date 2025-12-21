@@ -19,8 +19,6 @@ A foobar2000 component that provides a "Now Playing" bar panel for both Default 
 ## Installation
 
 1. Copy `foo_nowbar.dll` to your foobar2000 `components` folder:
-   - 64-bit: Use the x64 build
-   - 32-bit: Use the Win32 build
 2. Restart foobar2000
 3. Add the panel:
    - **Default UI**: View → Layout → Add panel → "Nowbar Control Panel"
