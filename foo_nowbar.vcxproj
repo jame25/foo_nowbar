@@ -184,6 +184,8 @@
     <ClInclude Include="guids.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="version.h" />
+    <ClInclude Include="resource.h" />
+    <ClInclude Include="preferences.h" />
     <ClInclude Include="core\control_panel_core.h" />
     <ClInclude Include="core\playback_state.h" />
     <ClInclude Include="ui\control_panel_cui.h" />
@@ -200,12 +202,16 @@
     </ClCompile>
     <ClCompile Include="core\control_panel_core.cpp" />
     <ClCompile Include="core\playback_state.cpp" />
+    <ClCompile Include="preferences.cpp" />
     <ClCompile Include="ui\control_panel_cui.cpp" />
     <ClCompile Include="ui\control_panel_dui.cpp" />
+  </ItemGroup>
+  
+  <ItemGroup>
+    <ResourceCompile Include="preferences.rc" />
   </ItemGroup>
   
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
 </Project>
-
