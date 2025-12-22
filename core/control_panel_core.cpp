@@ -144,9 +144,9 @@ void ControlPanelCore::update_dpi(float scale) {
 }
 
 SIZE ControlPanelCore::get_min_size() const {
-    // Minimum height: 0.75 inches, scaled by DPI
-    // At 96 DPI: 0.75 * 96 = 72 pixels
-    LONG min_height = static_cast<LONG>(0.75 * 96 * m_dpi_scale);
+    // Minimum height: 0.55 inches, scaled by DPI
+    // At 96 DPI: 0.55 * 96 = 53 pixels
+    LONG min_height = static_cast<LONG>(0.55 * 96 * m_dpi_scale);
     return {
         static_cast<LONG>(200 * m_dpi_scale),  // Reasonable minimum width
         min_height
@@ -236,12 +236,12 @@ void ControlPanelCore::update_layout(const RECT& rect) {
     
     // Calculate size scale factor based on panel height
     int reference_height = static_cast<int>(130 * m_dpi_scale);  // Reference height for full size
-    int min_height = static_cast<int>(72 * m_dpi_scale);  // Minimum panel height
+    int min_height = static_cast<int>(53 * m_dpi_scale);  // Minimum panel height (0.55 inches)
     float size_ratio = static_cast<float>(h - min_height) / static_cast<float>(reference_height - min_height);
     if (size_ratio < 0) size_ratio = 0;
     if (size_ratio > 1) size_ratio = 1;
-    // Scale from 85% at minimum to 100% at reference height
-    m_size_scale = 0.85f + 0.15f * size_ratio;
+    // Scale from 60% at minimum to 100% at reference height
+    m_size_scale = 0.60f + 0.40f * size_ratio;
 
     // Scaled sizes for controls
     int button_size = static_cast<int>(m_metrics.button_size * m_size_scale);
@@ -264,8 +264,26 @@ void ControlPanelCore::update_layout(const RECT& rect) {
     // Control buttons (center)
     int controls_width = button_size * 4 + play_button_size + spacing * 4;
     int controls_x = rect.left + (w - controls_width) / 2;
-    // Move buttons up by 10% of panel height (increases space between buttons and seekbar)
-    int vertical_offset = h / 10;
+    
+    // Calculate seekbar and time display heights first to determine available space
+    int seek_gap = static_cast<int>(10 * m_dpi_scale * m_size_scale);
+    int seekbar_height = static_cast<int>(m_metrics.seekbar_height * m_size_scale);
+    int total_seekbar_area = seek_gap + seekbar_height;
+    
+    // Calculate how much space we need below the play button for seekbar
+    // At minimum height, we need to move controls up more to fit everything
+    int bottom_margin = static_cast<int>(4 * m_dpi_scale);  // Small margin at bottom
+    int available_below_center = (rect.bottom - rect.top) / 2 - bottom_margin;
+    int needed_below_center = play_button_size / 2 + total_seekbar_area;
+    
+    // Increase vertical offset if needed to fit seekbar within panel
+    int base_offset = h / 10;  // Base 10% offset
+    int extra_offset = 0;
+    if (needed_below_center > available_below_center) {
+        extra_offset = needed_below_center - available_below_center;
+    }
+    int vertical_offset = base_offset + extra_offset;
+    
     int btn_y = y_center - button_size / 2 - vertical_offset;
     int play_y = y_center - play_button_size / 2 - vertical_offset;
 
@@ -283,19 +301,17 @@ void ControlPanelCore::update_layout(const RECT& rect) {
 
     m_rect_repeat = { controls_x, btn_y, controls_x + button_size, btn_y + button_size };
     
-    // Track info (between artwork and controls) - vertically centered
+    // Track info (between artwork and controls) - truly vertically centered on panel
     int info_x = m_rect_artwork.right + spacing;
     int info_right = m_rect_shuffle.left - spacing;
     int info_height = static_cast<int>((m_metrics.text_height * 2 + 8) * m_size_scale);  // Title + artist + gap (scaled)
-    int info_y = y_center - info_height / 2;
+    int info_y = y_center - info_height / 2;  // Centered on panel, not offset with controls
     m_rect_track_info = { info_x, info_y, info_right, info_y + info_height };
 
     // Seekbar (directly below control icons, 20% wider than control buttons)
-    int seek_gap = static_cast<int>(10 * m_dpi_scale);  // Fixed gap below controls
     int seek_y = m_rect_play.bottom + seek_gap;
     int seekbar_base_width = m_rect_repeat.right - m_rect_shuffle.left;
     int extra_width = seekbar_base_width / 10;  // 10% on each side = 20% total
-    int seekbar_height = static_cast<int>(m_metrics.seekbar_height * m_size_scale);
     m_rect_seekbar = {
         m_rect_shuffle.left - extra_width,     // Extend 10% left
         seek_y,
@@ -303,13 +319,13 @@ void ControlPanelCore::update_layout(const RECT& rect) {
         seek_y + seekbar_height
     };
 
-    // Time display (beside seekbar)
-    int time_gap = static_cast<int>(2 * m_dpi_scale);  // Fixed gap below seekbar
+    // Time display (beside seekbar) - no longer needed below, times are drawn inline
+    int time_gap = static_cast<int>(2 * m_dpi_scale * m_size_scale);
     m_rect_time = {
         m_rect_seekbar.left,
         m_rect_seekbar.bottom + time_gap,
         m_rect_seekbar.right,
-        m_rect_seekbar.bottom + m_metrics.text_height
+        m_rect_seekbar.bottom + static_cast<int>(m_metrics.text_height * m_size_scale)
     };
 }
 
@@ -585,27 +601,36 @@ void ControlPanelCore::draw_time_display(Gdiplus::Graphics& g) {
     sfRight.SetAlignment(Gdiplus::StringAlignmentFar);
     sfRight.SetLineAlignment(Gdiplus::StringAlignmentCenter);
     
+    // Create a scaled time font based on current size scale
+    float time_font_size = 9.0f * m_dpi_scale * m_size_scale;
+    Gdiplus::FontFamily fontFamily(L"Microsoft YaHei");
+    Gdiplus::Font timeFont(&fontFamily, time_font_size, Gdiplus::FontStyleRegular, Gdiplus::UnitPoint);
+    
     // Position time at the ends of the seekbar (vertically centered with seekbar)
     int seekbar_center_y = (m_rect_seekbar.top + m_rect_seekbar.bottom) / 2;
-    int time_height = m_metrics.text_height;
+    int time_height = static_cast<int>(m_metrics.text_height * m_size_scale);
+    
+    // Scale the time offset by size scale
+    float time_offset = 60 * m_dpi_scale * m_size_scale;
+    float time_width = 55 * m_dpi_scale * m_size_scale;
     
     // Left side: elapsed time (before seekbar)
     Gdiplus::RectF leftTimeRect(
-        (float)(m_rect_seekbar.left - 60 * m_dpi_scale), 
+        (float)(m_rect_seekbar.left - time_offset), 
         (float)(seekbar_center_y - time_height / 2),
-        (float)(55 * m_dpi_scale),
+        time_width,
         (float)time_height
     );
-    g.DrawString(elapsed.c_str(), -1, m_font_time.get(), leftTimeRect, &sfRight, &timeBrush);
+    g.DrawString(elapsed.c_str(), -1, &timeFont, leftTimeRect, &sfRight, &timeBrush);
     
     // Right side: remaining time (after seekbar)
     Gdiplus::RectF rightTimeRect(
-        (float)(m_rect_seekbar.right + 5 * m_dpi_scale),
+        (float)(m_rect_seekbar.right + 5 * m_dpi_scale * m_size_scale),
         (float)(seekbar_center_y - time_height / 2),
-        (float)(60 * m_dpi_scale),
+        time_offset,
         (float)time_height
     );
-    g.DrawString(remaining_str.c_str(), -1, m_font_time.get(), rightTimeRect, &sfLeft, &timeBrush);
+    g.DrawString(remaining_str.c_str(), -1, &timeFont, rightTimeRect, &sfLeft, &timeBrush);
 }
 
 void ControlPanelCore::draw_volume(Gdiplus::Graphics& g) {
