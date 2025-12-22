@@ -1,10 +1,15 @@
 #include "pch.h"
 #include "control_panel_core.h"
 #include "../preferences.h"
+#include "../resource.h"
 #include <vector>
 #include <algorithm>
 #include <memory>
 #include <mutex>
+#include <dwmapi.h>
+#include <commdlg.h>
+#pragma comment(lib, "dwmapi.lib")
+#pragma comment(lib, "comdlg32.lib")
 
 namespace nowbar {
 
@@ -116,6 +121,9 @@ void ControlPanelCore::initialize(HWND hwnd) {
 
     // Apply theme mode and fonts from preferences
     on_settings_changed();
+    
+    // Initialize mood state for current track
+    update_mood_state();
 }
 
 void ControlPanelCore::set_dark_mode(bool dark) {
@@ -262,8 +270,8 @@ void ControlPanelCore::update_layout(const RECT& rect) {
     int vol_x = mp_x - spacing - volume_width;
     m_rect_volume = { vol_x, y_center - vol_bar_height / 2 - vol_mp_offset, mp_x - spacing, y_center + vol_bar_height / 2 - vol_mp_offset };
 
-    // Control buttons (center)
-    int controls_width = button_size * 4 + play_button_size + spacing * 4;
+    // Control buttons (center) - heart, shuffle, prev, play, next, repeat
+    int controls_width = button_size * 5 + play_button_size + spacing * 5;
     int controls_x = rect.left + (w - controls_width) / 2;
     
     // Calculate seekbar and time display heights first to determine available space
@@ -288,6 +296,9 @@ void ControlPanelCore::update_layout(const RECT& rect) {
     int btn_y = y_center - button_size / 2 - vertical_offset;
     int play_y = y_center - play_button_size / 2 - vertical_offset;
 
+    m_rect_heart = { controls_x, btn_y, controls_x + button_size, btn_y + button_size };
+    controls_x += button_size + spacing;
+
     m_rect_shuffle = { controls_x, btn_y, controls_x + button_size, btn_y + button_size };
     controls_x += button_size + spacing;
 
@@ -304,7 +315,7 @@ void ControlPanelCore::update_layout(const RECT& rect) {
     
     // Track info (between artwork and controls) - truly vertically centered on panel
     int info_x = m_rect_artwork.right + spacing;
-    int info_right = m_rect_shuffle.left - spacing;
+    int info_right = m_rect_heart.left - spacing;
     int info_height = static_cast<int>((m_metrics.text_height * 2 + 8) * m_size_scale);  // Title + artist + gap (scaled)
     int info_y = y_center - info_height / 2;  // Centered on panel, not offset with controls
     m_rect_track_info = { info_x, info_y, info_right, info_y + info_height };
@@ -420,6 +431,21 @@ void ControlPanelCore::draw_track_info(Gdiplus::Graphics& g) {
 }
 
 void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics& g) {
+    // Heart button (mood toggle)
+    bool heart_hovered = (m_hover_region == HitRegion::HeartButton);
+    int hw = m_rect_heart.right - m_rect_heart.left;
+    int hh = m_rect_heart.bottom - m_rect_heart.top;
+    if (heart_hovered) {
+        Gdiplus::SolidBrush hoverBrush(m_button_hover_color);
+        g.FillEllipse(&hoverBrush, m_rect_heart.left, m_rect_heart.top, hw, hh);
+    }
+    // Red when mood is set, gray when empty
+    Gdiplus::Color heartColor = m_mood_active ? Gdiplus::Color(255, 239, 83, 80) : m_text_secondary_color;
+    int heart_inset = hw * 15 / 100;
+    RECT heartIconRect = { m_rect_heart.left + heart_inset, m_rect_heart.top + heart_inset,
+                            m_rect_heart.right - heart_inset, m_rect_heart.bottom - heart_inset };
+    draw_heart_icon(g, heartIconRect, heartColor);
+
     // Shuffle button
     bool shuffle_active = (m_state.playback_order == 4);  // Shuffle tracks
     bool shuffle_hovered = (m_hover_region == HitRegion::ShuffleButton);
@@ -711,6 +737,7 @@ HitRegion ControlPanelCore::hit_test(int x, int y) const {
     if (pt_in_rect(m_rect_play, x, y)) return HitRegion::PlayButton;
     if (pt_in_rect(m_rect_prev, x, y)) return HitRegion::PrevButton;
     if (pt_in_rect(m_rect_next, x, y)) return HitRegion::NextButton;
+    if (pt_in_rect(m_rect_heart, x, y)) return HitRegion::HeartButton;
     if (pt_in_rect(m_rect_shuffle, x, y)) return HitRegion::ShuffleButton;
     if (pt_in_rect(m_rect_repeat, x, y)) return HitRegion::RepeatButton;
     if (pt_in_rect(m_rect_seekbar, x, y)) return HitRegion::SeekBar;
@@ -801,6 +828,7 @@ void ControlPanelCore::on_lbutton_up(int x, int y) {
         case HitRegion::PlayButton: do_play_pause(); break;
         case HitRegion::PrevButton: do_prev(); break;
         case HitRegion::NextButton: do_next(); break;
+        case HitRegion::HeartButton: do_toggle_mood(); break;
         case HitRegion::ShuffleButton: do_shuffle_toggle(); break;
         case HitRegion::RepeatButton: do_repeat_cycle(); break;
         case HitRegion::MiniPlayerButton: {
@@ -845,8 +873,361 @@ void ControlPanelCore::on_lbutton_up(int x, int y) {
 }
 
 void ControlPanelCore::on_mouse_wheel(int delta) {
-    // Disabled - no mouse wheel functionality in this component
-    (void)delta;
+    // Adjust volume with mouse wheel
+    auto pc = playback_control::get();
+    // delta is typically 120 per notch, positive = scroll up = volume up
+    float volume_step = 2.5f;  // dB per scroll notch
+    float volume_change = (delta > 0) ? volume_step : -volume_step;
+    float new_volume = m_state.volume_db + volume_change;
+    // Clamp to valid range (-100 to 0 dB)
+    new_volume = std::max(-100.0f, std::min(0.0f, new_volume));
+    pc->set_volume(new_volume);
+}
+
+void ControlPanelCore::on_lbutton_dblclk(int x, int y) {
+    HitRegion region = hit_test(x, y);
+    if (region == HitRegion::Artwork) {
+        show_picture_viewer();
+    }
+}
+
+// Picture viewer window class name
+static const wchar_t* g_picture_viewer_class = L"foo_nowbar_picture_viewer";
+static bool g_picture_viewer_registered = false;
+static HWND g_picture_viewer_hwnd = nullptr;
+static std::unique_ptr<Gdiplus::Bitmap> g_viewer_bitmap;
+static album_art_data_ptr g_viewer_art_data;  // Keep original data for saving
+static bool g_viewer_fit_to_window = true;
+static bool g_viewer_dark_mode = true;
+static HWND g_viewer_dropdown = nullptr;
+static HWND g_viewer_save_btn = nullptr;
+static const int VIEWER_PANEL_HEIGHT = 36;
+static const int IDC_VIEW_MODE = 1001;
+static const int IDC_SAVE_BTN = 1002;
+
+// DWM dark mode attribute
+#ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
+#define DWMWA_USE_IMMERSIVE_DARK_MODE 20
+#endif
+
+static void SetViewerDarkMode(HWND hwnd, bool dark) {
+    BOOL value = dark ? TRUE : FALSE;
+    DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &value, sizeof(value));
+}
+
+static pfc::string8 GetImageTypeFromData(album_art_data_ptr data) {
+    if (!data.is_valid() || data->get_size() < 4) return "Unknown";
+    const unsigned char* bytes = static_cast<const unsigned char*>(data->data());
+    // Check JPEG signature
+    if (bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF) return "JPEG";
+    // Check PNG signature
+    if (bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47) return "PNG";
+    // Check GIF signature
+    if (bytes[0] == 0x47 && bytes[1] == 0x49 && bytes[2] == 0x46) return "GIF";
+    // Check BMP signature
+    if (bytes[0] == 0x42 && bytes[1] == 0x4D) return "BMP";
+    // Check WebP signature
+    if (data->get_size() >= 12 && bytes[0] == 0x52 && bytes[1] == 0x49 && bytes[2] == 0x46 && bytes[3] == 0x46 
+        && bytes[8] == 0x57 && bytes[9] == 0x45 && bytes[10] == 0x42 && bytes[11] == 0x50) return "WebP";
+    return "Unknown";
+}
+
+static void SaveArtworkToFile(HWND parent) {
+    if (!g_viewer_art_data.is_valid()) return;
+    
+    pfc::string8 type = GetImageTypeFromData(g_viewer_art_data);
+    const wchar_t* filter = L"JPEG Image (*.jpg)\0*.jpg\0PNG Image (*.png)\0*.png\0All Files (*.*)\0*.*\0";
+    const wchar_t* defaultExt = L"jpg";
+    if (type == "PNG") {
+        filter = L"PNG Image (*.png)\0*.png\0JPEG Image (*.jpg)\0*.jpg\0All Files (*.*)\0*.*\0";
+        defaultExt = L"png";
+    }
+    
+    wchar_t filename[MAX_PATH] = L"cover";
+    
+    OPENFILENAMEW ofn = {};
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = parent;
+    ofn.lpstrFilter = filter;
+    ofn.lpstrFile = filename;
+    ofn.nMaxFile = MAX_PATH;
+    ofn.lpstrDefExt = defaultExt;
+    ofn.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST;
+    
+    if (GetSaveFileNameW(&ofn)) {
+        // Save the file
+        HANDLE hFile = CreateFileW(filename, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (hFile != INVALID_HANDLE_VALUE) {
+            DWORD written;
+            WriteFile(hFile, g_viewer_art_data->data(), static_cast<DWORD>(g_viewer_art_data->get_size()), &written, nullptr);
+            CloseHandle(hFile);
+        }
+    }
+}
+
+static LRESULT CALLBACK PictureViewerProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+    switch (msg) {
+    case WM_CREATE: {
+        // Create bottom panel controls
+        HINSTANCE hInst = core_api::get_my_instance();
+        HFONT hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
+        
+        g_viewer_dropdown = CreateWindowExW(0, L"COMBOBOX", nullptr,
+            WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_VSCROLL,
+            8, 0, 160, 200, hwnd, (HMENU)IDC_VIEW_MODE, hInst, nullptr);
+        SendMessage(g_viewer_dropdown, WM_SETFONT, (WPARAM)hFont, TRUE);
+        SendMessageW(g_viewer_dropdown, CB_ADDSTRING, 0, (LPARAM)L"Fit to window size");
+        SendMessageW(g_viewer_dropdown, CB_ADDSTRING, 0, (LPARAM)L"Show in original size");
+        SendMessageW(g_viewer_dropdown, CB_SETCURSEL, g_viewer_fit_to_window ? 0 : 1, 0);
+        
+        g_viewer_save_btn = CreateWindowExW(0, L"BUTTON", L"Save",
+            WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+            0, 0, 80, 26, hwnd, (HMENU)IDC_SAVE_BTN, hInst, nullptr);
+        SendMessage(g_viewer_save_btn, WM_SETFONT, (WPARAM)hFont, TRUE);
+        
+        return 0;
+    }
+    
+    case WM_SIZE: {
+        RECT rect;
+        GetClientRect(hwnd, &rect);
+        int panelY = rect.bottom - VIEWER_PANEL_HEIGHT;
+        
+        // Position dropdown on left
+        SetWindowPos(g_viewer_dropdown, nullptr, 8, panelY + 6, 160, 200, SWP_NOZORDER);
+        
+        // Position save button on right
+        SetWindowPos(g_viewer_save_btn, nullptr, rect.right - 88, panelY + 5, 80, 26, SWP_NOZORDER);
+        
+        InvalidateRect(hwnd, nullptr, FALSE);
+        return 0;
+    }
+    
+    case WM_PAINT: {
+        PAINTSTRUCT ps;
+        HDC hdc = BeginPaint(hwnd, &ps);
+        
+        RECT rect;
+        GetClientRect(hwnd, &rect);
+        
+        // Image area (above panel)
+        int imageAreaHeight = rect.bottom - VIEWER_PANEL_HEIGHT;
+        
+        // Create GDI+ graphics
+        Gdiplus::Graphics g(hdc);
+        g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+        g.SetSmoothingMode(Gdiplus::SmoothingModeHighQuality);
+        
+        // Draw background based on theme
+        Gdiplus::Color bgColor = g_viewer_dark_mode ? Gdiplus::Color(255, 24, 24, 24) : Gdiplus::Color(255, 240, 240, 240);
+        Gdiplus::Color textColor = g_viewer_dark_mode ? Gdiplus::Color(255, 200, 200, 200) : Gdiplus::Color(255, 60, 60, 60);
+        Gdiplus::Color panelColor = g_viewer_dark_mode ? Gdiplus::Color(255, 40, 40, 40) : Gdiplus::Color(255, 220, 220, 220);
+        
+        g.Clear(bgColor);
+        
+        if (g_viewer_bitmap) {
+            int bw = g_viewer_bitmap->GetWidth();
+            int bh = g_viewer_bitmap->GetHeight();
+            int cw = rect.right - rect.left;
+            int ch = imageAreaHeight;
+            
+            int dw, dh, dx, dy;
+            if (g_viewer_fit_to_window) {
+                // Fit to window
+                float scale = std::min((float)cw / bw, (float)ch / bh);
+                dw = static_cast<int>(bw * scale);
+                dh = static_cast<int>(bh * scale);
+                dx = (cw - dw) / 2;
+                dy = (ch - dh) / 2;
+            } else {
+                // Original size (centered, may clip)
+                dw = bw;
+                dh = bh;
+                dx = (cw - dw) / 2;
+                dy = (ch - dh) / 2;
+            }
+            
+            g.DrawImage(g_viewer_bitmap.get(), dx, dy, dw, dh);
+        }
+        
+        // Draw bottom panel background
+        Gdiplus::SolidBrush panelBrush(panelColor);
+        g.FillRectangle(&panelBrush, 0, imageAreaHeight, rect.right, VIEWER_PANEL_HEIGHT);
+        
+        // Draw image info in center
+        if (g_viewer_art_data.is_valid() && g_viewer_bitmap) {
+            Gdiplus::Font font(L"Segoe UI", 9);
+            Gdiplus::SolidBrush textBrush(textColor);
+            Gdiplus::StringFormat sf;
+            sf.SetAlignment(Gdiplus::StringAlignmentCenter);
+            
+            // File size
+            size_t fileSize = g_viewer_art_data->get_size();
+            wchar_t sizeStr[64];
+            if (fileSize >= 1024 * 1024) {
+                swprintf_s(sizeStr, L"%.2f MB", fileSize / (1024.0 * 1024.0));
+            } else {
+                swprintf_s(sizeStr, L"%.1f KB", fileSize / 1024.0);
+            }
+            
+            // Resolution and type
+            pfc::string8 type = GetImageTypeFromData(g_viewer_art_data);
+            wchar_t infoStr[128];
+            swprintf_s(infoStr, L"%dx%d %S", g_viewer_bitmap->GetWidth(), g_viewer_bitmap->GetHeight(), type.c_str());
+            
+            float centerX = rect.right / 2.0f;
+            Gdiplus::RectF sizeRect(centerX - 100, (float)(imageAreaHeight + 4), 200, 14);
+            Gdiplus::RectF infoRect(centerX - 100, (float)(imageAreaHeight + 18), 200, 14);
+            
+            g.DrawString(sizeStr, -1, &font, sizeRect, &sf, &textBrush);
+            g.DrawString(infoStr, -1, &font, infoRect, &sf, &textBrush);
+        }
+        
+        EndPaint(hwnd, &ps);
+        return 0;
+    }
+    
+    case WM_COMMAND:
+        if (LOWORD(wp) == IDC_VIEW_MODE && HIWORD(wp) == CBN_SELCHANGE) {
+            g_viewer_fit_to_window = (SendMessageW(g_viewer_dropdown, CB_GETCURSEL, 0, 0) == 0);
+            InvalidateRect(hwnd, nullptr, FALSE);
+        } else if (LOWORD(wp) == IDC_SAVE_BTN) {
+            SaveArtworkToFile(hwnd);
+        }
+        return 0;
+    
+    case WM_CTLCOLORSTATIC:
+    case WM_CTLCOLORBTN: {
+        HDC hdcCtrl = (HDC)wp;
+        if (g_viewer_dark_mode) {
+            SetBkColor(hdcCtrl, RGB(40, 40, 40));
+            SetTextColor(hdcCtrl, RGB(200, 200, 200));
+            static HBRUSH darkBrush = CreateSolidBrush(RGB(40, 40, 40));
+            return (LRESULT)darkBrush;
+        }
+        return DefWindowProc(hwnd, msg, wp, lp);
+    }
+        
+    case WM_DESTROY:
+        g_picture_viewer_hwnd = nullptr;
+        g_viewer_bitmap.reset();
+        g_viewer_art_data.release();
+        g_viewer_dropdown = nullptr;
+        g_viewer_save_btn = nullptr;
+        return 0;
+    }
+    
+    return DefWindowProc(hwnd, msg, wp, lp);
+}
+
+void ControlPanelCore::show_picture_viewer() {
+    if (!m_artwork_bitmap) return;
+    
+    // Register window class if needed
+    if (!g_picture_viewer_registered) {
+        WNDCLASSEXW wc = {};
+        wc.cbSize = sizeof(wc);
+        wc.style = 0;
+        wc.lpfnWndProc = PictureViewerProc;
+        wc.hInstance = core_api::get_my_instance();
+        wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
+        wc.hbrBackground = nullptr;  // We handle painting
+        wc.lpszClassName = g_picture_viewer_class;
+        wc.hIcon = LoadIcon(core_api::get_my_instance(), MAKEINTRESOURCE(IDI_PICTURE_VIEWER));
+        wc.hIconSm = wc.hIcon;
+        
+        if (RegisterClassExW(&wc)) {
+            g_picture_viewer_registered = true;
+        }
+    }
+    
+    if (!g_picture_viewer_registered) return;
+    
+    // Close existing viewer if open
+    if (g_picture_viewer_hwnd) {
+        DestroyWindow(g_picture_viewer_hwnd);
+        g_picture_viewer_hwnd = nullptr;
+    }
+    
+    // Clone the artwork bitmap for the viewer
+    g_viewer_bitmap.reset(m_artwork_bitmap->Clone(0, 0, m_artwork_bitmap->GetWidth(), 
+                                                   m_artwork_bitmap->GetHeight(), 
+                                                   m_artwork_bitmap->GetPixelFormat()));
+    
+    // Get current track and artwork data for saving
+    auto pc = playback_control::get();
+    metadb_handle_ptr track;
+    if (pc->get_now_playing(track) && track.is_valid()) {
+        try {
+            auto art_manager = album_art_manager_v3::get();
+            auto extractor = art_manager->open(
+                pfc::list_single_ref_t<metadb_handle_ptr>(track),
+                pfc::list_single_ref_t<GUID>(album_art_ids::cover_front),
+                fb2k::noAbort);
+            if (extractor.is_valid()) {
+                album_art_data_ptr data;
+                if (extractor->query(album_art_ids::cover_front, data, fb2k::noAbort)) {
+                    g_viewer_art_data = data;
+                }
+            }
+        } catch (...) {}
+    }
+    
+    // Set dark mode based on current theme
+    g_viewer_dark_mode = m_dark_mode;
+    
+    // Calculate window size based on image size
+    int img_width = m_artwork_bitmap->GetWidth();
+    int img_height = m_artwork_bitmap->GetHeight();
+    
+    // Get screen size
+    int screen_width = GetSystemMetrics(SM_CXSCREEN);
+    int screen_height = GetSystemMetrics(SM_CYSCREEN);
+    
+    // Scale to fit in 80% of screen while maintaining aspect ratio
+    int max_width = screen_width * 80 / 100;
+    int max_height = screen_height * 80 / 100;
+    
+    float scale = std::min((float)max_width / img_width, (float)max_height / img_height);
+    scale = std::min(scale, 1.0f);  // Don't upscale
+    
+    int client_width = static_cast<int>(img_width * scale);
+    int client_height = static_cast<int>(img_height * scale) + VIEWER_PANEL_HEIGHT;  // Add panel height
+    
+    // Minimum size
+    client_width = std::max(400, client_width);
+    client_height = std::max(350, client_height);
+    
+    // Adjust for window chrome (title bar, borders)
+    RECT win_rect = { 0, 0, client_width, client_height };
+    AdjustWindowRectEx(&win_rect, WS_OVERLAPPEDWINDOW & ~(WS_MAXIMIZEBOX | WS_MINIMIZEBOX), FALSE, 0);
+    int win_width = win_rect.right - win_rect.left;
+    int win_height = win_rect.bottom - win_rect.top;
+    
+    // Center on screen
+    int win_x = (screen_width - win_width) / 2;
+    int win_y = (screen_height - win_height) / 2;
+    
+    // Create the viewer window with standard decorations (title bar, close button, resizable)
+    g_picture_viewer_hwnd = CreateWindowExW(
+        0,  // No extended styles
+        g_picture_viewer_class,
+        L"Album Art",
+        WS_OVERLAPPEDWINDOW & ~(WS_MAXIMIZEBOX | WS_MINIMIZEBOX),  // Standard window without max/min
+        win_x, win_y, win_width, win_height,
+        nullptr,
+        nullptr,
+        core_api::get_my_instance(),
+        nullptr
+    );
+    
+    if (g_picture_viewer_hwnd) {
+        // Apply dark/light mode to title bar
+        SetViewerDarkMode(g_picture_viewer_hwnd, g_viewer_dark_mode);
+        
+        ShowWindow(g_picture_viewer_hwnd, SW_SHOW);
+        SetForegroundWindow(g_picture_viewer_hwnd);
+    }
 }
 
 void ControlPanelCore::do_play_pause() {
@@ -901,6 +1282,79 @@ void ControlPanelCore::do_volume_change(float delta) {
     }
 }
 
+// Mood metadata filter for updating MOOD tag
+class MoodMetadataFilter : public file_info_filter {
+public:
+    MoodMetadataFilter(bool set_mood, const char* value) : m_set_mood(set_mood), m_value(value) {}
+    
+    bool apply_filter(trackRef track, t_filestats stats, file_info& info) override {
+        (void)track; (void)stats;
+        if (m_set_mood) {
+            info.meta_set("MOOD", m_value.c_str());
+        } else {
+            info.meta_remove_field("MOOD");
+        }
+        return true;
+    }
+private:
+    bool m_set_mood;
+    pfc::string8 m_value;
+};
+
+void ControlPanelCore::do_toggle_mood() {
+    auto pc = playback_control::get();
+    metadb_handle_ptr track;
+    if (!pc->get_now_playing(track) || !track.is_valid()) {
+        return;
+    }
+    
+    // Get current date/time
+    SYSTEMTIME st;
+    GetLocalTime(&st);
+    char datetime[64];
+    snprintf(datetime, sizeof(datetime), "%04d-%02d-%02d %02d:%02d:%02d",
+             st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+    
+    // Toggle mood state
+    bool new_mood = !m_mood_active;
+    
+    // Create filter
+    auto filter = fb2k::service_new<MoodMetadataFilter>(new_mood, datetime);
+    
+    // Update metadata asynchronously
+    metadb_handle_list tracks;
+    tracks.add_item(track);
+    metadb_io_v2::get()->update_info_async(
+        tracks,
+        filter,
+        core_api::get_main_window(),
+        metadb_io_v2::op_flag_partial_info_aware,
+        nullptr
+    );
+    
+    m_mood_active = new_mood;
+    invalidate();
+}
+
+void ControlPanelCore::update_mood_state() {
+    auto pc = playback_control::get();
+    metadb_handle_ptr track;
+    if (!pc->get_now_playing(track) || !track.is_valid()) {
+        m_mood_active = false;
+        return;
+    }
+    
+    // Check if MOOD tag exists
+    metadb_info_container::ptr info_container = track->get_info_ref();
+    if (info_container.is_valid()) {
+        const file_info& info = info_container->info();
+        const char* mood = info.meta_get("MOOD", 0);
+        m_mood_active = (mood != nullptr && strlen(mood) > 0);
+    } else {
+        m_mood_active = false;
+    }
+}
+
 void ControlPanelCore::on_playback_state_changed(const PlaybackState& state) {
     m_state = state;
     invalidate();
@@ -921,6 +1375,9 @@ void ControlPanelCore::on_volume_changed(float volume_db) {
 }
 
 void ControlPanelCore::on_track_changed() {
+    // Update mood state for new track
+    update_mood_state();
+    
     // Request artwork update from UI wrapper
     if (m_artwork_request_cb) {
         m_artwork_request_cb();
@@ -1174,6 +1631,83 @@ void ControlPanelCore::draw_next_icon(Gdiplus::Graphics& g, const RECT& rect, co
     path.AddLine(svgToNorm(220, -240), svgToNorm(220, -720));
     path.AddLine(svgToNorm(220, -720), svgToNorm(580, -480));
     path.AddLine(svgToNorm(580, -480), svgToNorm(220, -240));
+    path.CloseFigure();
+    
+    g.FillPath(&brush, &path);
+    g.SetTransform(&oldMatrix);
+}
+
+// Draw heart icon from Material Design SVG (favorite_24dp.svg)
+// Path uses viewBox 0 -960 960 960 (same as other icons)
+void ControlPanelCore::draw_heart_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color) {
+    float iconSize = static_cast<float>(std::min(rect.right - rect.left, rect.bottom - rect.top)) * 1.0f;
+    float cx = (rect.left + rect.right) / 2.0f;
+    float cy = (rect.top + rect.bottom) / 2.0f;
+    float scale = iconSize / 24.0f;
+    
+    Gdiplus::Matrix oldMatrix;
+    g.GetTransform(&oldMatrix);
+    
+    Gdiplus::Matrix matrix;
+    matrix.Translate(cx - 12 * scale, cy - 12 * scale);
+    matrix.Scale(scale, scale);
+    g.SetTransform(&matrix);
+    
+    Gdiplus::SolidBrush brush(color);
+    Gdiplus::GraphicsPath path;
+    
+    // Heart shape from Material Design favorite icon
+    // Simplified solid heart - two rounded lobes meeting at bottom point
+    // Based on viewBox 0 -960 960 960, center at 480
+    path.StartFigure();
+    
+    // Bottom point of heart
+    float bottomX = 480, bottomY = -120;
+    // Left lobe center
+    float leftLobeX = 300, leftLobeY = -634;
+    // Right lobe center  
+    float rightLobeX = 660, rightLobeY = -634;
+    // Top indent
+    float topIndentX = 480, topIndentY = -500;
+    
+    // Draw heart using beziers - left side
+    path.AddBezier(
+        svgToNorm(bottomX, bottomY),           // Bottom point
+        svgToNorm(200, -300),                   // Control 1
+        svgToNorm(80, -500),                    // Control 2
+        svgToNorm(80, leftLobeY)                // Left side
+    );
+    path.AddBezier(
+        svgToNorm(80, leftLobeY),
+        svgToNorm(80, -780),                    // Top left control
+        svgToNorm(200, -854),                   // Top control
+        svgToNorm(leftLobeX, -854)              // Top of left lobe
+    );
+    path.AddBezier(
+        svgToNorm(leftLobeX, -854),
+        svgToNorm(400, -854),                   // Control toward center
+        svgToNorm(480, -800),                   // Center top control
+        svgToNorm(topIndentX, -720)             // Top indent
+    );
+    // Right side (mirror)
+    path.AddBezier(
+        svgToNorm(topIndentX, -720),
+        svgToNorm(480, -800),
+        svgToNorm(560, -854),
+        svgToNorm(rightLobeX, -854)             // Top of right lobe
+    );
+    path.AddBezier(
+        svgToNorm(rightLobeX, -854),
+        svgToNorm(760, -854),
+        svgToNorm(880, -780),
+        svgToNorm(880, rightLobeY)              // Right side
+    );
+    path.AddBezier(
+        svgToNorm(880, rightLobeY),
+        svgToNorm(880, -500),
+        svgToNorm(760, -300),
+        svgToNorm(bottomX, bottomY)             // Back to bottom
+    );
     path.CloseFigure();
     
     g.FillPath(&brush, &path);
