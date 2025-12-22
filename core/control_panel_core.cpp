@@ -218,7 +218,7 @@ void ControlPanelCore::update_layout(const RECT& rect) {
     int y_center = rect.top + h / 2;
 
     // Artwork (left side) - size based on panel height with margins
-    int art_margin = m_metrics.artwork_margin;
+    int art_margin = get_nowbar_cover_margin() ? m_metrics.artwork_margin : 0;
     int art_size = h - (art_margin * 2);  // Fit within panel height with margins
     if (art_size > m_metrics.artwork_size) {
         art_size = m_metrics.artwork_size;  // Cap at max size
@@ -252,7 +252,8 @@ void ControlPanelCore::update_layout(const RECT& rect) {
     // Volume and MiniPlayer (right side) - moved up by 10%
     int vol_mp_offset = h / 10;  // Move up by 10%
     int mp_size = static_cast<int>(29 * m_dpi_scale * m_size_scale);  // MiniPlayer icon size (scaled)
-    int right_margin = rect.right - art_margin;
+    int right_inset = static_cast<int>(16 * m_dpi_scale);  // Extra inset from right edge
+    int right_margin = rect.right - art_margin - right_inset;
     int mp_x = right_margin - mp_size;
     int btn_y_right = y_center - mp_size / 2 - vol_mp_offset;
     m_rect_miniplayer = { mp_x, btn_y_right, mp_x + mp_size, btn_y_right + mp_size };
@@ -333,7 +334,8 @@ void ControlPanelCore::paint(HDC hdc, const RECT& rect) {
     update_layout(rect);
     
     Gdiplus::Graphics g(hdc);
-    g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+    g.SetSmoothingMode(Gdiplus::SmoothingModeHighQuality);
+    g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHighQuality);
     g.SetTextRenderingHint(Gdiplus::TextRenderingHintClearTypeGridFit);
     
     draw_background(g, rect);
@@ -544,34 +546,40 @@ void ControlPanelCore::draw_seekbar(Gdiplus::Graphics& g) {
     int track_h = static_cast<int>(m_metrics.seekbar_height * m_size_scale);
     int track_y = m_rect_seekbar.top + (h - track_h) / 2;
     int radius = track_h / 2;  // For rounded ends
+    bool is_pill = (get_nowbar_bar_style() == 0);  // 0=Pill-shaped, 1=Rectangular
 
-    // Background track (rounded pill shape) - dark gray
+    // Background track - dark gray
     Gdiplus::SolidBrush trackBrush(Gdiplus::Color(255, 60, 60, 60));
-    {
+    if (is_pill) {
         Gdiplus::GraphicsPath trackPath;
         int r = std::min(radius, w / 2);
         trackPath.AddArc(m_rect_seekbar.left, track_y, r * 2, track_h, 90, 180);
         trackPath.AddArc(m_rect_seekbar.left + w - r * 2, track_y, r * 2, track_h, 270, 180);
         trackPath.CloseFigure();
         g.FillPath(&trackBrush, &trackPath);
+    } else {
+        g.FillRectangle(&trackBrush, m_rect_seekbar.left, track_y, w, track_h);
     }
 
-    // Progress (rounded) - light gray
+    // Progress - light gray
     double progress = (m_state.track_length > 0) ? (m_state.playback_time / m_state.track_length) : 0.0;
     int progress_w = static_cast<int>(w * progress);
 
-    if (progress_w > radius * 2) {
+    if (progress_w > 0) {
         Gdiplus::SolidBrush progressBrush(Gdiplus::Color(255, 140, 140, 140));  // Darker gray
-        Gdiplus::GraphicsPath progressPath;
-        int r = std::min(radius, progress_w / 2);
-        progressPath.AddArc(m_rect_seekbar.left, track_y, r * 2, track_h, 90, 180);
-        progressPath.AddArc(m_rect_seekbar.left + progress_w - r * 2, track_y, r * 2, track_h, 270, 180);
-        progressPath.CloseFigure();
-        g.FillPath(&progressBrush, &progressPath);
-    } else if (progress_w > 0) {
-        // Too small for pill, just draw circle
-        Gdiplus::SolidBrush progressBrush(Gdiplus::Color(255, 140, 140, 140));  // Darker gray
-        g.FillEllipse(&progressBrush, m_rect_seekbar.left, track_y, track_h, track_h);
+        if (is_pill && progress_w > radius * 2) {
+            Gdiplus::GraphicsPath progressPath;
+            int r = std::min(radius, progress_w / 2);
+            progressPath.AddArc(m_rect_seekbar.left, track_y, r * 2, track_h, 90, 180);
+            progressPath.AddArc(m_rect_seekbar.left + progress_w - r * 2, track_y, r * 2, track_h, 270, 180);
+            progressPath.CloseFigure();
+            g.FillPath(&progressBrush, &progressPath);
+        } else if (is_pill) {
+            // Too small for pill, just draw circle
+            g.FillEllipse(&progressBrush, m_rect_seekbar.left, track_y, track_h, track_h);
+        } else {
+            g.FillRectangle(&progressBrush, m_rect_seekbar.left, track_y, progress_w, track_h);
+        }
     }
 
     // Seek handle (only on hover)
@@ -653,23 +661,26 @@ void ControlPanelCore::draw_volume(Gdiplus::Graphics& g) {
     int icon_gap = static_cast<int>(6 * m_dpi_scale * m_size_scale);  // Extra gap to move icon left
     draw_volume_icon(g, m_rect_volume.left - icon_gap, icon_y, icon_size, m_text_secondary_color, vol_level);
 
-    // Volume bar - use same thickness as seekbar with rounded ends
+    // Volume bar - use same thickness as seekbar
     int bar_offset = icon_size + static_cast<int>(12 * m_dpi_scale * m_size_scale);  // Icon + gap (scaled)
     int bar_x = m_rect_volume.left + bar_offset;
     int bar_w = w - bar_offset;
     int bar_h = static_cast<int>(m_metrics.seekbar_height * m_size_scale);
     int bar_y = m_rect_volume.top + (h - bar_h) / 2;
     int radius = bar_h / 2;
+    bool is_pill = (get_nowbar_bar_style() == 0);  // 0=Pill-shaped, 1=Rectangular
     
-    // Background (rounded pill shape)
+    // Background
     Gdiplus::SolidBrush trackBrush(Gdiplus::Color(255, 60, 60, 60));  // Same as seekbar track
-    {
+    if (is_pill) {
         Gdiplus::GraphicsPath trackPath;
         int r = std::min(radius, bar_w / 2);
         trackPath.AddArc(bar_x, bar_y, r * 2, bar_h, 90, 180);
         trackPath.AddArc(bar_x + bar_w - r * 2, bar_y, r * 2, bar_h, 270, 180);
         trackPath.CloseFigure();
         g.FillPath(&trackBrush, &trackPath);
+    } else {
+        g.FillRectangle(&trackBrush, bar_x, bar_y, bar_w, bar_h);
     }
     
     // Level (convert dB to linear: 0dB = 100%, -100dB = 0%)
@@ -678,18 +689,21 @@ void ControlPanelCore::draw_volume(Gdiplus::Graphics& g) {
     if (bar_level > 1) bar_level = 1;
     int level_w = static_cast<int>(bar_w * bar_level);
     
-    if (level_w > radius * 2) {
+    if (level_w > 0) {
         Gdiplus::SolidBrush levelBrush(Gdiplus::Color(255, 140, 140, 140));  // Darker gray like seekbar
-        Gdiplus::GraphicsPath levelPath;
-        int r = std::min(radius, level_w / 2);
-        levelPath.AddArc(bar_x, bar_y, r * 2, bar_h, 90, 180);
-        levelPath.AddArc(bar_x + level_w - r * 2, bar_y, r * 2, bar_h, 270, 180);
-        levelPath.CloseFigure();
-        g.FillPath(&levelBrush, &levelPath);
-    } else if (level_w > 0) {
-        // Too small for pill, just draw circle
-        Gdiplus::SolidBrush levelBrush(Gdiplus::Color(255, 140, 140, 140));  // Darker gray like seekbar
-        g.FillEllipse(&levelBrush, bar_x, bar_y, bar_h, bar_h);
+        if (is_pill && level_w > radius * 2) {
+            Gdiplus::GraphicsPath levelPath;
+            int r = std::min(radius, level_w / 2);
+            levelPath.AddArc(bar_x, bar_y, r * 2, bar_h, 90, 180);
+            levelPath.AddArc(bar_x + level_w - r * 2, bar_y, r * 2, bar_h, 270, 180);
+            levelPath.CloseFigure();
+            g.FillPath(&levelBrush, &levelPath);
+        } else if (is_pill) {
+            // Too small for pill, just draw circle
+            g.FillEllipse(&levelBrush, bar_x, bar_y, bar_h, bar_h);
+        } else {
+            g.FillRectangle(&levelBrush, bar_x, bar_y, level_w, bar_h);
+        }
     }
 }
 
