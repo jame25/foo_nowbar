@@ -6,6 +6,10 @@
 // Configuration access functions
 int get_nowbar_theme_mode();  // 0=Auto, 1=Dark, 2=Light
 
+// Get the effective background color for the current theme mode configuration
+// Can be called early before core is fully initialized
+COLORREF get_nowbar_initial_bg_color();
+
 // Font configuration functions
 bool get_nowbar_use_custom_fonts();
 LOGFONT get_nowbar_artist_font();
