@@ -1,7 +1,10 @@
 #pragma once
 
+// Icon resources
+#define IDI_PICTURE_VIEWER         101
+
 // Dialog IDs
-#define IDD_NOWBAR_PREFERENCES     101
+#define IDD_NOWBAR_PREFERENCES     102
 
 // Tab control
 #define IDC_TAB_CONTROL            1001
