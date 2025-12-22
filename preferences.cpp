@@ -15,6 +15,16 @@ static cfg_int cfg_nowbar_theme_mode(
     0  // Default: Auto
 );
 
+static cfg_int cfg_nowbar_cover_margin(
+    GUID{0xABCDEF05, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0x8D}},
+    1  // Default: Yes (margin enabled)
+);
+
+static cfg_int cfg_nowbar_bar_style(
+    GUID{0xABCDEF06, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0x8E}},
+    0  // Default: Pill-shaped
+);
+
 // Font configuration
 static cfg_struct_t<LOGFONT> cfg_nowbar_artist_font(
     GUID{0xABCDEF02, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0x8A}},
@@ -59,6 +69,17 @@ int get_nowbar_theme_mode() {
     if (mode < 0) mode = 0;
     if (mode > 2) mode = 2;
     return mode;
+}
+
+bool get_nowbar_cover_margin() {
+    return cfg_nowbar_cover_margin != 0;
+}
+
+int get_nowbar_bar_style() {
+    int style = cfg_nowbar_bar_style;
+    if (style < 0) style = 0;
+    if (style > 1) style = 1;
+    return style;
 }
 
 COLORREF get_nowbar_initial_bg_color() {
@@ -195,6 +216,10 @@ void nowbar_preferences::switch_tab(int tab) {
     BOOL show_general = (tab == 0) ? SW_SHOW : SW_HIDE;
     ShowWindow(GetDlgItem(m_hwnd, IDC_THEME_MODE_LABEL), show_general);
     ShowWindow(GetDlgItem(m_hwnd, IDC_THEME_MODE_COMBO), show_general);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_COVER_MARGIN_LABEL), show_general);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_COVER_MARGIN_COMBO), show_general);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_BAR_STYLE_LABEL), show_general);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_BAR_STYLE_COMBO), show_general);
     
     // Fonts tab controls
     BOOL show_fonts = (tab == 1) ? SW_SHOW : SW_HIDE;
@@ -205,7 +230,6 @@ void nowbar_preferences::switch_tab(int tab) {
     ShowWindow(GetDlgItem(m_hwnd, IDC_ARTIST_FONT_LABEL), show_fonts);
     ShowWindow(GetDlgItem(m_hwnd, IDC_ARTIST_FONT_DISPLAY), show_fonts);
     ShowWindow(GetDlgItem(m_hwnd, IDC_ARTIST_FONT_SELECT), show_fonts);
-    ShowWindow(GetDlgItem(m_hwnd, IDC_RESET_FONTS), show_fonts);
 }
 
 INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
@@ -232,6 +256,18 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         SendMessage(hThemeCombo, CB_ADDSTRING, 0, (LPARAM)L"Light");
         SendMessage(hThemeCombo, CB_SETCURSEL, cfg_nowbar_theme_mode, 0);
         
+        // Initialize cover margin combobox
+        HWND hMarginCombo = GetDlgItem(hwnd, IDC_COVER_MARGIN_COMBO);
+        SendMessage(hMarginCombo, CB_ADDSTRING, 0, (LPARAM)L"Yes");
+        SendMessage(hMarginCombo, CB_ADDSTRING, 0, (LPARAM)L"No");
+        SendMessage(hMarginCombo, CB_SETCURSEL, cfg_nowbar_cover_margin ? 0 : 1, 0);
+        
+        // Initialize bar style combobox
+        HWND hBarStyleCombo = GetDlgItem(hwnd, IDC_BAR_STYLE_COMBO);
+        SendMessage(hBarStyleCombo, CB_ADDSTRING, 0, (LPARAM)L"Pill-shaped");
+        SendMessage(hBarStyleCombo, CB_ADDSTRING, 0, (LPARAM)L"Rectangular");
+        SendMessage(hBarStyleCombo, CB_SETCURSEL, cfg_nowbar_bar_style, 0);
+        
         // Initialize font displays
         p_this->update_font_displays();
         
@@ -249,6 +285,8 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
     case WM_COMMAND:
         switch (LOWORD(wp)) {
         case IDC_THEME_MODE_COMBO:
+        case IDC_COVER_MARGIN_COMBO:
+        case IDC_BAR_STYLE_COMBO:
             if (HIWORD(wp) == CBN_SELCHANGE) {
                 p_this->on_changed();
             }
@@ -263,12 +301,6 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         case IDC_ARTIST_FONT_SELECT:
             if (HIWORD(wp) == BN_CLICKED) {
                 p_this->select_artist_font();
-            }
-            break;
-            
-        case IDC_RESET_FONTS:
-            if (HIWORD(wp) == BN_CLICKED) {
-                p_this->reset_fonts_to_default();
             }
             break;
         }
@@ -302,6 +334,13 @@ void nowbar_preferences::apply_settings() {
         // Save theme mode
         cfg_nowbar_theme_mode = (int)SendMessage(GetDlgItem(m_hwnd, IDC_THEME_MODE_COMBO), CB_GETCURSEL, 0, 0);
         
+        // Save cover margin (0=Yes, 1=No in combobox -> config 1=Yes, 0=No)
+        int marginSel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_COVER_MARGIN_COMBO), CB_GETCURSEL, 0, 0);
+        cfg_nowbar_cover_margin = (marginSel == 0) ? 1 : 0;
+        
+        // Save bar style (0=Pill-shaped, 1=Rectangular)
+        cfg_nowbar_bar_style = (int)SendMessage(GetDlgItem(m_hwnd, IDC_BAR_STYLE_COMBO), CB_GETCURSEL, 0, 0);
+        
         // Notify all registered instances to update
         nowbar::ControlPanelCore::notify_all_settings_changed();
     }
@@ -309,13 +348,21 @@ void nowbar_preferences::apply_settings() {
 
 void nowbar_preferences::reset_settings() {
     if (m_hwnd) {
-        // Reset to defaults
-        cfg_nowbar_theme_mode = 0;  // Auto
-        reset_nowbar_fonts();
-        
-        // Update UI
-        SendMessage(GetDlgItem(m_hwnd, IDC_THEME_MODE_COMBO), CB_SETCURSEL, 0, 0);
-        update_font_displays();
+        if (m_current_tab == 0) {
+            // Reset General tab settings
+            cfg_nowbar_theme_mode = 0;  // Auto
+            cfg_nowbar_cover_margin = 1;  // Yes (margin enabled)
+            cfg_nowbar_bar_style = 0;  // Pill-shaped
+            
+            // Update General tab UI
+            SendMessage(GetDlgItem(m_hwnd, IDC_THEME_MODE_COMBO), CB_SETCURSEL, 0, 0);
+            SendMessage(GetDlgItem(m_hwnd, IDC_COVER_MARGIN_COMBO), CB_SETCURSEL, 0, 0);
+            SendMessage(GetDlgItem(m_hwnd, IDC_BAR_STYLE_COMBO), CB_SETCURSEL, 0, 0);
+        } else if (m_current_tab == 1) {
+            // Reset Fonts tab settings
+            reset_nowbar_fonts();
+            update_font_displays();
+        }
         
         // Notify panels
         nowbar::ControlPanelCore::notify_all_settings_changed();
@@ -374,12 +421,6 @@ void nowbar_preferences::select_artist_font() {
         update_font_displays();
         on_changed();
     }
-}
-
-void nowbar_preferences::reset_fonts_to_default() {
-    reset_nowbar_fonts();
-    update_font_displays();
-    on_changed();
 }
 
 pfc::string8 nowbar_preferences::format_font_name(const LOGFONT& lf) {
