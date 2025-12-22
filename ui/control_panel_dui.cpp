@@ -71,8 +71,8 @@ ui_element_config::ptr ControlPanelDUI::get_configuration() {
 ui_element_min_max_info ControlPanelDUI::get_min_max_info() {
     ui_element_min_max_info info;
     
-    // Minimum height: 0.75 inches, scaled by DPI
-    // At 96 DPI: 0.75 * 96 = 72 pixels
+    // Minimum height: 0.55 inches, scaled by DPI
+    // At 96 DPI: 0.55 * 96 = 53 pixels
     int dpi = 96;
     if (m_hwnd) {
         HDC hdc = GetDC(m_hwnd);
@@ -82,7 +82,7 @@ ui_element_min_max_info ControlPanelDUI::get_min_max_info() {
         }
     }
 
-    info.m_min_height = static_cast<t_uint32>(0.75 * dpi);
+    info.m_min_height = static_cast<t_uint32>(0.55 * dpi);
     info.m_min_width = 200;  // Reasonable minimum width
     
     return info;
