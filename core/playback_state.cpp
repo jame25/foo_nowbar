@@ -92,6 +92,52 @@ void PlaybackStateManager::on_volume_change(float p_new_val) {
     notify_volume_changed(p_new_val);
 }
 
+void PlaybackStateManager::on_playback_dynamic_info_track(const file_info& p_info) {
+    // Extract metadata from dynamic info (for streaming sources like internet radio)
+    const char* title = nullptr;
+    const char* artist = nullptr;
+    
+    // Standard metadata
+    if (p_info.meta_exists("TITLE")) {
+        title = p_info.meta_get("TITLE", 0);
+    }
+    if (p_info.meta_exists("ARTIST")) {
+        artist = p_info.meta_get("ARTIST", 0);
+    }
+    
+    // ICY metadata (common in internet radio)
+    if (!title && p_info.meta_exists("STREAMTITLE")) {
+        title = p_info.meta_get("STREAMTITLE", 0);
+    }
+    if (!title && p_info.meta_exists("ICY_TITLE")) {
+        title = p_info.meta_get("ICY_TITLE", 0);
+    }
+    
+    // Alternative artist fields
+    if (!artist && p_info.meta_exists("ALBUMARTIST")) {
+        artist = p_info.meta_get("ALBUMARTIST", 0);
+    }
+    if (!artist && p_info.meta_exists("PERFORMER")) {
+        artist = p_info.meta_get("PERFORMER", 0);
+    }
+    
+    // Update state if we found meaningful metadata
+    bool changed = false;
+    if (title && strlen(title) > 0) {
+        m_state.track_title = title;
+        changed = true;
+    }
+    if (artist && strlen(artist) > 0) {
+        m_state.track_artist = artist;
+        changed = true;
+    }
+    
+    if (changed) {
+        notify_track_changed();
+        notify_state_changed();
+    }
+}
+
 void PlaybackStateManager::update_track_info(metadb_handle_ptr p_track) {
     if (!p_track.is_valid()) return;
     
