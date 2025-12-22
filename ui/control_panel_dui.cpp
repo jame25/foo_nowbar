@@ -229,6 +229,12 @@ LRESULT ControlPanelDUI::handle_message(UINT msg, WPARAM wp, LPARAM lp) {
         }
         return 0;
         
+    case WM_LBUTTONDBLCLK:
+        if (m_core) {
+            m_core->on_lbutton_dblclk(GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
+        }
+        return 0;
+        
     case WM_MOUSEWHEEL:
         if (m_core) {
             m_core->on_mouse_wheel(GET_WHEEL_DELTA_WPARAM(wp));
