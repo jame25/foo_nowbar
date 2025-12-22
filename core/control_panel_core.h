@@ -9,8 +9,8 @@ struct LayoutMetrics {
     int panel_height = 80;
     int artwork_size = 128;
     int artwork_margin = 8;
-    int button_size = 38;       // 20% bigger than 32
-    int play_button_size = 48;  // 20% bigger than 40
+    int button_size = 38;
+    int play_button_size = 48;
     int seekbar_height = 9;
     int volume_width = 192;  // 20% wider than 160
     int spacing = 16;
@@ -137,6 +137,7 @@ private:
     HWND m_hwnd = nullptr;
     bool m_dark_mode = true;
     float m_dpi_scale = 1.0f;
+    float m_size_scale = 1.0f;  // Scale factor for controls based on panel height
     LayoutMetrics m_metrics;
     
     // Current state
