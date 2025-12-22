@@ -42,9 +42,9 @@ void ControlPanelCore::unregister_instance(ControlPanelCore* instance) {
 
 void ControlPanelCore::notify_theme_changed() {
     std::lock_guard<std::mutex> lock(g_instances_mutex);
-    bool dark = ui_config_manager::g_is_dark_mode();
+    // Call on_settings_changed() which properly respects theme mode preferences
     for (auto* instance : g_instances) {
-        instance->set_dark_mode(dark);
+        instance->on_settings_changed();
     }
 }
 
@@ -144,12 +144,12 @@ void ControlPanelCore::update_dpi(float scale) {
 }
 
 SIZE ControlPanelCore::get_min_size() const {
-    // Minimum height: 1.5 inches, scaled by DPI
-    // At 96 DPI: 1.5 * 96 = 144 pixels
-    LONG min_height = static_cast<LONG>(1.5 * 96 * m_dpi_scale);
-    return { 
+    // Minimum height: 0.75 inches, scaled by DPI
+    // At 96 DPI: 0.75 * 96 = 72 pixels
+    LONG min_height = static_cast<LONG>(0.75 * 96 * m_dpi_scale);
+    return {
         static_cast<LONG>(200 * m_dpi_scale),  // Reasonable minimum width
-        min_height 
+        min_height
     };
 }
 
@@ -216,74 +216,100 @@ void ControlPanelCore::update_layout(const RECT& rect) {
     int w = rect.right - rect.left;
     int h = rect.bottom - rect.top;
     int y_center = rect.top + h / 2;
-    
-    // Artwork (left side)
-    int art_y = y_center - m_metrics.artwork_size / 2;
-    m_rect_artwork = { 
-        rect.left + m_metrics.artwork_margin, 
-        art_y, 
-        rect.left + m_metrics.artwork_margin + m_metrics.artwork_size, 
-        art_y + m_metrics.artwork_size 
+
+    // Artwork (left side) - size based on panel height with margins
+    int art_margin = m_metrics.artwork_margin;
+    int art_size = h - (art_margin * 2);  // Fit within panel height with margins
+    if (art_size > m_metrics.artwork_size) {
+        art_size = m_metrics.artwork_size;  // Cap at max size
+    }
+    if (art_size < 32) {
+        art_size = 32;  // Minimum size
+    }
+    int art_y = y_center - art_size / 2;
+    m_rect_artwork = {
+        rect.left + art_margin,
+        art_y,
+        rect.left + art_margin + art_size,
+        art_y + art_size
     };
     
+    // Calculate size scale factor based on panel height
+    int reference_height = static_cast<int>(130 * m_dpi_scale);  // Reference height for full size
+    int min_height = static_cast<int>(72 * m_dpi_scale);  // Minimum panel height
+    float size_ratio = static_cast<float>(h - min_height) / static_cast<float>(reference_height - min_height);
+    if (size_ratio < 0) size_ratio = 0;
+    if (size_ratio > 1) size_ratio = 1;
+    // Scale from 85% at minimum to 100% at reference height
+    m_size_scale = 0.85f + 0.15f * size_ratio;
+
+    // Scaled sizes for controls
+    int button_size = static_cast<int>(m_metrics.button_size * m_size_scale);
+    int play_button_size = static_cast<int>(m_metrics.play_button_size * m_size_scale);
+    int spacing = static_cast<int>(m_metrics.spacing * m_size_scale);
+    int volume_width = static_cast<int>(m_metrics.volume_width * m_size_scale);
+
     // Volume and MiniPlayer (right side) - moved up by 10%
     int vol_mp_offset = h / 10;  // Move up by 10%
-    int mp_size = static_cast<int>(29 * m_dpi_scale);  // MiniPlayer icon size (original)
-    int right_margin = rect.right - m_metrics.artwork_margin;
+    int mp_size = static_cast<int>(29 * m_dpi_scale * m_size_scale);  // MiniPlayer icon size (scaled)
+    int right_margin = rect.right - art_margin;
     int mp_x = right_margin - mp_size;
     int btn_y_right = y_center - mp_size / 2 - vol_mp_offset;
     m_rect_miniplayer = { mp_x, btn_y_right, mp_x + mp_size, btn_y_right + mp_size };
-    
-    int vol_x = mp_x - m_metrics.spacing - m_metrics.volume_width;
-    int vol_bar_height = 20;  // Volume bar vertical size
-    m_rect_volume = { vol_x, y_center - vol_bar_height / 2 - vol_mp_offset, mp_x - m_metrics.spacing, y_center + vol_bar_height / 2 - vol_mp_offset };
-    
+
+    int vol_bar_height = static_cast<int>(20 * m_dpi_scale * m_size_scale);  // Volume bar vertical size (scaled)
+    int vol_x = mp_x - spacing - volume_width;
+    m_rect_volume = { vol_x, y_center - vol_bar_height / 2 - vol_mp_offset, mp_x - spacing, y_center + vol_bar_height / 2 - vol_mp_offset };
+
     // Control buttons (center)
-    int controls_width = m_metrics.button_size * 4 + m_metrics.play_button_size + m_metrics.spacing * 4;
+    int controls_width = button_size * 4 + play_button_size + spacing * 4;
     int controls_x = rect.left + (w - controls_width) / 2;
     // Move buttons up by 10% of panel height (increases space between buttons and seekbar)
     int vertical_offset = h / 10;
-    int btn_y = y_center - m_metrics.button_size / 2 - vertical_offset;
-    int play_y = y_center - m_metrics.play_button_size / 2 - vertical_offset;
-    
-    m_rect_shuffle = { controls_x, btn_y, controls_x + m_metrics.button_size, btn_y + m_metrics.button_size };
-    controls_x += m_metrics.button_size + m_metrics.spacing;
-    
-    m_rect_prev = { controls_x, btn_y, controls_x + m_metrics.button_size, btn_y + m_metrics.button_size };
-    controls_x += m_metrics.button_size + m_metrics.spacing;
-    
-    m_rect_play = { controls_x, play_y, controls_x + m_metrics.play_button_size, play_y + m_metrics.play_button_size };
-    controls_x += m_metrics.play_button_size + m_metrics.spacing;
-    
-    m_rect_next = { controls_x, btn_y, controls_x + m_metrics.button_size, btn_y + m_metrics.button_size };
-    controls_x += m_metrics.button_size + m_metrics.spacing;
-    
-    m_rect_repeat = { controls_x, btn_y, controls_x + m_metrics.button_size, btn_y + m_metrics.button_size };
+    int btn_y = y_center - button_size / 2 - vertical_offset;
+    int play_y = y_center - play_button_size / 2 - vertical_offset;
+
+    m_rect_shuffle = { controls_x, btn_y, controls_x + button_size, btn_y + button_size };
+    controls_x += button_size + spacing;
+
+    m_rect_prev = { controls_x, btn_y, controls_x + button_size, btn_y + button_size };
+    controls_x += button_size + spacing;
+
+    m_rect_play = { controls_x, play_y, controls_x + play_button_size, play_y + play_button_size };
+    controls_x += play_button_size + spacing;
+
+    m_rect_next = { controls_x, btn_y, controls_x + button_size, btn_y + button_size };
+    controls_x += button_size + spacing;
+
+    m_rect_repeat = { controls_x, btn_y, controls_x + button_size, btn_y + button_size };
     
     // Track info (between artwork and controls) - vertically centered
-    int info_x = m_rect_artwork.right + m_metrics.spacing;
-    int info_right = m_rect_shuffle.left - m_metrics.spacing;
-    int info_height = m_metrics.text_height * 2 + 10;  // Title + artist + gap (20% larger)
+    int info_x = m_rect_artwork.right + spacing;
+    int info_right = m_rect_shuffle.left - spacing;
+    int info_height = static_cast<int>((m_metrics.text_height * 2 + 8) * m_size_scale);  // Title + artist + gap (scaled)
     int info_y = y_center - info_height / 2;
     m_rect_track_info = { info_x, info_y, info_right, info_y + info_height };
-    
-    // Seekbar (directly below control icons, 20% wider than control buttons, moved down 10%)
-    int seek_y = m_rect_play.bottom + m_metrics.spacing / 2 + m_metrics.seekbar_height;  // Extra offset to move down
+
+    // Seekbar (directly below control icons, 20% wider than control buttons)
+    int seek_gap = static_cast<int>(10 * m_dpi_scale);  // Fixed gap below controls
+    int seek_y = m_rect_play.bottom + seek_gap;
     int seekbar_base_width = m_rect_repeat.right - m_rect_shuffle.left;
     int extra_width = seekbar_base_width / 10;  // 10% on each side = 20% total
-    m_rect_seekbar = { 
+    int seekbar_height = static_cast<int>(m_metrics.seekbar_height * m_size_scale);
+    m_rect_seekbar = {
         m_rect_shuffle.left - extra_width,     // Extend 10% left
-        seek_y, 
+        seek_y,
         m_rect_repeat.right + extra_width,     // Extend 10% right
-        seek_y + m_metrics.seekbar_height 
+        seek_y + seekbar_height
     };
-    
-    // Time display (below seekbar)
-    m_rect_time = { 
-        m_rect_seekbar.left, 
-        m_rect_seekbar.bottom + 2, 
-        m_rect_seekbar.right, 
-        m_rect_seekbar.bottom + m_metrics.text_height 
+
+    // Time display (beside seekbar)
+    int time_gap = static_cast<int>(2 * m_dpi_scale);  // Fixed gap below seekbar
+    m_rect_time = {
+        m_rect_seekbar.left,
+        m_rect_seekbar.bottom + time_gap,
+        m_rect_seekbar.right,
+        m_rect_seekbar.bottom + m_metrics.text_height
     };
 }
 
@@ -353,10 +379,13 @@ void ControlPanelCore::draw_track_info(Gdiplus::Graphics& g) {
         (float)m_metrics.text_height
     );
     
+    int scaled_text_height = static_cast<int>(m_metrics.text_height * m_size_scale);
+    int scaled_gap = static_cast<int>(4 * m_size_scale);
+
     Gdiplus::RectF artistRect(
-        (float)m_rect_track_info.left, (float)(m_rect_track_info.top + m_metrics.text_height + 5),
-        (float)(m_rect_track_info.right - m_rect_track_info.left), 
-        (float)m_metrics.text_height
+        (float)m_rect_track_info.left, (float)(m_rect_track_info.top + scaled_text_height + scaled_gap),
+        (float)(m_rect_track_info.right - m_rect_track_info.left),
+        (float)scaled_text_height
     );
     
     Gdiplus::StringFormat sf;
@@ -494,12 +523,12 @@ void ControlPanelCore::draw_circular_button(Gdiplus::Graphics& g, const RECT& re
 void ControlPanelCore::draw_seekbar(Gdiplus::Graphics& g) {
     int w = m_rect_seekbar.right - m_rect_seekbar.left;
     int h = m_rect_seekbar.bottom - m_rect_seekbar.top;
-    
-    // Use seekbar_height from metrics
-    int track_h = m_metrics.seekbar_height;
+
+    // Use scaled seekbar_height
+    int track_h = static_cast<int>(m_metrics.seekbar_height * m_size_scale);
     int track_y = m_rect_seekbar.top + (h - track_h) / 2;
     int radius = track_h / 2;  // For rounded ends
-    
+
     // Background track (rounded pill shape) - dark gray
     Gdiplus::SolidBrush trackBrush(Gdiplus::Color(255, 60, 60, 60));
     {
@@ -510,11 +539,11 @@ void ControlPanelCore::draw_seekbar(Gdiplus::Graphics& g) {
         trackPath.CloseFigure();
         g.FillPath(&trackBrush, &trackPath);
     }
-    
+
     // Progress (rounded) - light gray
     double progress = (m_state.track_length > 0) ? (m_state.playback_time / m_state.track_length) : 0.0;
     int progress_w = static_cast<int>(w * progress);
-    
+
     if (progress_w > radius * 2) {
         Gdiplus::SolidBrush progressBrush(Gdiplus::Color(255, 140, 140, 140));  // Darker gray
         Gdiplus::GraphicsPath progressPath;
@@ -528,10 +557,10 @@ void ControlPanelCore::draw_seekbar(Gdiplus::Graphics& g) {
         Gdiplus::SolidBrush progressBrush(Gdiplus::Color(255, 140, 140, 140));  // Darker gray
         g.FillEllipse(&progressBrush, m_rect_seekbar.left, track_y, track_h, track_h);
     }
-    
+
     // Seek handle (only on hover)
     if (m_hover_region == HitRegion::SeekBar || m_seeking) {
-        int handle_size = static_cast<int>(14 * m_dpi_scale);
+        int handle_size = static_cast<int>(14 * m_dpi_scale * m_size_scale);
         int handle_x = m_rect_seekbar.left + progress_w - handle_size / 2;
         int handle_y = m_rect_seekbar.top + (h - handle_size) / 2;
         Gdiplus::SolidBrush handleBrush(Gdiplus::Color(255, 255, 255, 255));
@@ -593,17 +622,17 @@ void ControlPanelCore::draw_volume(Gdiplus::Graphics& g) {
     if (level <= 0) vol_level = 0;  // mute (0%)
     else if (level <= 0.5f) vol_level = 1;  // low (0-50%)
     
-    // Draw custom volume icon (10% smaller than original 32px) - always grayed
-    int icon_size = static_cast<int>(23 * m_dpi_scale);  // 20% smaller volume icon
+    // Draw custom volume icon (scaled with panel height) - always grayed
+    int icon_size = static_cast<int>(23 * m_dpi_scale * m_size_scale);  // Volume icon (scaled)
     int icon_y = m_rect_volume.top + (h - icon_size) / 2;
-    int icon_gap = static_cast<int>(6 * m_dpi_scale);  // Extra gap to move icon left
+    int icon_gap = static_cast<int>(6 * m_dpi_scale * m_size_scale);  // Extra gap to move icon left
     draw_volume_icon(g, m_rect_volume.left - icon_gap, icon_y, icon_size, m_text_secondary_color, vol_level);
-    
+
     // Volume bar - use same thickness as seekbar with rounded ends
-    int bar_offset = icon_size + static_cast<int>(12 * m_dpi_scale);  // Icon + gap (50% larger)
+    int bar_offset = icon_size + static_cast<int>(12 * m_dpi_scale * m_size_scale);  // Icon + gap (scaled)
     int bar_x = m_rect_volume.left + bar_offset;
     int bar_w = w - bar_offset;
-    int bar_h = m_metrics.seekbar_height;
+    int bar_h = static_cast<int>(m_metrics.seekbar_height * m_size_scale);
     int bar_y = m_rect_volume.top + (h - bar_h) / 2;
     int radius = bar_h / 2;
     
@@ -647,8 +676,8 @@ HitRegion ControlPanelCore::hit_test(int x, int y) const {
     if (pt_in_rect(m_rect_repeat, x, y)) return HitRegion::RepeatButton;
     if (pt_in_rect(m_rect_seekbar, x, y)) return HitRegion::SeekBar;
     // Volume area - check both icon (positioned left of rect) and slider
-    int icon_gap = static_cast<int>(6 * m_dpi_scale);
-    int icon_width = static_cast<int>(23 * m_dpi_scale);  // Match smaller volume icon
+    int icon_gap = static_cast<int>(6 * m_dpi_scale * m_size_scale);
+    int icon_width = static_cast<int>(23 * m_dpi_scale * m_size_scale);  // Match volume icon
     RECT expanded_volume = { m_rect_volume.left - icon_gap, m_rect_volume.top, 
                               m_rect_volume.right, m_rect_volume.bottom };
     if (pt_in_rect(expanded_volume, x, y)) {
@@ -678,8 +707,8 @@ void ControlPanelCore::on_mouse_move(int x, int y) {
     }
     
     if (m_volume_dragging) {
-        int icon_size = static_cast<int>(23 * m_dpi_scale);  // Match smaller volume icon
-        int bar_offset = icon_size + static_cast<int>(12 * m_dpi_scale);  // Match draw_volume
+        int icon_size = static_cast<int>(23 * m_dpi_scale * m_size_scale);  // Match volume icon
+        int bar_offset = icon_size + static_cast<int>(12 * m_dpi_scale * m_size_scale);  // Match draw_volume
         int bar_x = m_rect_volume.left + bar_offset;
         int bar_w = (m_rect_volume.right - m_rect_volume.left) - bar_offset;
         double level = static_cast<double>(x - bar_x) / bar_w;
