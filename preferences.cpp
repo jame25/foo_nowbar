@@ -61,6 +61,34 @@ int get_nowbar_theme_mode() {
     return mode;
 }
 
+COLORREF get_nowbar_initial_bg_color() {
+    int theme_mode = get_nowbar_theme_mode();
+    bool dark;
+    
+    switch (theme_mode) {
+        case 1:  // Force Dark
+            dark = true;
+            break;
+        case 2:  // Force Light
+            dark = false;
+            break;
+        default:  // Auto (0) - query foobar2000
+            // Use tryGet() to safely check if ui_config_manager is available
+            {
+                auto api = ui_config_manager::tryGet();
+                if (api.is_valid()) {
+                    dark = api->is_dark_mode();
+                } else {
+                    // Default to dark if we can't determine (during early startup)
+                    dark = true;
+                }
+            }
+            break;
+    }
+    
+    return dark ? RGB(24, 24, 24) : RGB(245, 245, 245);
+}
+
 bool get_nowbar_use_custom_fonts() {
     return cfg_nowbar_use_custom_fonts != 0;
 }
