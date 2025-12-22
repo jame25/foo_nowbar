@@ -32,7 +32,7 @@ public:
 
     // container_uie_window_v3
     uie::container_window_v3_config get_window_config() override {
-        return uie::container_window_v3_config(L"foo_nowbar_cui_panel", false);
+        return uie::container_window_v3_config(L"foo_nowbar_cui_panel", false, CS_DBLCLKS);
     }
 
     LRESULT on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp) override;
