@@ -1,8 +1,8 @@
 # foo_nowbar
 
-A foobar2000 component that provides a "Now Playing" bar panel for both Default UI (DUI) and Columns UI (CUI).
+A foobar2000 component that provides a "Now Playing" control panel for both Default UI (DUI) and Columns UI (CUI).
 
-<img width="1287" height="172" alt="foo_nowbar" src="https://github.com/user-attachments/assets/7f1aefdd-ee54-41b6-8a0d-3ec63e173b53" />
+<img width="1230" height="151" alt="foo_nowbar" src="https://github.com/user-attachments/assets/6de52277-c87d-4154-8a31-98b29ee516b2" />
 
 ## Features
 
@@ -10,6 +10,7 @@ A foobar2000 component that provides a "Now Playing" bar panel for both Default 
 - **Album Artwork Display**: Shows album art
 - **Track Information**: Displays track title and artist name
 - **Playback Controls**: Shuffle, Previous, Play/Pause, Next, and Repeat buttons
+- **Heart/Mood Button** - Heart icon to "like" a track
 - **Seek Bar**: Interactive progress bar with elapsed and remaining time display
 - **Volume Control**: Volume slider with mute toggle
 - **MiniPlayer Launch**: Quick access button to launch the MiniPlayer (requires [foo_traycontrols](https://github.com/jame25/foo_traycontrols))
