@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "control_panel_dui.h"
+#include "../preferences.h"
 
 namespace nowbar {
 
@@ -18,6 +19,7 @@ bool ControlPanelDUI::register_class() {
     wc.lpfnWndProc = WindowProc;
     wc.hInstance = core_api::get_my_instance();
     wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
+    wc.hbrBackground = CreateSolidBrush(RGB(24, 24, 24));  // Dark background to prevent white flash
     wc.lpszClassName = get_class_name();
     
     registered = (RegisterClassExW(&wc) != 0);
@@ -69,8 +71,8 @@ ui_element_config::ptr ControlPanelDUI::get_configuration() {
 ui_element_min_max_info ControlPanelDUI::get_min_max_info() {
     ui_element_min_max_info info;
     
-    // Minimum height: 1.5 inches, scaled by DPI
-    // At 96 DPI: 1.5 * 96 = 144 pixels
+    // Minimum height: 0.55 inches, scaled by DPI
+    // At 96 DPI: 0.55 * 96 = 53 pixels
     int dpi = 96;
     if (m_hwnd) {
         HDC hdc = GetDC(m_hwnd);
@@ -79,8 +81,8 @@ ui_element_min_max_info ControlPanelDUI::get_min_max_info() {
             ReleaseDC(m_hwnd, hdc);
         }
     }
-    
-    info.m_min_height = static_cast<t_uint32>(1.5 * dpi);
+
+    info.m_min_height = static_cast<t_uint32>(0.55 * dpi);
     info.m_min_width = 200;  // Reasonable minimum width
     
     return info;
@@ -143,10 +145,7 @@ LRESULT ControlPanelDUI::handle_message(UINT msg, WPARAM wp, LPARAM lp) {
             update_artwork();
         });
         
-        if (m_callback.is_valid()) {
-            bool dark = m_callback->is_dark_mode();
-            m_core->set_dark_mode(dark);
-        }
+        // Note: initialize() already calls on_settings_changed() which respects theme mode preferences
         update_artwork();
         return 0;
         
@@ -186,8 +185,17 @@ LRESULT ControlPanelDUI::handle_message(UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
     }
         
-    case WM_ERASEBKGND:
+    case WM_ERASEBKGND: {
+        // Paint background based on current theme setting to prevent flash
+        HDC hdc = (HDC)wp;
+        RECT rc;
+        GetClientRect(m_hwnd, &rc);
+        COLORREF bg_color = get_nowbar_initial_bg_color();
+        HBRUSH brush = CreateSolidBrush(bg_color);
+        FillRect(hdc, &rc, brush);
+        DeleteObject(brush);
         return 1;
+    }
         
     case WM_MOUSEMOVE:
         if (!m_tracking_mouse) {
@@ -218,6 +226,12 @@ LRESULT ControlPanelDUI::handle_message(UINT msg, WPARAM wp, LPARAM lp) {
         ReleaseCapture();
         if (m_core) {
             m_core->on_lbutton_up(GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
+        }
+        return 0;
+        
+    case WM_LBUTTONDBLCLK:
+        if (m_core) {
+            m_core->on_lbutton_dblclk(GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
         }
         return 0;
         
