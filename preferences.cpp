@@ -25,6 +25,16 @@ static cfg_int cfg_nowbar_bar_style(
     0  // Default: Pill-shaped
 );
 
+static cfg_int cfg_nowbar_mood_icon_visible(
+    GUID{0xABCDEF07, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0x8F}},
+    1  // Default: Show (visible)
+);
+
+static cfg_int cfg_nowbar_miniplayer_icon_visible(
+    GUID{0xABCDEF08, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0x90}},
+    1  // Default: Show (visible)
+);
+
 // Font configuration
 static cfg_struct_t<LOGFONT> cfg_nowbar_artist_font(
     GUID{0xABCDEF02, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0x8A}},
@@ -80,6 +90,14 @@ int get_nowbar_bar_style() {
     if (style < 0) style = 0;
     if (style > 1) style = 1;
     return style;
+}
+
+bool get_nowbar_mood_icon_visible() {
+    return cfg_nowbar_mood_icon_visible != 0;
+}
+
+bool get_nowbar_miniplayer_icon_visible() {
+    return cfg_nowbar_miniplayer_icon_visible != 0;
 }
 
 COLORREF get_nowbar_initial_bg_color() {
@@ -220,6 +238,10 @@ void nowbar_preferences::switch_tab(int tab) {
     ShowWindow(GetDlgItem(m_hwnd, IDC_COVER_MARGIN_COMBO), show_general);
     ShowWindow(GetDlgItem(m_hwnd, IDC_BAR_STYLE_LABEL), show_general);
     ShowWindow(GetDlgItem(m_hwnd, IDC_BAR_STYLE_COMBO), show_general);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_MOOD_ICON_LABEL), show_general);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_MOOD_ICON_COMBO), show_general);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_MINIPLAYER_ICON_LABEL), show_general);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_MINIPLAYER_ICON_COMBO), show_general);
     
     // Fonts tab controls
     BOOL show_fonts = (tab == 1) ? SW_SHOW : SW_HIDE;
@@ -268,6 +290,18 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         SendMessage(hBarStyleCombo, CB_ADDSTRING, 0, (LPARAM)L"Rectangular");
         SendMessage(hBarStyleCombo, CB_SETCURSEL, cfg_nowbar_bar_style, 0);
         
+        // Initialize mood icon visibility combobox
+        HWND hMoodIconCombo = GetDlgItem(hwnd, IDC_MOOD_ICON_COMBO);
+        SendMessage(hMoodIconCombo, CB_ADDSTRING, 0, (LPARAM)L"Show");
+        SendMessage(hMoodIconCombo, CB_ADDSTRING, 0, (LPARAM)L"Hidden");
+        SendMessage(hMoodIconCombo, CB_SETCURSEL, cfg_nowbar_mood_icon_visible ? 0 : 1, 0);
+        
+        // Initialize miniplayer icon visibility combobox
+        HWND hMiniplayerIconCombo = GetDlgItem(hwnd, IDC_MINIPLAYER_ICON_COMBO);
+        SendMessage(hMiniplayerIconCombo, CB_ADDSTRING, 0, (LPARAM)L"Show");
+        SendMessage(hMiniplayerIconCombo, CB_ADDSTRING, 0, (LPARAM)L"Hidden");
+        SendMessage(hMiniplayerIconCombo, CB_SETCURSEL, cfg_nowbar_miniplayer_icon_visible ? 0 : 1, 0);
+        
         // Initialize font displays
         p_this->update_font_displays();
         
@@ -287,6 +321,8 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         case IDC_THEME_MODE_COMBO:
         case IDC_COVER_MARGIN_COMBO:
         case IDC_BAR_STYLE_COMBO:
+        case IDC_MOOD_ICON_COMBO:
+        case IDC_MINIPLAYER_ICON_COMBO:
             if (HIWORD(wp) == CBN_SELCHANGE) {
                 p_this->on_changed();
             }
@@ -341,6 +377,14 @@ void nowbar_preferences::apply_settings() {
         // Save bar style (0=Pill-shaped, 1=Rectangular)
         cfg_nowbar_bar_style = (int)SendMessage(GetDlgItem(m_hwnd, IDC_BAR_STYLE_COMBO), CB_GETCURSEL, 0, 0);
         
+        // Save mood icon visibility (0=Show, 1=Hidden in combobox -> config 1=Show, 0=Hidden)
+        int moodIconSel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_MOOD_ICON_COMBO), CB_GETCURSEL, 0, 0);
+        cfg_nowbar_mood_icon_visible = (moodIconSel == 0) ? 1 : 0;
+        
+        // Save miniplayer icon visibility (0=Show, 1=Hidden in combobox -> config 1=Show, 0=Hidden)
+        int miniplayerIconSel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_MINIPLAYER_ICON_COMBO), CB_GETCURSEL, 0, 0);
+        cfg_nowbar_miniplayer_icon_visible = (miniplayerIconSel == 0) ? 1 : 0;
+        
         // Notify all registered instances to update
         nowbar::ControlPanelCore::notify_all_settings_changed();
     }
@@ -353,11 +397,15 @@ void nowbar_preferences::reset_settings() {
             cfg_nowbar_theme_mode = 0;  // Auto
             cfg_nowbar_cover_margin = 1;  // Yes (margin enabled)
             cfg_nowbar_bar_style = 0;  // Pill-shaped
+            cfg_nowbar_mood_icon_visible = 1;  // Show (visible)
+            cfg_nowbar_miniplayer_icon_visible = 1;  // Show (visible)
             
             // Update General tab UI
             SendMessage(GetDlgItem(m_hwnd, IDC_THEME_MODE_COMBO), CB_SETCURSEL, 0, 0);
             SendMessage(GetDlgItem(m_hwnd, IDC_COVER_MARGIN_COMBO), CB_SETCURSEL, 0, 0);
             SendMessage(GetDlgItem(m_hwnd, IDC_BAR_STYLE_COMBO), CB_SETCURSEL, 0, 0);
+            SendMessage(GetDlgItem(m_hwnd, IDC_MOOD_ICON_COMBO), CB_SETCURSEL, 0, 0);
+            SendMessage(GetDlgItem(m_hwnd, IDC_MINIPLAYER_ICON_COMBO), CB_SETCURSEL, 0, 0);
         } else if (m_current_tab == 1) {
             // Reset Fonts tab settings
             reset_nowbar_fonts();
