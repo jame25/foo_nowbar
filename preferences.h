@@ -7,6 +7,8 @@
 int get_nowbar_theme_mode();  // 0=Auto, 1=Dark, 2=Light
 bool get_nowbar_cover_margin();  // true=Yes (margin), false=No (edge-to-edge)
 int get_nowbar_bar_style();  // 0=Pill-shaped, 1=Rectangular
+bool get_nowbar_mood_icon_visible();  // true=Show, false=Hidden
+bool get_nowbar_miniplayer_icon_visible();  // true=Show, false=Hidden
 
 // Get the effective background color for the current theme mode configuration
 // Can be called early before core is fully initialized
