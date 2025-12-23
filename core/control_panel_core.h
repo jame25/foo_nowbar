@@ -9,8 +9,8 @@ struct LayoutMetrics {
     int panel_height = 80;
     int artwork_size = 128;
     int artwork_margin = 8;
-    int button_size = 38;       // 20% bigger than 32
-    int play_button_size = 48;  // 20% bigger than 40
+    int button_size = 38;
+    int play_button_size = 48;
     int seekbar_height = 9;
     int volume_width = 192;  // 20% wider than 160
     int spacing = 16;
@@ -34,6 +34,7 @@ enum class HitRegion {
     None,
     Artwork,
     TrackInfo,
+    HeartButton,   // Mood/favorite toggle
     PrevButton,
     PlayButton,
     NextButton,
@@ -74,6 +75,7 @@ public:
     void on_mouse_leave();
     void on_lbutton_down(int x, int y);
     void on_lbutton_up(int x, int y);
+    void on_lbutton_dblclk(int x, int y);
     void on_mouse_wheel(int delta);
     
     // IPlaybackStateCallback
@@ -121,6 +123,7 @@ private:
     void draw_pause_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color, bool with_circle);
     void draw_prev_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color);
     void draw_next_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color);
+    void draw_heart_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color);
     void draw_miniplayer_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color);
     void draw_volume_icon(Gdiplus::Graphics& g, int x, int y, int size, const Gdiplus::Color& color, int level);  // level: 0=mute, 1=low, 2=full
     
@@ -132,11 +135,15 @@ private:
     void do_repeat_cycle();
     void do_seek(double position);
     void do_volume_change(float delta);
+    void do_toggle_mood();
+    void update_mood_state();
+    void show_picture_viewer();
     
     // Member variables
     HWND m_hwnd = nullptr;
     bool m_dark_mode = true;
     float m_dpi_scale = 1.0f;
+    float m_size_scale = 1.0f;  // Scale factor for controls based on panel height
     LayoutMetrics m_metrics;
     
     // Current state
@@ -145,6 +152,7 @@ private:
     // Hit regions
     RECT m_rect_artwork = {};
     RECT m_rect_track_info = {};
+    RECT m_rect_heart = {};
     RECT m_rect_prev = {};
     RECT m_rect_play = {};
     RECT m_rect_next = {};
@@ -162,6 +170,7 @@ private:
     bool m_volume_dragging = false;
     float m_prev_volume_db = 0.0f;  // Store previous volume for mute toggle
     bool m_miniplayer_active = false;  // MiniPlayer enabled state for icon color
+    bool m_mood_active = false;  // MOOD tag state for heart icon color
     
     // Artwork
     std::unique_ptr<Gdiplus::Bitmap> m_artwork_bitmap;
