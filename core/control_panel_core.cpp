@@ -8,6 +8,7 @@
 #include <mutex>
 #include <dwmapi.h>
 #include <commdlg.h>
+#include <shellapi.h>
 #pragma comment(lib, "dwmapi.lib")
 #pragma comment(lib, "comdlg32.lib")
 
@@ -279,21 +280,27 @@ void ControlPanelCore::update_layout(const RECT& rect) {
     int vol_x = volume_right_edge - volume_width;
     m_rect_volume = { vol_x, y_center - vol_bar_height / 2 - vol_mp_offset, volume_right_edge, y_center + vol_bar_height / 2 - vol_mp_offset };
 
-    // Control buttons (center) - heart, shuffle, prev, play, next, repeat
-    int controls_width = button_size * 5 + play_button_size + spacing * 5;
-    int controls_x = rect.left + (w - controls_width) / 2;
-    
+    // Control buttons (center) - core controls are always in fixed positions
+    // Layout: [heart] shuffle prev play next repeat [custom]
+    // The core 5 buttons (shuffle, prev, play, next, repeat) are always centered
+    // Heart and custom buttons appear at the edges without shifting the core controls
+
+    // Calculate fixed width for core controls only (shuffle, prev, play, next, repeat)
+    int core_buttons = 5;  // shuffle, prev, play, next, repeat
+    int core_width = button_size * (core_buttons - 1) + play_button_size + spacing * (core_buttons - 1);
+    int core_start_x = rect.left + (w - core_width) / 2;
+
     // Calculate seekbar and time display heights first to determine available space
     int seek_gap = static_cast<int>(10 * m_dpi_scale * m_size_scale);
     int seekbar_height = static_cast<int>(m_metrics.seekbar_height * m_size_scale);
     int total_seekbar_area = seek_gap + seekbar_height;
-    
+
     // Calculate how much space we need below the play button for seekbar
     // At minimum height, we need to move controls up more to fit everything
     int bottom_margin = static_cast<int>(4 * m_dpi_scale);  // Small margin at bottom
     int available_below_center = (rect.bottom - rect.top) / 2 - bottom_margin;
     int needed_below_center = play_button_size / 2 + total_seekbar_area;
-    
+
     // Increase vertical offset if needed to fit seekbar within panel
     int base_offset = h / 10;  // Base 10% offset
     int extra_offset = 0;
@@ -301,17 +308,12 @@ void ControlPanelCore::update_layout(const RECT& rect) {
         extra_offset = needed_below_center - available_below_center;
     }
     int vertical_offset = base_offset + extra_offset;
-    
+
     int btn_y = y_center - button_size / 2 - vertical_offset;
     int play_y = y_center - play_button_size / 2 - vertical_offset;
 
-    // Heart button (only if visible)
-    if (get_nowbar_mood_icon_visible()) {
-        m_rect_heart = { controls_x, btn_y, controls_x + button_size, btn_y + button_size };
-        controls_x += button_size + spacing;
-    } else {
-        m_rect_heart = {};  // Clear rect when hidden
-    }
+    // Position core controls at fixed positions
+    int controls_x = core_start_x;
 
     m_rect_shuffle = { controls_x, btn_y, controls_x + button_size, btn_y + button_size };
     controls_x += button_size + spacing;
@@ -326,11 +328,27 @@ void ControlPanelCore::update_layout(const RECT& rect) {
     controls_x += button_size + spacing;
 
     m_rect_repeat = { controls_x, btn_y, controls_x + button_size, btn_y + button_size };
-    
+
+    // Heart button - positioned to the left of shuffle (if visible)
+    if (get_nowbar_mood_icon_visible()) {
+        int heart_x = m_rect_shuffle.left - spacing - button_size;
+        m_rect_heart = { heart_x, btn_y, heart_x + button_size, btn_y + button_size };
+    } else {
+        m_rect_heart = {};  // Clear rect when hidden
+    }
+
+    // Custom button - positioned to the right of repeat (if visible)
+    if (get_nowbar_custom_button_visible()) {
+        int custom_x = m_rect_repeat.right + spacing;
+        m_rect_custom = { custom_x, btn_y, custom_x + button_size, btn_y + button_size };
+    } else {
+        m_rect_custom = {};  // Clear rect when hidden
+    }
+
     // Track info (between artwork and controls) - truly vertically centered on panel
     int info_x = m_rect_artwork.right + spacing;
-    // Use heart button for right edge if visible, otherwise use shuffle button
-    int info_right = get_nowbar_mood_icon_visible() ? (m_rect_heart.left - spacing) : (m_rect_shuffle.left - spacing);
+    // Always use shuffle button as reference for right edge (fixed position)
+    int info_right = m_rect_shuffle.left - spacing;
     int info_height = static_cast<int>((m_metrics.text_height * 2 + 8) * m_size_scale);  // Title + artist + gap (scaled)
     int info_y = y_center - info_height / 2;  // Centered on panel, not offset with controls
     m_rect_track_info = { info_x, info_y, info_right, info_y + info_height };
@@ -371,7 +389,7 @@ void ControlPanelCore::paint(HDC hdc, const RECT& rect) {
     draw_seekbar(g);
     draw_time_display(g);
     draw_volume(g);
-    
+
     // MiniPlayer button (only if visible)
     if (get_nowbar_miniplayer_icon_visible()) {
         bool mp_hovered = (m_hover_region == HitRegion::MiniPlayerButton);
@@ -537,6 +555,21 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics& g) {
     RECT repeatIconRect = { m_rect_repeat.left + repeat_inset, m_rect_repeat.top + repeat_inset,
                              m_rect_repeat.right - repeat_inset, m_rect_repeat.bottom - repeat_inset };
     draw_repeat_icon(g, repeatIconRect, repeatColor, repeat_one);
+
+    // Custom button (next to repeat) - only if visible
+    if (get_nowbar_custom_button_visible()) {
+        bool custom_hovered = (m_hover_region == HitRegion::CustomButton);
+        int cw = m_rect_custom.right - m_rect_custom.left;
+        int ch = m_rect_custom.bottom - m_rect_custom.top;
+        if (custom_hovered) {
+            Gdiplus::SolidBrush hoverBrush(m_button_hover_color);
+            g.FillEllipse(&hoverBrush, m_rect_custom.left, m_rect_custom.top, cw, ch);
+        }
+        int custom_inset = cw * 15 / 100;  // 15% inset to match other icons
+        RECT customIconRect = { m_rect_custom.left + custom_inset, m_rect_custom.top + custom_inset,
+                                 m_rect_custom.right - custom_inset, m_rect_custom.bottom - custom_inset };
+        draw_custom_icon(g, customIconRect, m_text_secondary_color);
+    }
 }
 
 void ControlPanelCore::draw_button(Gdiplus::Graphics& g, const RECT& rect, const wchar_t* icon, bool hovered, bool active) {
@@ -760,6 +793,7 @@ HitRegion ControlPanelCore::hit_test(int x, int y) const {
     if (pt_in_rect(m_rect_shuffle, x, y)) return HitRegion::ShuffleButton;
     if (pt_in_rect(m_rect_repeat, x, y)) return HitRegion::RepeatButton;
     if (pt_in_rect(m_rect_seekbar, x, y)) return HitRegion::SeekBar;
+    if (get_nowbar_custom_button_visible() && pt_in_rect(m_rect_custom, x, y)) return HitRegion::CustomButton;
     // Volume area - check both icon (positioned left of rect) and slider
     int icon_gap = static_cast<int>(6 * m_dpi_scale * m_size_scale);
     int icon_width = static_cast<int>(23 * m_dpi_scale * m_size_scale);  // Match volume icon
@@ -883,6 +917,31 @@ void ControlPanelCore::on_lbutton_up(int x, int y) {
             }
             break;
         }
+        case HitRegion::CustomButton: {
+            int action = get_nowbar_custom_button_action();
+            if (action == 1) {
+                // Open URL
+                pfc::string8 url = get_nowbar_custom_button_url();
+                if (!url.is_empty()) {
+                    pfc::stringcvt::string_wide_from_utf8 wideUrl(url);
+                    ShellExecuteW(nullptr, L"open", wideUrl, nullptr, nullptr, SW_SHOWNORMAL);
+                }
+            } else if (action == 2) {
+                // Run Executable
+                pfc::string8 exe = get_nowbar_custom_button_executable();
+                if (!exe.is_empty()) {
+                    pfc::stringcvt::string_wide_from_utf8 wideExe(exe);
+                    ShellExecuteW(nullptr, L"open", wideExe, nullptr, nullptr, SW_SHOWNORMAL);
+                }
+            } else if (action == 3) {
+                // Foobar2k Action
+                pfc::string8 fb2k_action = get_nowbar_custom_button_fb2k_action();
+                if (!fb2k_action.is_empty()) {
+                    execute_fb2k_action_by_path(fb2k_action.c_str());
+                }
+            }
+            break;
+        }
         default: break;
         }
     }
@@ -907,6 +966,9 @@ void ControlPanelCore::on_lbutton_dblclk(int x, int y) {
     HitRegion region = hit_test(x, y);
     if (region == HitRegion::Artwork) {
         show_picture_viewer();
+    } else if (region == HitRegion::TrackInfo) {
+        // Highlight the currently playing track in the playlist (like status bar double-click)
+        playlist_manager::get()->highlight_playing_item();
     }
 }
 
@@ -1580,6 +1642,39 @@ void ControlPanelCore::draw_volume_icon(Gdiplus::Graphics& g, int x, int y, int 
         Gdiplus::Pen pen(color, 2.0f * scale);
         g.DrawArc(&pen, x + 14 * scale, y + 7 * scale, 6 * scale, 10 * scale, -60, 120);
         g.DrawArc(&pen, x + 14 * scale, y + 3 * scale, 10 * scale, 18 * scale, -50, 100);
+    }
+}
+
+// Draw custom button icon - 3x3 grid of circles from SVG
+// Based on cbutton3_24dp.svg - uniform grid of equal-sized circles
+void ControlPanelCore::draw_custom_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color) {
+    float iconSize = static_cast<float>(std::min(rect.right - rect.left, rect.bottom - rect.top));
+    float cx = (rect.left + rect.right) / 2.0f;
+    float cy = (rect.top + rect.bottom) / 2.0f;
+    float scale = iconSize / 960.0f;  // SVG viewBox is 960x960
+    float offsetX = cx - 480.0f * scale;  // Center horizontally (icon center X = 480)
+    // Icon's visual center Y is at -400 (not viewBox center -480), adjust by 80 units
+    float offsetY = cy - 560.0f * scale;  // 560 = 960 + (-400), centers on actual icon
+
+    Gdiplus::SolidBrush brush(color);
+
+    // Helper lambda to draw a circle at SVG coordinates
+    auto drawCircle = [&](float svgX, float svgY, float radius) {
+        float x = offsetX + svgX * scale;
+        float y = offsetY + (960.0f + svgY) * scale;  // SVG uses negative Y
+        float r = radius * scale;
+        g.FillEllipse(&brush, x - r, y - r, r * 2, r * 2);
+    };
+
+    // 3x3 grid of equal-sized circles (radius 56.5 from SVG)
+    const float radius = 56.5f;
+    const float xPositions[] = { 240.0f, 480.0f, 720.0f };
+    const float yPositions[] = { -640.0f, -400.0f, -160.0f };
+
+    for (float yPos : yPositions) {
+        for (float xPos : xPositions) {
+            drawCircle(xPos, yPos, radius);
+        }
     }
 }
 
