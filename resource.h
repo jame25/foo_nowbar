@@ -1,8 +1,5 @@
 #pragma once
 
-// Icon resources
-#define IDI_PICTURE_VIEWER         101
-
 // Dialog IDs
 #define IDD_NOWBAR_PREFERENCES     102
 
