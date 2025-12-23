@@ -262,13 +262,22 @@ void ControlPanelCore::update_layout(const RECT& rect) {
     int mp_size = static_cast<int>(29 * m_dpi_scale * m_size_scale);  // MiniPlayer icon size (scaled)
     int right_inset = static_cast<int>(16 * m_dpi_scale);  // Extra inset from right edge
     int right_margin = rect.right - art_margin - right_inset;
-    int mp_x = right_margin - mp_size;
-    int btn_y_right = y_center - mp_size / 2 - vol_mp_offset;
-    m_rect_miniplayer = { mp_x, btn_y_right, mp_x + mp_size, btn_y_right + mp_size };
+    
+    // MiniPlayer button (only if visible)
+    int volume_right_edge;
+    if (get_nowbar_miniplayer_icon_visible()) {
+        int mp_x = right_margin - mp_size;
+        int btn_y_right = y_center - mp_size / 2 - vol_mp_offset;
+        m_rect_miniplayer = { mp_x, btn_y_right, mp_x + mp_size, btn_y_right + mp_size };
+        volume_right_edge = mp_x - spacing;
+    } else {
+        m_rect_miniplayer = {};  // Clear rect when hidden
+        volume_right_edge = right_margin;
+    }
 
     int vol_bar_height = static_cast<int>(20 * m_dpi_scale * m_size_scale);  // Volume bar vertical size (scaled)
-    int vol_x = mp_x - spacing - volume_width;
-    m_rect_volume = { vol_x, y_center - vol_bar_height / 2 - vol_mp_offset, mp_x - spacing, y_center + vol_bar_height / 2 - vol_mp_offset };
+    int vol_x = volume_right_edge - volume_width;
+    m_rect_volume = { vol_x, y_center - vol_bar_height / 2 - vol_mp_offset, volume_right_edge, y_center + vol_bar_height / 2 - vol_mp_offset };
 
     // Control buttons (center) - heart, shuffle, prev, play, next, repeat
     int controls_width = button_size * 5 + play_button_size + spacing * 5;
@@ -296,8 +305,13 @@ void ControlPanelCore::update_layout(const RECT& rect) {
     int btn_y = y_center - button_size / 2 - vertical_offset;
     int play_y = y_center - play_button_size / 2 - vertical_offset;
 
-    m_rect_heart = { controls_x, btn_y, controls_x + button_size, btn_y + button_size };
-    controls_x += button_size + spacing;
+    // Heart button (only if visible)
+    if (get_nowbar_mood_icon_visible()) {
+        m_rect_heart = { controls_x, btn_y, controls_x + button_size, btn_y + button_size };
+        controls_x += button_size + spacing;
+    } else {
+        m_rect_heart = {};  // Clear rect when hidden
+    }
 
     m_rect_shuffle = { controls_x, btn_y, controls_x + button_size, btn_y + button_size };
     controls_x += button_size + spacing;
@@ -315,7 +329,8 @@ void ControlPanelCore::update_layout(const RECT& rect) {
     
     // Track info (between artwork and controls) - truly vertically centered on panel
     int info_x = m_rect_artwork.right + spacing;
-    int info_right = m_rect_heart.left - spacing;
+    // Use heart button for right edge if visible, otherwise use shuffle button
+    int info_right = get_nowbar_mood_icon_visible() ? (m_rect_heart.left - spacing) : (m_rect_shuffle.left - spacing);
     int info_height = static_cast<int>((m_metrics.text_height * 2 + 8) * m_size_scale);  // Title + artist + gap (scaled)
     int info_y = y_center - info_height / 2;  // Centered on panel, not offset with controls
     m_rect_track_info = { info_x, info_y, info_right, info_y + info_height };
@@ -357,16 +372,18 @@ void ControlPanelCore::paint(HDC hdc, const RECT& rect) {
     draw_time_display(g);
     draw_volume(g);
     
-    // MiniPlayer button
-    bool mp_hovered = (m_hover_region == HitRegion::MiniPlayerButton);
-    int mp_w = m_rect_miniplayer.right - m_rect_miniplayer.left;
-    int mp_h = m_rect_miniplayer.bottom - m_rect_miniplayer.top;
-    if (mp_hovered) {
-        Gdiplus::SolidBrush hoverBrush(m_button_hover_color);
-        g.FillEllipse(&hoverBrush, m_rect_miniplayer.left, m_rect_miniplayer.top, mp_w, mp_h);
+    // MiniPlayer button (only if visible)
+    if (get_nowbar_miniplayer_icon_visible()) {
+        bool mp_hovered = (m_hover_region == HitRegion::MiniPlayerButton);
+        int mp_w = m_rect_miniplayer.right - m_rect_miniplayer.left;
+        int mp_h = m_rect_miniplayer.bottom - m_rect_miniplayer.top;
+        if (mp_hovered) {
+            Gdiplus::SolidBrush hoverBrush(m_button_hover_color);
+            g.FillEllipse(&hoverBrush, m_rect_miniplayer.left, m_rect_miniplayer.top, mp_w, mp_h);
+        }
+        Gdiplus::Color mpColor = m_miniplayer_active ? m_accent_color : m_text_secondary_color;
+        draw_miniplayer_icon(g, m_rect_miniplayer, mpColor);
     }
-    Gdiplus::Color mpColor = m_miniplayer_active ? m_accent_color : m_text_secondary_color;
-    draw_miniplayer_icon(g, m_rect_miniplayer, mpColor);
 }
 
 void ControlPanelCore::draw_background(Gdiplus::Graphics& g, const RECT& rect) {
@@ -431,20 +448,22 @@ void ControlPanelCore::draw_track_info(Gdiplus::Graphics& g) {
 }
 
 void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics& g) {
-    // Heart button (mood toggle)
-    bool heart_hovered = (m_hover_region == HitRegion::HeartButton);
-    int hw = m_rect_heart.right - m_rect_heart.left;
-    int hh = m_rect_heart.bottom - m_rect_heart.top;
-    if (heart_hovered) {
-        Gdiplus::SolidBrush hoverBrush(m_button_hover_color);
-        g.FillEllipse(&hoverBrush, m_rect_heart.left, m_rect_heart.top, hw, hh);
+    // Heart button (mood toggle) - only if visible
+    if (get_nowbar_mood_icon_visible()) {
+        bool heart_hovered = (m_hover_region == HitRegion::HeartButton);
+        int hw = m_rect_heart.right - m_rect_heart.left;
+        int hh = m_rect_heart.bottom - m_rect_heart.top;
+        if (heart_hovered) {
+            Gdiplus::SolidBrush hoverBrush(m_button_hover_color);
+            g.FillEllipse(&hoverBrush, m_rect_heart.left, m_rect_heart.top, hw, hh);
+        }
+        // Red when mood is set, gray when empty
+        Gdiplus::Color heartColor = m_mood_active ? Gdiplus::Color(255, 239, 83, 80) : m_text_secondary_color;
+        int heart_inset = hw * 15 / 100;
+        RECT heartIconRect = { m_rect_heart.left + heart_inset, m_rect_heart.top + heart_inset,
+                                m_rect_heart.right - heart_inset, m_rect_heart.bottom - heart_inset };
+        draw_heart_icon(g, heartIconRect, heartColor);
     }
-    // Red when mood is set, gray when empty
-    Gdiplus::Color heartColor = m_mood_active ? Gdiplus::Color(255, 239, 83, 80) : m_text_secondary_color;
-    int heart_inset = hw * 15 / 100;
-    RECT heartIconRect = { m_rect_heart.left + heart_inset, m_rect_heart.top + heart_inset,
-                            m_rect_heart.right - heart_inset, m_rect_heart.bottom - heart_inset };
-    draw_heart_icon(g, heartIconRect, heartColor);
 
     // Shuffle button
     bool shuffle_active = (m_state.playback_order == 4);  // Shuffle tracks
@@ -737,7 +756,7 @@ HitRegion ControlPanelCore::hit_test(int x, int y) const {
     if (pt_in_rect(m_rect_play, x, y)) return HitRegion::PlayButton;
     if (pt_in_rect(m_rect_prev, x, y)) return HitRegion::PrevButton;
     if (pt_in_rect(m_rect_next, x, y)) return HitRegion::NextButton;
-    if (pt_in_rect(m_rect_heart, x, y)) return HitRegion::HeartButton;
+    if (get_nowbar_mood_icon_visible() && pt_in_rect(m_rect_heart, x, y)) return HitRegion::HeartButton;
     if (pt_in_rect(m_rect_shuffle, x, y)) return HitRegion::ShuffleButton;
     if (pt_in_rect(m_rect_repeat, x, y)) return HitRegion::RepeatButton;
     if (pt_in_rect(m_rect_seekbar, x, y)) return HitRegion::SeekBar;
@@ -753,7 +772,7 @@ HitRegion ControlPanelCore::hit_test(int x, int y) const {
         }
         return HitRegion::VolumeSlider;
     }
-    if (pt_in_rect(m_rect_miniplayer, x, y)) return HitRegion::MiniPlayerButton;
+    if (get_nowbar_miniplayer_icon_visible() && pt_in_rect(m_rect_miniplayer, x, y)) return HitRegion::MiniPlayerButton;
     if (pt_in_rect(m_rect_artwork, x, y)) return HitRegion::Artwork;
     if (pt_in_rect(m_rect_track_info, x, y)) return HitRegion::TrackInfo;
     return HitRegion::None;
