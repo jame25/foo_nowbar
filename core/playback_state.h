@@ -58,7 +58,7 @@ private:
     void on_volume_change(float p_new_val) override;
     void on_playback_edited(metadb_handle_ptr p_track) override {}
     void on_playback_dynamic_info(const file_info& p_info) override {}
-    void on_playback_dynamic_info_track(const file_info& p_info) override {}
+    void on_playback_dynamic_info_track(const file_info& p_info) override;
     
     void update_track_info(metadb_handle_ptr p_track);
     void notify_state_changed();
