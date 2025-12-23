@@ -16,6 +16,10 @@
 #define IDC_COVER_MARGIN_COMBO     1104
 #define IDC_BAR_STYLE_LABEL        1105
 #define IDC_BAR_STYLE_COMBO        1106
+#define IDC_MOOD_ICON_LABEL        1107
+#define IDC_MOOD_ICON_COMBO        1108
+#define IDC_MINIPLAYER_ICON_LABEL  1109
+#define IDC_MINIPLAYER_ICON_COMBO  1110
 
 // Fonts tab controls
 #define IDC_FONTS_GROUP            1201
