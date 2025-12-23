@@ -41,6 +41,7 @@ enum class HitRegion {
     ShuffleButton,
     RepeatButton,
     SeekBar,
+    CustomButton,  // Custom button (left of volume)
     VolumeIcon,    // Click to mute/unmute
     VolumeSlider,  // Drag to adjust volume
     MiniPlayerButton
@@ -126,6 +127,7 @@ private:
     void draw_heart_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color);
     void draw_miniplayer_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color);
     void draw_volume_icon(Gdiplus::Graphics& g, int x, int y, int size, const Gdiplus::Color& color, int level);  // level: 0=mute, 1=low, 2=full
+    void draw_custom_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color);
     
     // Playback control actions
     void do_play_pause();
@@ -159,6 +161,7 @@ private:
     RECT m_rect_shuffle = {};
     RECT m_rect_repeat = {};
     RECT m_rect_seekbar = {};
+    RECT m_rect_custom = {};
     RECT m_rect_volume = {};
     RECT m_rect_miniplayer = {};
     RECT m_rect_time = {};
