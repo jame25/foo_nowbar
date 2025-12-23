@@ -24,6 +24,7 @@
 #include <optional>
 #include <functional>
 #include <vector>
+#include <list>
 #include <mutex>
 #include <algorithm>
 
