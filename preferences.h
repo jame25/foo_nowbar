@@ -5,6 +5,14 @@
 
 // Configuration access functions
 int get_nowbar_theme_mode();  // 0=Auto, 1=Dark, 2=Light
+bool get_nowbar_cover_margin();  // true=Yes (margin), false=No (edge-to-edge)
+int get_nowbar_bar_style();  // 0=Pill-shaped, 1=Rectangular
+bool get_nowbar_mood_icon_visible();  // true=Show, false=Hidden
+bool get_nowbar_miniplayer_icon_visible();  // true=Show, false=Hidden
+
+// Get the effective background color for the current theme mode configuration
+// Can be called early before core is fully initialized
+COLORREF get_nowbar_initial_bg_color();
 
 // Font configuration functions
 bool get_nowbar_use_custom_fonts();
@@ -43,7 +51,6 @@ private:
     void update_font_displays();
     void select_artist_font();
     void select_track_font();
-    void reset_fonts_to_default();
     pfc::string8 format_font_name(const LOGFONT& lf);
     
     // Tab control methods
