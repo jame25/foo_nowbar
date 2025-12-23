@@ -35,6 +35,31 @@ static cfg_int cfg_nowbar_miniplayer_icon_visible(
     1  // Default: Show (visible)
 );
 
+static cfg_int cfg_nowbar_custom_button_visible(
+    GUID{0xABCDEF09, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0x91}},
+    1  // Default: Show (visible)
+);
+
+static cfg_int cfg_nowbar_custom_button_action(
+    GUID{0xABCDEF0A, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0x92}},
+    0  // Default: None (0=None, 1=Open URL, 2=Run Executable)
+);
+
+static cfg_string cfg_nowbar_custom_button_url(
+    GUID{0xABCDEF0B, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0x93}},
+    ""  // Default: empty
+);
+
+static cfg_string cfg_nowbar_custom_button_executable(
+    GUID{0xABCDEF0C, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0x94}},
+    ""  // Default: empty
+);
+
+static cfg_string cfg_nowbar_custom_button_fb2k_action(
+    GUID{0xABCDEF0D, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0x95}},
+    ""  // Default: empty (e.g., "Playback/Matrix Now Playing/Announce current track to Matrix")
+);
+
 // Font configuration
 static cfg_struct_t<LOGFONT> cfg_nowbar_artist_font(
     GUID{0xABCDEF02, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0x8A}},
@@ -98,6 +123,157 @@ bool get_nowbar_mood_icon_visible() {
 
 bool get_nowbar_miniplayer_icon_visible() {
     return cfg_nowbar_miniplayer_icon_visible != 0;
+}
+
+bool get_nowbar_custom_button_visible() {
+    return cfg_nowbar_custom_button_visible != 0;
+}
+
+int get_nowbar_custom_button_action() {
+    int action = cfg_nowbar_custom_button_action;
+    if (action < 0) action = 0;
+    if (action > 3) action = 3;  // 0=None, 1=Open URL, 2=Run Executable, 3=Foobar2k Action
+    return action;
+}
+
+pfc::string8 get_nowbar_custom_button_url() {
+    return cfg_nowbar_custom_button_url.get();
+}
+
+pfc::string8 get_nowbar_custom_button_executable() {
+    return cfg_nowbar_custom_button_executable.get();
+}
+
+pfc::string8 get_nowbar_custom_button_fb2k_action() {
+    return cfg_nowbar_custom_button_fb2k_action.get();
+}
+
+// Execute a foobar2000 main menu command by path (e.g., "Playback/Matrix Now Playing/Announce current track to Matrix")
+bool execute_fb2k_action_by_path(const char* path) {
+    if (!path || !*path) return false;
+
+    pfc::string8 target_path(path);
+
+    // Enumerate all main menu commands and find one matching the path
+    service_enum_t<mainmenu_commands> enumerator;
+    service_ptr_t<mainmenu_commands> commands;
+
+    while (enumerator.next(commands)) {
+        service_ptr_t<mainmenu_commands_v2> commands_v2;
+        commands->service_query_t(commands_v2);
+
+        const auto command_count = commands->get_command_count();
+        for (uint32_t command_index = 0; command_index < command_count; command_index++) {
+            GUID command_id = commands->get_command(command_index);
+
+            // Build the full path for this command
+            pfc::string8 command_name;
+            commands->get_name(command_index, command_name);
+
+            // Get parent group names
+            std::list<pfc::string8> name_parts;
+            name_parts.push_back(command_name);
+
+            GUID parent_id = commands->get_parent();
+            while (parent_id != pfc::guid_null) {
+                service_enum_t<mainmenu_group> group_enum;
+                service_ptr_t<mainmenu_group> group;
+                bool found = false;
+
+                while (group_enum.next(group)) {
+                    if (group->get_guid() == parent_id) {
+                        service_ptr_t<mainmenu_group_popup> popup;
+                        if (group->service_query_t(popup)) {
+                            pfc::string8 group_name;
+                            popup->get_display_string(group_name);
+                            name_parts.push_front(group_name);
+                        }
+                        parent_id = group->get_parent();
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) break;
+            }
+
+            // Build full path string
+            pfc::string8 full_path;
+            bool first = true;
+            for (const auto& part : name_parts) {
+                if (!first) full_path << "/";
+                full_path << part;
+                first = false;
+            }
+
+            // Check for match (case-insensitive)
+            if (stricmp_utf8(full_path.c_str(), target_path.c_str()) == 0) {
+                mainmenu_commands::g_execute(command_id);
+                return true;
+            }
+
+            // For dynamic commands, check sub-items
+            if (commands_v2.is_valid() && commands_v2->is_command_dynamic(command_index)) {
+                mainmenu_node::ptr node = commands_v2->dynamic_instantiate(command_index);
+
+                // Recursive lambda to search dynamic nodes
+                std::function<bool(const mainmenu_node::ptr&, std::list<pfc::string8>)> search_node;
+                search_node = [&](const mainmenu_node::ptr& n, std::list<pfc::string8> parts) -> bool {
+                    if (!n.is_valid()) return false;
+
+                    pfc::string8 display_name;
+                    uint32_t flags;
+                    n->get_display(display_name, flags);
+
+                    switch (n->get_type()) {
+                    case mainmenu_node::type_command: {
+                        parts.push_back(display_name);
+
+                        pfc::string8 node_path;
+                        bool first_part = true;
+                        for (const auto& p : parts) {
+                            if (!first_part) node_path << "/";
+                            node_path << p;
+                            first_part = false;
+                        }
+
+                        if (stricmp_utf8(node_path.c_str(), target_path.c_str()) == 0) {
+                            mainmenu_commands::g_execute_dynamic(command_id, n->get_guid());
+                            return true;
+                        }
+                        return false;
+                    }
+                    case mainmenu_node::type_group: {
+                        if (!display_name.is_empty()) {
+                            parts.push_back(display_name);
+                        }
+
+                        for (size_t i = 0, count = n->get_children_count(); i < count; i++) {
+                            if (search_node(n->get_child(i), parts)) {
+                                return true;
+                            }
+                        }
+                        return false;
+                    }
+                    default:
+                        return false;
+                    }
+                };
+
+                // Start search from root with parent path
+                std::list<pfc::string8> base_parts;
+                for (const auto& p : name_parts) {
+                    if (&p != &name_parts.back()) {  // Exclude the command name itself
+                        base_parts.push_back(p);
+                    }
+                }
+                if (search_node(node, base_parts)) {
+                    return true;
+                }
+            }
+        }
+    }
+
+    return false;
 }
 
 COLORREF get_nowbar_initial_bg_color() {
@@ -242,7 +418,18 @@ void nowbar_preferences::switch_tab(int tab) {
     ShowWindow(GetDlgItem(m_hwnd, IDC_MOOD_ICON_COMBO), show_general);
     ShowWindow(GetDlgItem(m_hwnd, IDC_MINIPLAYER_ICON_LABEL), show_general);
     ShowWindow(GetDlgItem(m_hwnd, IDC_MINIPLAYER_ICON_COMBO), show_general);
-    
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CUSTOM_BUTTON_LABEL), show_general);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CUSTOM_BUTTON_COMBO), show_general);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CUSTOM_ACTION_LABEL), show_general);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CUSTOM_ACTION_COMBO), show_general);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CUSTOM_URL_LABEL), show_general);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CUSTOM_URL_EDIT), show_general);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CUSTOM_EXE_LABEL), show_general);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CUSTOM_EXE_EDIT), show_general);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CUSTOM_EXE_BROWSE), show_general);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CUSTOM_FB2K_LABEL), show_general);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CUSTOM_FB2K_EDIT), show_general);
+
     // Fonts tab controls
     BOOL show_fonts = (tab == 1) ? SW_SHOW : SW_HIDE;
     ShowWindow(GetDlgItem(m_hwnd, IDC_FONTS_GROUP), show_fonts);
@@ -301,7 +488,30 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         SendMessage(hMiniplayerIconCombo, CB_ADDSTRING, 0, (LPARAM)L"Show");
         SendMessage(hMiniplayerIconCombo, CB_ADDSTRING, 0, (LPARAM)L"Hidden");
         SendMessage(hMiniplayerIconCombo, CB_SETCURSEL, cfg_nowbar_miniplayer_icon_visible ? 0 : 1, 0);
-        
+
+        // Initialize custom button visibility combobox
+        HWND hCustomButtonCombo = GetDlgItem(hwnd, IDC_CUSTOM_BUTTON_COMBO);
+        SendMessage(hCustomButtonCombo, CB_ADDSTRING, 0, (LPARAM)L"Show");
+        SendMessage(hCustomButtonCombo, CB_ADDSTRING, 0, (LPARAM)L"Hidden");
+        SendMessage(hCustomButtonCombo, CB_SETCURSEL, cfg_nowbar_custom_button_visible ? 0 : 1, 0);
+
+        // Initialize custom button action combobox
+        HWND hCustomActionCombo = GetDlgItem(hwnd, IDC_CUSTOM_ACTION_COMBO);
+        SendMessage(hCustomActionCombo, CB_ADDSTRING, 0, (LPARAM)L"None");
+        SendMessage(hCustomActionCombo, CB_ADDSTRING, 0, (LPARAM)L"Open URL");
+        SendMessage(hCustomActionCombo, CB_ADDSTRING, 0, (LPARAM)L"Run Executable");
+        SendMessage(hCustomActionCombo, CB_ADDSTRING, 0, (LPARAM)L"Foobar2k Action");
+        SendMessage(hCustomActionCombo, CB_SETCURSEL, cfg_nowbar_custom_button_action, 0);
+
+        // Initialize URL edit box
+        uSetDlgItemText(hwnd, IDC_CUSTOM_URL_EDIT, cfg_nowbar_custom_button_url);
+
+        // Initialize executable edit box
+        uSetDlgItemText(hwnd, IDC_CUSTOM_EXE_EDIT, cfg_nowbar_custom_button_executable);
+
+        // Initialize fb2k action edit box
+        uSetDlgItemText(hwnd, IDC_CUSTOM_FB2K_EDIT, cfg_nowbar_custom_button_fb2k_action);
+
         // Initialize font displays
         p_this->update_font_displays();
         
@@ -323,11 +533,38 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         case IDC_BAR_STYLE_COMBO:
         case IDC_MOOD_ICON_COMBO:
         case IDC_MINIPLAYER_ICON_COMBO:
+        case IDC_CUSTOM_BUTTON_COMBO:
+        case IDC_CUSTOM_ACTION_COMBO:
             if (HIWORD(wp) == CBN_SELCHANGE) {
                 p_this->on_changed();
             }
             break;
-            
+
+        case IDC_CUSTOM_URL_EDIT:
+        case IDC_CUSTOM_EXE_EDIT:
+        case IDC_CUSTOM_FB2K_EDIT:
+            if (HIWORD(wp) == EN_CHANGE) {
+                p_this->on_changed();
+            }
+            break;
+
+        case IDC_CUSTOM_EXE_BROWSE:
+            if (HIWORD(wp) == BN_CLICKED) {
+                wchar_t filename[MAX_PATH] = L"";
+                OPENFILENAMEW ofn = {};
+                ofn.lStructSize = sizeof(ofn);
+                ofn.hwndOwner = hwnd;
+                ofn.lpstrFilter = L"Executable Files (*.exe)\0*.exe\0All Files (*.*)\0*.*\0";
+                ofn.lpstrFile = filename;
+                ofn.nMaxFile = MAX_PATH;
+                ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
+                if (GetOpenFileNameW(&ofn)) {
+                    SetDlgItemTextW(hwnd, IDC_CUSTOM_EXE_EDIT, filename);
+                    p_this->on_changed();
+                }
+            }
+            break;
+
         case IDC_TRACK_FONT_SELECT:
             if (HIWORD(wp) == BN_CLICKED) {
                 p_this->select_track_font();
@@ -384,7 +621,29 @@ void nowbar_preferences::apply_settings() {
         // Save miniplayer icon visibility (0=Show, 1=Hidden in combobox -> config 1=Show, 0=Hidden)
         int miniplayerIconSel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_MINIPLAYER_ICON_COMBO), CB_GETCURSEL, 0, 0);
         cfg_nowbar_miniplayer_icon_visible = (miniplayerIconSel == 0) ? 1 : 0;
-        
+
+        // Save custom button visibility (0=Show, 1=Hidden in combobox -> config 1=Show, 0=Hidden)
+        int customButtonSel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_CUSTOM_BUTTON_COMBO), CB_GETCURSEL, 0, 0);
+        cfg_nowbar_custom_button_visible = (customButtonSel == 0) ? 1 : 0;
+
+        // Save custom button action
+        cfg_nowbar_custom_button_action = (int)SendMessage(GetDlgItem(m_hwnd, IDC_CUSTOM_ACTION_COMBO), CB_GETCURSEL, 0, 0);
+
+        // Save custom button URL
+        pfc::string8 url;
+        uGetDlgItemText(m_hwnd, IDC_CUSTOM_URL_EDIT, url);
+        cfg_nowbar_custom_button_url = url;
+
+        // Save custom button executable
+        pfc::string8 exe;
+        uGetDlgItemText(m_hwnd, IDC_CUSTOM_EXE_EDIT, exe);
+        cfg_nowbar_custom_button_executable = exe;
+
+        // Save custom button fb2k action
+        pfc::string8 fb2k_action;
+        uGetDlgItemText(m_hwnd, IDC_CUSTOM_FB2K_EDIT, fb2k_action);
+        cfg_nowbar_custom_button_fb2k_action = fb2k_action;
+
         // Notify all registered instances to update
         nowbar::ControlPanelCore::notify_all_settings_changed();
     }
@@ -399,13 +658,23 @@ void nowbar_preferences::reset_settings() {
             cfg_nowbar_bar_style = 0;  // Pill-shaped
             cfg_nowbar_mood_icon_visible = 1;  // Show (visible)
             cfg_nowbar_miniplayer_icon_visible = 1;  // Show (visible)
-            
+            cfg_nowbar_custom_button_visible = 1;  // Show (visible)
+            cfg_nowbar_custom_button_action = 0;  // None
+            cfg_nowbar_custom_button_url = "";
+            cfg_nowbar_custom_button_executable = "";
+            cfg_nowbar_custom_button_fb2k_action = "";
+
             // Update General tab UI
             SendMessage(GetDlgItem(m_hwnd, IDC_THEME_MODE_COMBO), CB_SETCURSEL, 0, 0);
             SendMessage(GetDlgItem(m_hwnd, IDC_COVER_MARGIN_COMBO), CB_SETCURSEL, 0, 0);
             SendMessage(GetDlgItem(m_hwnd, IDC_BAR_STYLE_COMBO), CB_SETCURSEL, 0, 0);
             SendMessage(GetDlgItem(m_hwnd, IDC_MOOD_ICON_COMBO), CB_SETCURSEL, 0, 0);
             SendMessage(GetDlgItem(m_hwnd, IDC_MINIPLAYER_ICON_COMBO), CB_SETCURSEL, 0, 0);
+            SendMessage(GetDlgItem(m_hwnd, IDC_CUSTOM_BUTTON_COMBO), CB_SETCURSEL, 0, 0);
+            SendMessage(GetDlgItem(m_hwnd, IDC_CUSTOM_ACTION_COMBO), CB_SETCURSEL, 0, 0);
+            SetDlgItemTextW(m_hwnd, IDC_CUSTOM_URL_EDIT, L"");
+            SetDlgItemTextW(m_hwnd, IDC_CUSTOM_EXE_EDIT, L"");
+            SetDlgItemTextW(m_hwnd, IDC_CUSTOM_FB2K_EDIT, L"");
         } else if (m_current_tab == 1) {
             // Reset Fonts tab settings
             reset_nowbar_fonts();
