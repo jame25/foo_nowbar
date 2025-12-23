@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "control_panel_cui.h"
+#include "../preferences.h"
 
 namespace nowbar {
 
@@ -16,9 +17,7 @@ void ControlPanelCUI::initialize_core(HWND wnd) {
             update_artwork();
         });
         
-        // Check dark mode
-        bool dark = ui_config_manager::g_is_dark_mode();
-        m_core->set_dark_mode(dark);
+        // Note: initialize() already calls on_settings_changed() which respects theme mode preferences
         
         // Load artwork for current track
         update_artwork();
@@ -96,8 +95,17 @@ LRESULT ControlPanelCUI::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
     }
         
-    case WM_ERASEBKGND:
-        return 1;  // We handle background ourselves
+    case WM_ERASEBKGND: {
+        // Paint background based on current theme setting to prevent flash
+        HDC hdc = (HDC)wp;
+        RECT rc;
+        GetClientRect(wnd, &rc);
+        COLORREF bg_color = get_nowbar_initial_bg_color();
+        HBRUSH brush = CreateSolidBrush(bg_color);
+        FillRect(hdc, &rc, brush);
+        DeleteObject(brush);
+        return 1;
+    }
         
     case WM_MOUSEMOVE: {
         if (!m_tracking_mouse) {
@@ -129,6 +137,12 @@ LRESULT ControlPanelCUI::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp) {
         ReleaseCapture();
         if (m_core) {
             m_core->on_lbutton_up(GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
+        }
+        return 0;
+        
+    case WM_LBUTTONDBLCLK:
+        if (m_core) {
+            m_core->on_lbutton_dblclk(GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
         }
         return 0;
         
