@@ -162,11 +162,25 @@ void ControlPanelCore::update_dpi(float scale) {
 }
 
 SIZE ControlPanelCore::get_min_size() const {
+  // Get DPI for scaling
+  int dpi = static_cast<int>(96 * m_dpi_scale);
+  
   // Minimum height: 0.55 inches, scaled by DPI
   // At 96 DPI: 0.55 * 96 = 53 pixels
-  LONG min_height = static_cast<LONG>(0.55 * 96 * m_dpi_scale);
-  return {static_cast<LONG>(200 * m_dpi_scale), // Reasonable minimum width
-          min_height};
+  LONG min_height = static_cast<LONG>(0.55 * dpi);
+  
+  // Minimum width: 700 pixels (matches DUI)
+  // Calculate minimum width based on layout requirements (at 96 DPI):
+  // - Artwork min: 32px + margins (~16px) = 48px
+  // - Core controls: 5 buttons (~192px including spacing)
+  // - Volume bar: ~100px
+  // - Optional icons (heart, custom, miniplayer): ~114px total when all visible
+  // - Margins and spacing: ~26px
+  // - Extra breathing room: ~220px
+  // Total comfortable minimum: ~700px
+  LONG min_width = 1000;
+  
+  return {min_width, min_height};
 }
 
 void ControlPanelCore::set_miniplayer_active(bool active) {
@@ -305,6 +319,10 @@ void ControlPanelCore::update_layout(const RECT &rect) {
   int core_width = button_size * (core_buttons - 1) + play_button_size +
                    spacing * (core_buttons - 1);
   int core_start_x = rect.left + (w - core_width) / 2;
+  
+  // Clamp control buttons to prevent overlap with artwork
+  int min_controls_x = m_rect_artwork.right + spacing;
+  core_start_x = std::max(core_start_x, min_controls_x);
 
   // Calculate seekbar and time display heights first to determine available
   // space
@@ -356,6 +374,9 @@ void ControlPanelCore::update_layout(const RECT &rect) {
   // Heart button - positioned to the left of shuffle (if visible)
   if (get_nowbar_mood_icon_visible()) {
     int heart_x = m_rect_shuffle.left - spacing - button_size;
+    // Prevent overlap with artwork - clamp left edge
+    int min_heart_x = m_rect_artwork.right + spacing;
+    heart_x = std::max(heart_x, min_heart_x);
     m_rect_heart = {heart_x, btn_y, heart_x + button_size, btn_y + button_size};
   } else {
     m_rect_heart = {}; // Clear rect when hidden
@@ -378,14 +399,29 @@ void ControlPanelCore::update_layout(const RECT &rect) {
   }
 
   // Set Volume bar position - align vertically with control buttons
-  m_rect_volume = {vol_x, btn_y, volume_right_edge, btn_y + button_size};
+  // Apply minimum spacing constraint to prevent overlap with control buttons
+  int rightmost_control_right;
+  if (get_nowbar_custom_button_visible()) {
+    rightmost_control_right = m_rect_custom.right;
+  } else {
+    rightmost_control_right = m_rect_repeat.right;
+  }
+  
+  // Clamp volume bar left edge to maintain minimum spacing from controls
+  int vol_x_clamped = std::max(vol_x, rightmost_control_right + spacing);
+  m_rect_volume = {vol_x_clamped, btn_y, volume_right_edge, btn_y + button_size};
 
 
   // Track info (between artwork and controls) - truly vertically centered on
   // panel
   int info_x = m_rect_artwork.right + spacing;
-  // Always use shuffle button as reference for right edge (fixed position)
-  int info_right = m_rect_shuffle.left - spacing;
+  // Use heart button as reference if visible, otherwise shuffle button
+  // Add extra spacing to prevent text overlap with progress timer
+  int extra_spacing = spacing; // Full spacing instead of 50%
+  int reference_left = get_nowbar_mood_icon_visible() ? m_rect_heart.left : m_rect_shuffle.left;
+  // Account for timer space: timer extends ~60px to the left of seekbar (which starts at shuffle)
+  int timer_space = static_cast<int>(75 * m_dpi_scale * m_size_scale); // Timer width + gap
+  int info_right = reference_left - timer_space;
   int info_height =
       static_cast<int>((m_metrics.text_height * 2 + 8) *
                        m_size_scale); // Title + artist + gap (scaled)
@@ -393,13 +429,17 @@ void ControlPanelCore::update_layout(const RECT &rect) {
       y_center - info_height / 2; // Centered on panel, not offset with controls
   m_rect_track_info = {info_x, info_y, info_right, info_y + info_height};
 
-  // Seekbar (directly below control icons, 20% wider than control buttons)
+  // Seekbar (directly below control icons, aligned with shuffle to repeat)
   int seek_y = m_rect_play.bottom + seek_gap;
-  int seekbar_base_width = m_rect_repeat.right - m_rect_shuffle.left;
-  int extra_width = seekbar_base_width / 10; // 10% on each side = 20% total
-  m_rect_seekbar = {m_rect_shuffle.left - extra_width, // Extend 10% left
+  
+  // Position seekbar to align exactly with shuffle (left) and repeat (right) buttons
+  // The seekbar position is fixed - no constraints since minimum width ensures enough space
+  int seekbar_left = m_rect_shuffle.left;
+  int seekbar_right = m_rect_repeat.right;
+  
+  m_rect_seekbar = {seekbar_left,
                     seek_y,
-                    m_rect_repeat.right + extra_width, // Extend 10% right
+                    seekbar_right,
                     seek_y + seekbar_height};
 
   // Time display (beside seekbar) - no longer needed below, times are drawn
@@ -483,6 +523,15 @@ void ControlPanelCore::draw_artwork(Gdiplus::Graphics &g) {
 }
 
 void ControlPanelCore::draw_track_info(Gdiplus::Graphics &g) {
+  // Set clipping region to prevent text overflow beyond boundaries
+  Gdiplus::Rect clipRect(
+      m_rect_track_info.left,
+      m_rect_track_info.top,
+      m_rect_track_info.right - m_rect_track_info.left,
+      m_rect_track_info.bottom - m_rect_track_info.top
+  );
+  g.SetClip(clipRect);
+  
   Gdiplus::SolidBrush titleBrush(m_text_color);
   Gdiplus::SolidBrush artistBrush(m_text_secondary_color);
 
@@ -514,6 +563,9 @@ void ControlPanelCore::draw_track_info(Gdiplus::Graphics &g) {
     g.DrawString(artist.c_str(), -1, m_font_artist.get(), artistRect, &sf,
                  &artistBrush);
   }
+  
+  // Reset clipping region after drawing text
+  g.ResetClip();
 }
 
 void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
@@ -780,15 +832,30 @@ void ControlPanelCore::draw_time_display(Gdiplus::Graphics &g) {
   float time_width = 55 * m_dpi_scale * m_size_scale;
 
   // Left side: elapsed time (before seekbar)
-  Gdiplus::RectF leftTimeRect((float)(m_rect_seekbar.left - time_offset),
+  // Position timer to end just before the seekbar (with gap for seek handle)
+  // Text is right-aligned within the rect so it appears adjacent to the seekbar
+  int timer_gap = static_cast<int>(12 * m_dpi_scale * m_size_scale); // Gap to avoid seek handle overlap
+  float timer_right = (float)(m_rect_seekbar.left - timer_gap);
+  float timer_left = timer_right - time_width;
+  
+  // Constrain timer left edge to not overlap with artwork
+  // (Track info text is clipped, so timer can use the space between artwork and seekbar)
+  int timer_spacing = static_cast<int>(8 * m_dpi_scale); // Minimum spacing from artwork
+  float min_timer_left = (float)(m_rect_artwork.right + timer_spacing);
+  if (timer_left < min_timer_left) {
+    timer_left = min_timer_left;
+  }
+  
+  Gdiplus::RectF leftTimeRect(timer_left,
                               (float)(seekbar_center_y - time_height / 2),
                               time_width, (float)time_height);
   g.DrawString(elapsed.c_str(), -1, &timeFont, leftTimeRect, &sfRight,
                &timeBrush);
 
   // Right side: remaining time (after seekbar)
+  // Use same gap as left side to avoid seek handle overlap
   Gdiplus::RectF rightTimeRect(
-      (float)(m_rect_seekbar.right + 5 * m_dpi_scale * m_size_scale),
+      (float)(m_rect_seekbar.right + timer_gap),
       (float)(seekbar_center_y - time_height / 2), time_offset,
       (float)time_height);
   g.DrawString(remaining_str.c_str(), -1, &timeFont, rightTimeRect, &sfLeft,
