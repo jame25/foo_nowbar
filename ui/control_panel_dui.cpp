@@ -71,8 +71,7 @@ ui_element_config::ptr ControlPanelDUI::get_configuration() {
 ui_element_min_max_info ControlPanelDUI::get_min_max_info() {
     ui_element_min_max_info info;
     
-    // Minimum height: 0.55 inches, scaled by DPI
-    // At 96 DPI: 0.55 * 96 = 53 pixels
+    // Get DPI for scaling calculations
     int dpi = 96;
     if (m_hwnd) {
         HDC hdc = GetDC(m_hwnd);
@@ -82,8 +81,24 @@ ui_element_min_max_info ControlPanelDUI::get_min_max_info() {
         }
     }
 
+    // Minimum height: 0.55 inches, scaled by DPI
+    // At 96 DPI: 0.55 * 96 = 53 pixels
     info.m_min_height = static_cast<t_uint32>(0.55 * dpi);
-    info.m_min_width = 200;  // Reasonable minimum width
+    
+    // Maximum height: 1.8 inches, scaled by DPI  
+    // At 96 DPI: 1.8 * 96 = 173 pixels
+    // Keeps panel compact and horizontal-focused
+    info.m_max_height = static_cast<t_uint32>(1.8 * dpi);
+    
+    // Calculate minimum width based on layout requirements (at 96 DPI):
+    // - Artwork min: 32px + margins (~16px) = 48px
+    // - Core controls: 5 buttons (~192px including spacing)
+    // - Volume bar: ~100px
+    // - Optional icons (heart, custom, miniplayer): ~114px total when all visible
+    // - Margins and spacing: ~26px
+    // - Extra breathing room: ~520px
+    // Total comfortable minimum: ~1000px (matches core)
+    info.m_min_width = 1000;
     
     return info;
 }
