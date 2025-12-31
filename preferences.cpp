@@ -40,6 +40,11 @@ static cfg_int cfg_nowbar_custom_button_visible(
     1  // Default: Show (visible)
 );
 
+static cfg_int cfg_nowbar_hover_circles(
+    GUID{0xABCDEF1C, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xAC}},
+    1  // Default: Yes (show hover circles)
+);
+
 static cfg_int cfg_nowbar_custom_button_action(
     GUID{0xABCDEF0A, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0x92}},
     0  // Default: None (0=None, 1=Open URL, 2=Run Executable)
@@ -98,6 +103,57 @@ static cfg_int cfg_nowbar_use_custom_fonts(
     0  // Default: use built-in fonts
 );
 
+// Custom Button tab configuration (4 buttons)
+static cfg_int cfg_cbutton1_enabled(
+    GUID{0xABCDEF10, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xA0}},
+    0  // Default: disabled
+);
+static cfg_int cfg_cbutton1_action(
+    GUID{0xABCDEF11, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xA1}},
+    0  // Default: None
+);
+static cfg_int cfg_cbutton2_enabled(
+    GUID{0xABCDEF12, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xA2}},
+    0  // Default: disabled
+);
+static cfg_int cfg_cbutton2_action(
+    GUID{0xABCDEF13, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xA3}},
+    0  // Default: None
+);
+static cfg_int cfg_cbutton3_enabled(
+    GUID{0xABCDEF14, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xA4}},
+    0  // Default: disabled
+);
+static cfg_int cfg_cbutton3_action(
+    GUID{0xABCDEF15, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xA5}},
+    0  // Default: None
+);
+static cfg_int cfg_cbutton4_enabled(
+    GUID{0xABCDEF16, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xA6}},
+    0  // Default: disabled
+);
+static cfg_int cfg_cbutton4_action(
+    GUID{0xABCDEF17, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xA7}},
+    0  // Default: None
+);
+
+static cfg_string cfg_cbutton1_path(
+    GUID{0xABCDEF18, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xA8}},
+    ""  // Default: empty
+);
+static cfg_string cfg_cbutton2_path(
+    GUID{0xABCDEF19, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xA9}},
+    ""  // Default: empty
+);
+static cfg_string cfg_cbutton3_path(
+    GUID{0xABCDEF1A, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xAA}},
+    ""  // Default: empty
+);
+static cfg_string cfg_cbutton4_path(
+    GUID{0xABCDEF1B, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xAB}},
+    ""  // Default: empty
+);
+
 // Configuration accessors
 int get_nowbar_theme_mode() {
     int mode = cfg_nowbar_theme_mode;
@@ -125,6 +181,10 @@ bool get_nowbar_miniplayer_icon_visible() {
     return cfg_nowbar_miniplayer_icon_visible != 0;
 }
 
+bool get_nowbar_hover_circles_enabled() {
+    return cfg_nowbar_hover_circles != 0;
+}
+
 bool get_nowbar_custom_button_visible() {
     return cfg_nowbar_custom_button_visible != 0;
 }
@@ -146,6 +206,39 @@ pfc::string8 get_nowbar_custom_button_executable() {
 
 pfc::string8 get_nowbar_custom_button_fb2k_action() {
     return cfg_nowbar_custom_button_fb2k_action.get();
+}
+
+bool get_nowbar_cbutton_enabled(int button_index) {
+    switch (button_index) {
+        case 0: return cfg_cbutton1_enabled != 0;
+        case 1: return cfg_cbutton2_enabled != 0;
+        case 2: return cfg_cbutton3_enabled != 0;
+        case 3: return cfg_cbutton4_enabled != 0;
+        default: return false;
+    }
+}
+
+int get_nowbar_cbutton_action(int button_index) {
+    int action = 0;
+    switch (button_index) {
+        case 0: action = cfg_cbutton1_action; break;
+        case 1: action = cfg_cbutton2_action; break;
+        case 2: action = cfg_cbutton3_action; break;
+        case 3: action = cfg_cbutton4_action; break;
+    }
+    if (action < 0) action = 0;
+    if (action > 3) action = 3;
+    return action;
+}
+
+pfc::string8 get_nowbar_cbutton_path(int button_index) {
+    switch (button_index) {
+        case 0: return cfg_cbutton1_path.get();
+        case 1: return cfg_cbutton2_path.get();
+        case 2: return cfg_cbutton3_path.get();
+        case 3: return cfg_cbutton4_path.get();
+        default: return pfc::string8();
+    }
 }
 
 // Execute a foobar2000 main menu command by path (e.g., "Playback/Matrix Now Playing/Announce current track to Matrix")
@@ -399,8 +492,11 @@ void nowbar_preferences::init_tab_control() {
     tie.pszText = (LPWSTR)L"General";
     TabCtrl_InsertItem(hTab, 0, &tie);
     
-    tie.pszText = (LPWSTR)L"Fonts";
+    tie.pszText = (LPWSTR)L"Custom Button";
     TabCtrl_InsertItem(hTab, 1, &tie);
+    
+    tie.pszText = (LPWSTR)L"Fonts";
+    TabCtrl_InsertItem(hTab, 2, &tie);
 }
 
 void nowbar_preferences::switch_tab(int tab) {
@@ -418,20 +514,33 @@ void nowbar_preferences::switch_tab(int tab) {
     ShowWindow(GetDlgItem(m_hwnd, IDC_MOOD_ICON_COMBO), show_general);
     ShowWindow(GetDlgItem(m_hwnd, IDC_MINIPLAYER_ICON_LABEL), show_general);
     ShowWindow(GetDlgItem(m_hwnd, IDC_MINIPLAYER_ICON_COMBO), show_general);
-    ShowWindow(GetDlgItem(m_hwnd, IDC_CUSTOM_BUTTON_LABEL), show_general);
-    ShowWindow(GetDlgItem(m_hwnd, IDC_CUSTOM_BUTTON_COMBO), show_general);
-    ShowWindow(GetDlgItem(m_hwnd, IDC_CUSTOM_ACTION_LABEL), show_general);
-    ShowWindow(GetDlgItem(m_hwnd, IDC_CUSTOM_ACTION_COMBO), show_general);
-    ShowWindow(GetDlgItem(m_hwnd, IDC_CUSTOM_URL_LABEL), show_general);
-    ShowWindow(GetDlgItem(m_hwnd, IDC_CUSTOM_URL_EDIT), show_general);
-    ShowWindow(GetDlgItem(m_hwnd, IDC_CUSTOM_EXE_LABEL), show_general);
-    ShowWindow(GetDlgItem(m_hwnd, IDC_CUSTOM_EXE_EDIT), show_general);
-    ShowWindow(GetDlgItem(m_hwnd, IDC_CUSTOM_EXE_BROWSE), show_general);
-    ShowWindow(GetDlgItem(m_hwnd, IDC_CUSTOM_FB2K_LABEL), show_general);
-    ShowWindow(GetDlgItem(m_hwnd, IDC_CUSTOM_FB2K_EDIT), show_general);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_HOVER_CIRCLES_LABEL), show_general);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_HOVER_CIRCLES_COMBO), show_general);
 
+    // Custom Button tab controls
+    BOOL show_cbutton = (tab == 1) ? SW_SHOW : SW_HIDE;
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON_ENABLE_LABEL), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON_ACTION_LABEL), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON_PATH_LABEL), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON1_ENABLE), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON1_ACTION), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON1_PATH), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON1_BROWSE), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON2_ENABLE), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON2_ACTION), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON2_PATH), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON2_BROWSE), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON3_ENABLE), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON3_ACTION), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON3_PATH), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON3_BROWSE), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON4_ENABLE), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON4_ACTION), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON4_PATH), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON4_BROWSE), show_cbutton);
+    
     // Fonts tab controls
-    BOOL show_fonts = (tab == 1) ? SW_SHOW : SW_HIDE;
+    BOOL show_fonts = (tab == 2) ? SW_SHOW : SW_HIDE;
     ShowWindow(GetDlgItem(m_hwnd, IDC_FONTS_GROUP), show_fonts);
     ShowWindow(GetDlgItem(m_hwnd, IDC_TRACK_FONT_LABEL), show_fonts);
     ShowWindow(GetDlgItem(m_hwnd, IDC_TRACK_FONT_DISPLAY), show_fonts);
@@ -439,6 +548,40 @@ void nowbar_preferences::switch_tab(int tab) {
     ShowWindow(GetDlgItem(m_hwnd, IDC_ARTIST_FONT_LABEL), show_fonts);
     ShowWindow(GetDlgItem(m_hwnd, IDC_ARTIST_FONT_DISPLAY), show_fonts);
     ShowWindow(GetDlgItem(m_hwnd, IDC_ARTIST_FONT_SELECT), show_fonts);
+}
+
+// Helper to update path control states based on action selection
+static void update_cbutton_path_state(HWND hwnd, int action_id, int path_id, int browse_id) {
+    int action = (int)SendMessage(GetDlgItem(hwnd, action_id), CB_GETCURSEL, 0, 0);
+    HWND hPath = GetDlgItem(hwnd, path_id);
+    HWND hBrowse = GetDlgItem(hwnd, browse_id);
+    
+    // 0=None, 1=Open URL, 2=Run Executable, 3=Foobar2k Action
+    switch (action) {
+        case 0:  // None - disable both
+            EnableWindow(hPath, FALSE);
+            EnableWindow(hBrowse, FALSE);
+            break;
+        case 1:  // Open URL - enable path edit, hide browse
+            EnableWindow(hPath, TRUE);
+            EnableWindow(hBrowse, FALSE);
+            break;
+        case 2:  // Run Executable - enable path edit, enable browse
+            EnableWindow(hPath, TRUE);
+            EnableWindow(hBrowse, TRUE);
+            break;
+        case 3:  // Foobar2k Action - enable path edit, hide browse
+            EnableWindow(hPath, TRUE);
+            EnableWindow(hBrowse, FALSE);
+            break;
+    }
+}
+
+static void update_all_cbutton_path_states(HWND hwnd) {
+    update_cbutton_path_state(hwnd, IDC_CBUTTON1_ACTION, IDC_CBUTTON1_PATH, IDC_CBUTTON1_BROWSE);
+    update_cbutton_path_state(hwnd, IDC_CBUTTON2_ACTION, IDC_CBUTTON2_PATH, IDC_CBUTTON2_BROWSE);
+    update_cbutton_path_state(hwnd, IDC_CBUTTON3_ACTION, IDC_CBUTTON3_PATH, IDC_CBUTTON3_BROWSE);
+    update_cbutton_path_state(hwnd, IDC_CBUTTON4_ACTION, IDC_CBUTTON4_PATH, IDC_CBUTTON4_BROWSE);
 }
 
 INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
@@ -489,31 +632,44 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         SendMessage(hMiniplayerIconCombo, CB_ADDSTRING, 0, (LPARAM)L"Hidden");
         SendMessage(hMiniplayerIconCombo, CB_SETCURSEL, cfg_nowbar_miniplayer_icon_visible ? 0 : 1, 0);
 
-        // Initialize custom button visibility combobox
-        HWND hCustomButtonCombo = GetDlgItem(hwnd, IDC_CUSTOM_BUTTON_COMBO);
-        SendMessage(hCustomButtonCombo, CB_ADDSTRING, 0, (LPARAM)L"Show");
-        SendMessage(hCustomButtonCombo, CB_ADDSTRING, 0, (LPARAM)L"Hidden");
-        SendMessage(hCustomButtonCombo, CB_SETCURSEL, cfg_nowbar_custom_button_visible ? 0 : 1, 0);
-
-        // Initialize custom button action combobox
-        HWND hCustomActionCombo = GetDlgItem(hwnd, IDC_CUSTOM_ACTION_COMBO);
-        SendMessage(hCustomActionCombo, CB_ADDSTRING, 0, (LPARAM)L"None");
-        SendMessage(hCustomActionCombo, CB_ADDSTRING, 0, (LPARAM)L"Open URL");
-        SendMessage(hCustomActionCombo, CB_ADDSTRING, 0, (LPARAM)L"Run Executable");
-        SendMessage(hCustomActionCombo, CB_ADDSTRING, 0, (LPARAM)L"Foobar2k Action");
-        SendMessage(hCustomActionCombo, CB_SETCURSEL, cfg_nowbar_custom_button_action, 0);
-
-        // Initialize URL edit box
-        uSetDlgItemText(hwnd, IDC_CUSTOM_URL_EDIT, cfg_nowbar_custom_button_url);
-
-        // Initialize executable edit box
-        uSetDlgItemText(hwnd, IDC_CUSTOM_EXE_EDIT, cfg_nowbar_custom_button_executable);
-
-        // Initialize fb2k action edit box
-        uSetDlgItemText(hwnd, IDC_CUSTOM_FB2K_EDIT, cfg_nowbar_custom_button_fb2k_action);
+        // Initialize hover circles combobox
+        HWND hHoverCirclesCombo = GetDlgItem(hwnd, IDC_HOVER_CIRCLES_COMBO);
+        SendMessage(hHoverCirclesCombo, CB_ADDSTRING, 0, (LPARAM)L"Yes");
+        SendMessage(hHoverCirclesCombo, CB_ADDSTRING, 0, (LPARAM)L"No");
+        SendMessage(hHoverCirclesCombo, CB_SETCURSEL, cfg_nowbar_hover_circles ? 0 : 1, 0);
 
         // Initialize font displays
         p_this->update_font_displays();
+
+        // Initialize Custom Button tab controls
+        // Populate action comboboxes with choices
+        int cbutton_action_combos[] = {IDC_CBUTTON1_ACTION, IDC_CBUTTON2_ACTION, IDC_CBUTTON3_ACTION, IDC_CBUTTON4_ACTION};
+        for (int id : cbutton_action_combos) {
+            HWND hCombo = GetDlgItem(hwnd, id);
+            SendMessage(hCombo, CB_ADDSTRING, 0, (LPARAM)L"None");
+            SendMessage(hCombo, CB_ADDSTRING, 0, (LPARAM)L"Open URL");
+            SendMessage(hCombo, CB_ADDSTRING, 0, (LPARAM)L"Run Executable");
+            SendMessage(hCombo, CB_ADDSTRING, 0, (LPARAM)L"Foobar2k Action");
+        }
+        
+        // Set checkbox and combobox states from config
+        CheckDlgButton(hwnd, IDC_CBUTTON1_ENABLE, cfg_cbutton1_enabled ? BST_CHECKED : BST_UNCHECKED);
+        CheckDlgButton(hwnd, IDC_CBUTTON2_ENABLE, cfg_cbutton2_enabled ? BST_CHECKED : BST_UNCHECKED);
+        CheckDlgButton(hwnd, IDC_CBUTTON3_ENABLE, cfg_cbutton3_enabled ? BST_CHECKED : BST_UNCHECKED);
+        CheckDlgButton(hwnd, IDC_CBUTTON4_ENABLE, cfg_cbutton4_enabled ? BST_CHECKED : BST_UNCHECKED);
+        SendMessage(GetDlgItem(hwnd, IDC_CBUTTON1_ACTION), CB_SETCURSEL, cfg_cbutton1_action, 0);
+        SendMessage(GetDlgItem(hwnd, IDC_CBUTTON2_ACTION), CB_SETCURSEL, cfg_cbutton2_action, 0);
+        SendMessage(GetDlgItem(hwnd, IDC_CBUTTON3_ACTION), CB_SETCURSEL, cfg_cbutton3_action, 0);
+        SendMessage(GetDlgItem(hwnd, IDC_CBUTTON4_ACTION), CB_SETCURSEL, cfg_cbutton4_action, 0);
+        
+        // Initialize path edit boxes
+        uSetDlgItemText(hwnd, IDC_CBUTTON1_PATH, cfg_cbutton1_path);
+        uSetDlgItemText(hwnd, IDC_CBUTTON2_PATH, cfg_cbutton2_path);
+        uSetDlgItemText(hwnd, IDC_CBUTTON3_PATH, cfg_cbutton3_path);
+        uSetDlgItemText(hwnd, IDC_CBUTTON4_PATH, cfg_cbutton4_path);
+        
+        // Update path control states based on action selection
+        update_all_cbutton_path_states(hwnd);
         
         // Show initial tab
         p_this->switch_tab(0);
@@ -533,23 +689,53 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         case IDC_BAR_STYLE_COMBO:
         case IDC_MOOD_ICON_COMBO:
         case IDC_MINIPLAYER_ICON_COMBO:
-        case IDC_CUSTOM_BUTTON_COMBO:
-        case IDC_CUSTOM_ACTION_COMBO:
+        case IDC_HOVER_CIRCLES_COMBO:
             if (HIWORD(wp) == CBN_SELCHANGE) {
                 p_this->on_changed();
             }
             break;
 
-        case IDC_CUSTOM_URL_EDIT:
-        case IDC_CUSTOM_EXE_EDIT:
-        case IDC_CUSTOM_FB2K_EDIT:
+        case IDC_CBUTTON1_ACTION:
+        case IDC_CBUTTON2_ACTION:
+        case IDC_CBUTTON3_ACTION:
+        case IDC_CBUTTON4_ACTION:
+            if (HIWORD(wp) == CBN_SELCHANGE) {
+                p_this->on_changed();
+                // Update path control states when action changes
+                update_all_cbutton_path_states(hwnd);
+            }
+            break;
+
+        case IDC_CBUTTON1_ENABLE:
+        case IDC_CBUTTON2_ENABLE:
+        case IDC_CBUTTON3_ENABLE:
+        case IDC_CBUTTON4_ENABLE:
+            if (HIWORD(wp) == BN_CLICKED) {
+                p_this->on_changed();
+            }
+            break;
+
+        case IDC_CBUTTON1_PATH:
+        case IDC_CBUTTON2_PATH:
+        case IDC_CBUTTON3_PATH:
+        case IDC_CBUTTON4_PATH:
             if (HIWORD(wp) == EN_CHANGE) {
                 p_this->on_changed();
             }
             break;
 
-        case IDC_CUSTOM_EXE_BROWSE:
+        case IDC_CBUTTON1_BROWSE:
+        case IDC_CBUTTON2_BROWSE:
+        case IDC_CBUTTON3_BROWSE:
+        case IDC_CBUTTON4_BROWSE:
             if (HIWORD(wp) == BN_CLICKED) {
+                int path_id = 0;
+                switch (LOWORD(wp)) {
+                    case IDC_CBUTTON1_BROWSE: path_id = IDC_CBUTTON1_PATH; break;
+                    case IDC_CBUTTON2_BROWSE: path_id = IDC_CBUTTON2_PATH; break;
+                    case IDC_CBUTTON3_BROWSE: path_id = IDC_CBUTTON3_PATH; break;
+                    case IDC_CBUTTON4_BROWSE: path_id = IDC_CBUTTON4_PATH; break;
+                }
                 wchar_t filename[MAX_PATH] = L"";
                 OPENFILENAMEW ofn = {};
                 ofn.lStructSize = sizeof(ofn);
@@ -559,7 +745,7 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
                 ofn.nMaxFile = MAX_PATH;
                 ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
                 if (GetOpenFileNameW(&ofn)) {
-                    SetDlgItemTextW(hwnd, IDC_CUSTOM_EXE_EDIT, filename);
+                    SetDlgItemTextW(hwnd, path_id, filename);
                     p_this->on_changed();
                 }
             }
@@ -622,27 +808,30 @@ void nowbar_preferences::apply_settings() {
         int miniplayerIconSel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_MINIPLAYER_ICON_COMBO), CB_GETCURSEL, 0, 0);
         cfg_nowbar_miniplayer_icon_visible = (miniplayerIconSel == 0) ? 1 : 0;
 
-        // Save custom button visibility (0=Show, 1=Hidden in combobox -> config 1=Show, 0=Hidden)
-        int customButtonSel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_CUSTOM_BUTTON_COMBO), CB_GETCURSEL, 0, 0);
-        cfg_nowbar_custom_button_visible = (customButtonSel == 0) ? 1 : 0;
+        // Save hover circles setting (0=Yes, 1=No in combobox -> config 1=Yes, 0=No)
+        int hoverCirclesSel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_HOVER_CIRCLES_COMBO), CB_GETCURSEL, 0, 0);
+        cfg_nowbar_hover_circles = (hoverCirclesSel == 0) ? 1 : 0;
 
-        // Save custom button action
-        cfg_nowbar_custom_button_action = (int)SendMessage(GetDlgItem(m_hwnd, IDC_CUSTOM_ACTION_COMBO), CB_GETCURSEL, 0, 0);
-
-        // Save custom button URL
-        pfc::string8 url;
-        uGetDlgItemText(m_hwnd, IDC_CUSTOM_URL_EDIT, url);
-        cfg_nowbar_custom_button_url = url;
-
-        // Save custom button executable
-        pfc::string8 exe;
-        uGetDlgItemText(m_hwnd, IDC_CUSTOM_EXE_EDIT, exe);
-        cfg_nowbar_custom_button_executable = exe;
-
-        // Save custom button fb2k action
-        pfc::string8 fb2k_action;
-        uGetDlgItemText(m_hwnd, IDC_CUSTOM_FB2K_EDIT, fb2k_action);
-        cfg_nowbar_custom_button_fb2k_action = fb2k_action;
+        // Save Custom Button tab settings
+        cfg_cbutton1_enabled = IsDlgButtonChecked(m_hwnd, IDC_CBUTTON1_ENABLE) == BST_CHECKED ? 1 : 0;
+        cfg_cbutton2_enabled = IsDlgButtonChecked(m_hwnd, IDC_CBUTTON2_ENABLE) == BST_CHECKED ? 1 : 0;
+        cfg_cbutton3_enabled = IsDlgButtonChecked(m_hwnd, IDC_CBUTTON3_ENABLE) == BST_CHECKED ? 1 : 0;
+        cfg_cbutton4_enabled = IsDlgButtonChecked(m_hwnd, IDC_CBUTTON4_ENABLE) == BST_CHECKED ? 1 : 0;
+        cfg_cbutton1_action = (int)SendMessage(GetDlgItem(m_hwnd, IDC_CBUTTON1_ACTION), CB_GETCURSEL, 0, 0);
+        cfg_cbutton2_action = (int)SendMessage(GetDlgItem(m_hwnd, IDC_CBUTTON2_ACTION), CB_GETCURSEL, 0, 0);
+        cfg_cbutton3_action = (int)SendMessage(GetDlgItem(m_hwnd, IDC_CBUTTON3_ACTION), CB_GETCURSEL, 0, 0);
+        cfg_cbutton4_action = (int)SendMessage(GetDlgItem(m_hwnd, IDC_CBUTTON4_ACTION), CB_GETCURSEL, 0, 0);
+        
+        // Save Custom Button paths
+        pfc::string8 path;
+        uGetDlgItemText(m_hwnd, IDC_CBUTTON1_PATH, path);
+        cfg_cbutton1_path = path;
+        uGetDlgItemText(m_hwnd, IDC_CBUTTON2_PATH, path);
+        cfg_cbutton2_path = path;
+        uGetDlgItemText(m_hwnd, IDC_CBUTTON3_PATH, path);
+        cfg_cbutton3_path = path;
+        uGetDlgItemText(m_hwnd, IDC_CBUTTON4_PATH, path);
+        cfg_cbutton4_path = path;
 
         // Notify all registered instances to update
         nowbar::ControlPanelCore::notify_all_settings_changed();
@@ -658,11 +847,7 @@ void nowbar_preferences::reset_settings() {
             cfg_nowbar_bar_style = 0;  // Pill-shaped
             cfg_nowbar_mood_icon_visible = 1;  // Show (visible)
             cfg_nowbar_miniplayer_icon_visible = 1;  // Show (visible)
-            cfg_nowbar_custom_button_visible = 1;  // Show (visible)
-            cfg_nowbar_custom_button_action = 0;  // None
-            cfg_nowbar_custom_button_url = "";
-            cfg_nowbar_custom_button_executable = "";
-            cfg_nowbar_custom_button_fb2k_action = "";
+            cfg_nowbar_hover_circles = 1;  // Yes (show hover circles)
 
             // Update General tab UI
             SendMessage(GetDlgItem(m_hwnd, IDC_THEME_MODE_COMBO), CB_SETCURSEL, 0, 0);
@@ -670,12 +855,37 @@ void nowbar_preferences::reset_settings() {
             SendMessage(GetDlgItem(m_hwnd, IDC_BAR_STYLE_COMBO), CB_SETCURSEL, 0, 0);
             SendMessage(GetDlgItem(m_hwnd, IDC_MOOD_ICON_COMBO), CB_SETCURSEL, 0, 0);
             SendMessage(GetDlgItem(m_hwnd, IDC_MINIPLAYER_ICON_COMBO), CB_SETCURSEL, 0, 0);
-            SendMessage(GetDlgItem(m_hwnd, IDC_CUSTOM_BUTTON_COMBO), CB_SETCURSEL, 0, 0);
-            SendMessage(GetDlgItem(m_hwnd, IDC_CUSTOM_ACTION_COMBO), CB_SETCURSEL, 0, 0);
-            SetDlgItemTextW(m_hwnd, IDC_CUSTOM_URL_EDIT, L"");
-            SetDlgItemTextW(m_hwnd, IDC_CUSTOM_EXE_EDIT, L"");
-            SetDlgItemTextW(m_hwnd, IDC_CUSTOM_FB2K_EDIT, L"");
+            SendMessage(GetDlgItem(m_hwnd, IDC_HOVER_CIRCLES_COMBO), CB_SETCURSEL, 0, 0);
         } else if (m_current_tab == 1) {
+            // Reset Custom Button tab settings
+            cfg_cbutton1_enabled = 0;
+            cfg_cbutton2_enabled = 0;
+            cfg_cbutton3_enabled = 0;
+            cfg_cbutton4_enabled = 0;
+            cfg_cbutton1_action = 0;
+            cfg_cbutton2_action = 0;
+            cfg_cbutton3_action = 0;
+            cfg_cbutton4_action = 0;
+            cfg_cbutton1_path = "";
+            cfg_cbutton2_path = "";
+            cfg_cbutton3_path = "";
+            cfg_cbutton4_path = "";
+            
+            // Update UI
+            CheckDlgButton(m_hwnd, IDC_CBUTTON1_ENABLE, BST_UNCHECKED);
+            CheckDlgButton(m_hwnd, IDC_CBUTTON2_ENABLE, BST_UNCHECKED);
+            CheckDlgButton(m_hwnd, IDC_CBUTTON3_ENABLE, BST_UNCHECKED);
+            CheckDlgButton(m_hwnd, IDC_CBUTTON4_ENABLE, BST_UNCHECKED);
+            SendMessage(GetDlgItem(m_hwnd, IDC_CBUTTON1_ACTION), CB_SETCURSEL, 0, 0);
+            SendMessage(GetDlgItem(m_hwnd, IDC_CBUTTON2_ACTION), CB_SETCURSEL, 0, 0);
+            SendMessage(GetDlgItem(m_hwnd, IDC_CBUTTON3_ACTION), CB_SETCURSEL, 0, 0);
+            SendMessage(GetDlgItem(m_hwnd, IDC_CBUTTON4_ACTION), CB_SETCURSEL, 0, 0);
+            SetDlgItemTextW(m_hwnd, IDC_CBUTTON1_PATH, L"");
+            SetDlgItemTextW(m_hwnd, IDC_CBUTTON2_PATH, L"");
+            SetDlgItemTextW(m_hwnd, IDC_CBUTTON3_PATH, L"");
+            SetDlgItemTextW(m_hwnd, IDC_CBUTTON4_PATH, L"");
+            update_all_cbutton_path_states(m_hwnd);
+        } else if (m_current_tab == 2) {
             // Reset Fonts tab settings
             reset_nowbar_fonts();
             update_font_displays();
