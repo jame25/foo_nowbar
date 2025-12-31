@@ -45,6 +45,11 @@ static cfg_int cfg_nowbar_hover_circles(
     1  // Default: Yes (show hover circles)
 );
 
+static cfg_int cfg_nowbar_alternate_icons(
+    GUID{0xABCDEF1D, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xAD}},
+    0  // Default: Disabled
+);
+
 static cfg_int cfg_nowbar_custom_button_action(
     GUID{0xABCDEF0A, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0x92}},
     0  // Default: None (0=None, 1=Open URL, 2=Run Executable)
@@ -183,6 +188,10 @@ bool get_nowbar_miniplayer_icon_visible() {
 
 bool get_nowbar_hover_circles_enabled() {
     return cfg_nowbar_hover_circles != 0;
+}
+
+bool get_nowbar_alternate_icons_enabled() {
+    return cfg_nowbar_alternate_icons != 0;
 }
 
 bool get_nowbar_custom_button_visible() {
@@ -516,6 +525,8 @@ void nowbar_preferences::switch_tab(int tab) {
     ShowWindow(GetDlgItem(m_hwnd, IDC_MINIPLAYER_ICON_COMBO), show_general);
     ShowWindow(GetDlgItem(m_hwnd, IDC_HOVER_CIRCLES_LABEL), show_general);
     ShowWindow(GetDlgItem(m_hwnd, IDC_HOVER_CIRCLES_COMBO), show_general);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_ALTERNATE_ICONS_LABEL), show_general);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_ALTERNATE_ICONS_COMBO), show_general);
 
     // Custom Button tab controls
     BOOL show_cbutton = (tab == 1) ? SW_SHOW : SW_HIDE;
@@ -638,6 +649,12 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         SendMessage(hHoverCirclesCombo, CB_ADDSTRING, 0, (LPARAM)L"No");
         SendMessage(hHoverCirclesCombo, CB_SETCURSEL, cfg_nowbar_hover_circles ? 0 : 1, 0);
 
+        // Initialize alternate icons combobox
+        HWND hAlternateIconsCombo = GetDlgItem(hwnd, IDC_ALTERNATE_ICONS_COMBO);
+        SendMessage(hAlternateIconsCombo, CB_ADDSTRING, 0, (LPARAM)L"Enabled");
+        SendMessage(hAlternateIconsCombo, CB_ADDSTRING, 0, (LPARAM)L"Disabled");
+        SendMessage(hAlternateIconsCombo, CB_SETCURSEL, cfg_nowbar_alternate_icons ? 0 : 1, 0);
+
         // Initialize font displays
         p_this->update_font_displays();
 
@@ -690,6 +707,7 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         case IDC_MOOD_ICON_COMBO:
         case IDC_MINIPLAYER_ICON_COMBO:
         case IDC_HOVER_CIRCLES_COMBO:
+        case IDC_ALTERNATE_ICONS_COMBO:
             if (HIWORD(wp) == CBN_SELCHANGE) {
                 p_this->on_changed();
             }
@@ -808,9 +826,12 @@ void nowbar_preferences::apply_settings() {
         int miniplayerIconSel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_MINIPLAYER_ICON_COMBO), CB_GETCURSEL, 0, 0);
         cfg_nowbar_miniplayer_icon_visible = (miniplayerIconSel == 0) ? 1 : 0;
 
-        // Save hover circles setting (0=Yes, 1=No in combobox -> config 1=Yes, 0=No)
         int hoverCirclesSel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_HOVER_CIRCLES_COMBO), CB_GETCURSEL, 0, 0);
         cfg_nowbar_hover_circles = (hoverCirclesSel == 0) ? 1 : 0;
+
+        // Save alternate icons setting (0=Enabled, 1=Disabled in combobox -> config 1=Enabled, 0=Disabled)
+        int alternateIconsSel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_ALTERNATE_ICONS_COMBO), CB_GETCURSEL, 0, 0);
+        cfg_nowbar_alternate_icons = (alternateIconsSel == 0) ? 1 : 0;
 
         // Save Custom Button tab settings
         cfg_cbutton1_enabled = IsDlgButtonChecked(m_hwnd, IDC_CBUTTON1_ENABLE) == BST_CHECKED ? 1 : 0;
@@ -848,6 +869,7 @@ void nowbar_preferences::reset_settings() {
             cfg_nowbar_mood_icon_visible = 1;  // Show (visible)
             cfg_nowbar_miniplayer_icon_visible = 1;  // Show (visible)
             cfg_nowbar_hover_circles = 1;  // Yes (show hover circles)
+            cfg_nowbar_alternate_icons = 0;  // Disabled
 
             // Update General tab UI
             SendMessage(GetDlgItem(m_hwnd, IDC_THEME_MODE_COMBO), CB_SETCURSEL, 0, 0);
@@ -856,6 +878,7 @@ void nowbar_preferences::reset_settings() {
             SendMessage(GetDlgItem(m_hwnd, IDC_MOOD_ICON_COMBO), CB_SETCURSEL, 0, 0);
             SendMessage(GetDlgItem(m_hwnd, IDC_MINIPLAYER_ICON_COMBO), CB_SETCURSEL, 0, 0);
             SendMessage(GetDlgItem(m_hwnd, IDC_HOVER_CIRCLES_COMBO), CB_SETCURSEL, 0, 0);
+            SendMessage(GetDlgItem(m_hwnd, IDC_ALTERNATE_ICONS_COMBO), CB_SETCURSEL, 1, 0);  // Default: Disabled
         } else if (m_current_tab == 1) {
             // Reset Custom Button tab settings
             cfg_cbutton1_enabled = 0;
