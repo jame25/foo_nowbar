@@ -27,6 +27,7 @@
 #include <list>
 #include <mutex>
 #include <algorithm>
+#include <chrono>
 
 // foobar2000 SDK (inside columns_ui) - use full header for all functionality
 #include "../columns_ui/foobar2000/SDK/foobar2000.h"
