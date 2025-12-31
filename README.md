@@ -1,6 +1,6 @@
 # foo_nowbar
 
-A foobar2000 component that provides a "Now Playing" control panel for both Default UI (DUI) and Columns UI (CUI).
+A foobar2000 component that provides a "Now Playing" control panel for both Default UI and Columns UI.
 
 <img width="1230" height="151" alt="foo_nowbar" src="https://github.com/user-attachments/assets/6de52277-c87d-4154-8a31-98b29ee516b2" />
 
