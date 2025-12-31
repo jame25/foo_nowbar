@@ -85,10 +85,10 @@ ui_element_min_max_info ControlPanelDUI::get_min_max_info() {
     // At 96 DPI: 0.55 * 96 = 53 pixels
     info.m_min_height = static_cast<t_uint32>(0.55 * dpi);
     
-    // Maximum height: 1.8 inches, scaled by DPI  
-    // At 96 DPI: 1.8 * 96 = 173 pixels
+    // Maximum height: 1.12 inches, scaled by DPI (~38% total reduction from 1.8)
+    // At 96 DPI: 1.12 * 96 = 108 pixels
     // Keeps panel compact and horizontal-focused
-    info.m_max_height = static_cast<t_uint32>(1.8 * dpi);
+    info.m_max_height = static_cast<t_uint32>(1.12 * dpi);
     
     // Calculate minimum width based on layout requirements (at 96 DPI):
     // - Artwork min: 32px + margins (~16px) = 48px
@@ -97,8 +97,8 @@ ui_element_min_max_info ControlPanelDUI::get_min_max_info() {
     // - Optional icons (heart, custom, miniplayer): ~114px total when all visible
     // - Margins and spacing: ~26px
     // - Extra breathing room: ~520px
-    // Total comfortable minimum: ~1000px (matches core)
-    info.m_min_width = 1000;
+    // Total comfortable minimum: ~1100px (10% increase for custom buttons)
+    info.m_min_width = 1100;
     
     return info;
 }
@@ -153,14 +153,29 @@ LRESULT ControlPanelDUI::handle_message(UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
     case WM_CREATE:
         m_core = std::make_unique<ControlPanelCore>();
-        m_core->initialize(m_hwnd);
         
-        // Set artwork request callback
+        // Set callbacks BEFORE initialize() so they're available when on_settings_changed() is called
         m_core->set_artwork_request_callback([this]() {
             update_artwork();
         });
         
-        // Note: initialize() already calls on_settings_changed() which respects theme mode preferences
+        // Set color query callback for Custom theme mode (DUI color scheme sync)
+        m_core->set_color_query_callback([this](COLORREF& bg, COLORREF& text, COLORREF& highlight) -> bool {
+            if (!m_callback.is_valid()) return false;
+            try {
+                // Use query_std_color which provides fallback to system colors when not user-overridden
+                bg = m_callback->query_std_color(ui_color_background);
+                text = m_callback->query_std_color(ui_color_text);
+                highlight = m_callback->query_std_color(ui_color_selection);
+                return true;
+            } catch (...) {
+                return false;
+            }
+        });
+        
+        // Now initialize (which calls on_settings_changed with callbacks available)
+        m_core->initialize(m_hwnd);
+        
         update_artwork();
         return 0;
         
