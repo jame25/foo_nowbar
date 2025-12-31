@@ -177,8 +177,8 @@ SIZE ControlPanelCore::get_min_size() const {
   // - Optional icons (heart, custom, miniplayer): ~114px total when all visible
   // - Margins and spacing: ~26px
   // - Extra breathing room: ~220px
-  // Total comfortable minimum: ~700px
-  LONG min_width = 1000;
+  // Total comfortable minimum: ~1265px (26.5% total increase for custom buttons)
+  LONG min_width = 1265;
   
   return {min_width, min_height};
 }
@@ -201,23 +201,66 @@ void ControlPanelCore::on_settings_changed() {
   // Reload theme mode from preferences
   int theme_mode = get_nowbar_theme_mode();
 
-  bool dark;
-  switch (theme_mode) {
-  case 1: // Dark
-    dark = true;
-    break;
-  case 2: // Light
-    dark = false;
-    break;
-  default: // Auto (0) - follow system/foobar setting
-    dark = ui_config_manager::g_is_dark_mode();
-    break;
+  if (theme_mode == 3) {
+    // Custom - use DUI color scheme via callback
+    apply_custom_colors();
+  } else {
+    bool dark;
+    switch (theme_mode) {
+    case 1: // Dark
+      dark = true;
+      break;
+    case 2: // Light
+      dark = false;
+      break;
+    default: // Auto (0) - follow system/foobar setting
+      dark = ui_config_manager::g_is_dark_mode();
+      break;
+    }
+    set_dark_mode(dark);
   }
-
-  set_dark_mode(dark);
 
   // Update fonts from preferences
   update_fonts();
+}
+
+void ControlPanelCore::set_color_query_callback(ColorQueryCallback callback) {
+  m_color_query_cb = callback;
+}
+
+void ControlPanelCore::apply_custom_colors() {
+  if (!m_color_query_cb) {
+    // Fallback to auto mode if no callback
+    set_dark_mode(ui_config_manager::g_is_dark_mode());
+    return;
+  }
+  
+  COLORREF bg, text, highlight;
+  if (m_color_query_cb(bg, text, highlight)) {
+    
+    // Apply custom colors from DUI color scheme
+    m_bg_color = Gdiplus::Color(255, GetRValue(bg), GetGValue(bg), GetBValue(bg));
+    m_text_color = Gdiplus::Color(255, GetRValue(text), GetGValue(text), GetBValue(text));
+    
+    // Calculate secondary color (60% opacity approximation)
+    int r = GetRValue(text), g = GetGValue(text), b = GetBValue(text);
+    int br = GetRValue(bg), bg_ = GetGValue(bg), bb = GetBValue(bg);
+    m_text_secondary_color = Gdiplus::Color(255, 
+        (r * 60 + br * 40) / 100,
+        (g * 60 + bg_ * 40) / 100, 
+        (b * 60 + bb * 40) / 100);
+    
+    // Accent color from highlight
+    m_accent_color = Gdiplus::Color(255, GetRValue(highlight), GetGValue(highlight), GetBValue(highlight));
+    
+    // Hover color - semi-transparent version of text color
+    m_button_hover_color = Gdiplus::Color(40, GetRValue(text), GetGValue(text), GetBValue(text));
+    
+    invalidate();
+  } else {
+    // Callback failed, fallback to auto
+    set_dark_mode(ui_config_manager::g_is_dark_mode());
+  }
 }
 
 void ControlPanelCore::update_fonts() {
@@ -382,30 +425,97 @@ void ControlPanelCore::update_layout(const RECT &rect) {
     m_rect_heart = {}; // Clear rect when hidden
   }
 
-  // Custom buttons #1-4 - positioned to the right of repeat (only if enabled)
-  // Position each enabled button in sequence
-  int cbutton_x = m_rect_repeat.right + spacing;
+  // Custom buttons #1-6 - arranged in two rows to the LEFT of volume bar
+  // Row 1: buttons 1, 2, 3 at btn_y
+  // Row 2: buttons 4, 5, 6 below row 1
+  // Clear all rects first
   m_rect_cbutton1 = {};
   m_rect_cbutton2 = {};
   m_rect_cbutton3 = {};
   m_rect_cbutton4 = {};
+  m_rect_cbutton5 = {};
+  m_rect_cbutton6 = {};
   m_rect_custom = {};  // Legacy - clear it
   
-  if (get_nowbar_cbutton_enabled(0)) {
-    m_rect_cbutton1 = {cbutton_x, btn_y, cbutton_x + button_size, btn_y + button_size};
-    cbutton_x += button_size + spacing;
+  // Calculate available space for custom buttons
+  int min_cbutton_left = m_rect_repeat.right + spacing;
+  int cbutton_right_edge = vol_x - spacing;
+  int available_width = cbutton_right_edge - min_cbutton_left;
+  
+  // Row spacing and second row position
+  int row_spacing = 2;  // Small gap between rows
+  int row2_y = btn_y + button_size + row_spacing;  // Position below row 1
+  
+  // Check which buttons in each row are enabled
+  bool row1_enabled[3] = {get_nowbar_cbutton_enabled(0), get_nowbar_cbutton_enabled(1), get_nowbar_cbutton_enabled(2)};
+  bool row2_enabled[3] = {get_nowbar_cbutton_enabled(3), get_nowbar_cbutton_enabled(4), get_nowbar_cbutton_enabled(5)};
+  
+  int row1_count = (row1_enabled[0] ? 1 : 0) + (row1_enabled[1] ? 1 : 0) + (row1_enabled[2] ? 1 : 0);
+  int row2_count = (row2_enabled[0] ? 1 : 0) + (row2_enabled[1] ? 1 : 0) + (row2_enabled[2] ? 1 : 0);
+  
+  // Calculate how many buttons fit in each row (both use same button_size)
+  int row1_to_show = 0;
+  for (int count = row1_count; count > 0; count--) {
+    int width_needed = count * button_size + (count - 1) * spacing;
+    if (width_needed <= available_width) {
+      row1_to_show = count;
+      break;
+    }
   }
-  if (get_nowbar_cbutton_enabled(1)) {
-    m_rect_cbutton2 = {cbutton_x, btn_y, cbutton_x + button_size, btn_y + button_size};
-    cbutton_x += button_size + spacing;
+  
+  int row2_to_show = 0;
+  for (int count = row2_count; count > 0; count--) {
+    int width_needed = count * button_size + (count - 1) * spacing;
+    if (width_needed <= available_width) {
+      row2_to_show = count;
+      break;
+    }
   }
-  if (get_nowbar_cbutton_enabled(2)) {
-    m_rect_cbutton3 = {cbutton_x, btn_y, cbutton_x + button_size, btn_y + button_size};
-    cbutton_x += button_size + spacing;
+  
+  // Calculate the maximum width needed (to align both rows to same left edge)
+  int row1_width = row1_to_show > 0 ? row1_to_show * button_size + (row1_to_show - 1) * spacing : 0;
+  int row2_width = row2_to_show > 0 ? row2_to_show * button_size + (row2_to_show - 1) * spacing : 0;
+  int max_width = std::max(row1_width, row2_width);
+  int start_x = cbutton_right_edge - max_width;
+  
+  // Position Row 1 buttons (1, 2, 3) - starting from aligned left edge
+  int row1_x = start_x;
+  int shown1 = 0;
+  
+  if (row1_enabled[0] && shown1 < row1_to_show) {
+    m_rect_cbutton1 = {row1_x, btn_y, row1_x + button_size, btn_y + button_size};
+    row1_x += button_size + spacing;
+    shown1++;
   }
-  if (get_nowbar_cbutton_enabled(3)) {
-    m_rect_cbutton4 = {cbutton_x, btn_y, cbutton_x + button_size, btn_y + button_size};
-    cbutton_x += button_size + spacing;
+  if (row1_enabled[1] && shown1 < row1_to_show) {
+    m_rect_cbutton2 = {row1_x, btn_y, row1_x + button_size, btn_y + button_size};
+    row1_x += button_size + spacing;
+    shown1++;
+  }
+  if (row1_enabled[2] && shown1 < row1_to_show) {
+    m_rect_cbutton3 = {row1_x, btn_y, row1_x + button_size, btn_y + button_size};
+    row1_x += button_size + spacing;
+    shown1++;
+  }
+  
+  // Position Row 2 buttons (4, 5, 6) - same left edge as row 1
+  int row2_x = start_x;
+  int shown2 = 0;
+  
+  if (row2_enabled[0] && shown2 < row2_to_show) {
+    m_rect_cbutton4 = {row2_x, row2_y, row2_x + button_size, row2_y + button_size};
+    row2_x += button_size + spacing;
+    shown2++;
+  }
+  if (row2_enabled[1] && shown2 < row2_to_show) {
+    m_rect_cbutton5 = {row2_x, row2_y, row2_x + button_size, row2_y + button_size};
+    row2_x += button_size + spacing;
+    shown2++;
+  }
+  if (row2_enabled[2] && shown2 < row2_to_show) {
+    m_rect_cbutton6 = {row2_x, row2_y, row2_x + button_size, row2_y + button_size};
+    row2_x += button_size + spacing;
+    shown2++;
   }
 
   // Set MiniPlayer button position now that btn_y is calculated
@@ -416,17 +526,8 @@ void ControlPanelCore::update_layout(const RECT &rect) {
   }
 
   // Set Volume bar position - align vertically with control buttons
-  // Apply minimum spacing constraint to prevent overlap with control buttons
-  // Find rightmost control button
-  int rightmost_control_right = m_rect_repeat.right;
-  if (get_nowbar_cbutton_enabled(3)) rightmost_control_right = m_rect_cbutton4.right;
-  else if (get_nowbar_cbutton_enabled(2)) rightmost_control_right = m_rect_cbutton3.right;
-  else if (get_nowbar_cbutton_enabled(1)) rightmost_control_right = m_rect_cbutton2.right;
-  else if (get_nowbar_cbutton_enabled(0)) rightmost_control_right = m_rect_cbutton1.right;
-  
-  // Clamp volume bar left edge to maintain minimum spacing from controls
-  int vol_x_clamped = std::max(vol_x, rightmost_control_right + spacing);
-  m_rect_volume = {vol_x_clamped, btn_y, volume_right_edge, btn_y + button_size};
+  // No need to clamp based on custom buttons since they're now to the left
+  m_rect_volume = {vol_x, btn_y, volume_right_edge, btn_y + button_size};
 
 
   // Track info (between artwork and controls) - truly vertically centered on
@@ -650,8 +751,10 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
       Gdiplus::SolidBrush hoverBrush(m_button_hover_color);
       g.FillEllipse(&hoverBrush, m_rect_play.left, m_rect_play.top, play_w, play_h);
     }
-    // Draw alternate play or pause icon (uses secondary color like other icons)
-    if (m_state.is_playing && !m_state.is_paused) {
+    // Draw stop icon if hover timer triggered, otherwise play/pause
+    if (m_show_stop_icon) {
+      draw_stop_icon(g, m_rect_play, m_text_secondary_color, false);  // Outline for alternate icons
+    } else if (m_state.is_playing && !m_state.is_paused) {
       draw_alternate_pause_icon(g, m_rect_play, m_text_secondary_color);
     } else {
       draw_alternate_play_icon(g, m_rect_play, m_text_secondary_color);
@@ -663,9 +766,11 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
     Gdiplus::SolidBrush bgBrush(bgColor);
     g.FillEllipse(&bgBrush, m_rect_play.left, m_rect_play.top, play_w, play_h);
 
-    // Draw play or pause icon (black on white background)
+    // Draw stop icon if hover timer triggered, otherwise play/pause
     Gdiplus::Color playIconColor(255, 0, 0, 0);
-    if (m_state.is_playing && !m_state.is_paused) {
+    if (m_show_stop_icon) {
+      draw_stop_icon(g, m_rect_play, playIconColor, true);  // Filled for default icons
+    } else if (m_state.is_playing && !m_state.is_paused) {
       draw_pause_icon(g, m_rect_play, playIconColor, false);
     } else {
       draw_play_icon(g, m_rect_play, playIconColor, false);
@@ -703,7 +808,7 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
       m_rect_repeat.right - repeat_inset, m_rect_repeat.bottom - repeat_inset};
   draw_repeat_icon(g, repeatIconRect, repeatColor, repeat_one);
 
-  // Custom buttons #1-4 (only render if enabled)
+  // Custom buttons #1-6 (only render if enabled)
   auto draw_cbutton = [&](int index, const RECT& rect, HitRegion region) {
     if (!get_nowbar_cbutton_enabled(index)) return;
     bool hovered = (m_hover_region == region);
@@ -724,6 +829,8 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
   draw_cbutton(1, m_rect_cbutton2, HitRegion::CButton2);
   draw_cbutton(2, m_rect_cbutton3, HitRegion::CButton3);
   draw_cbutton(3, m_rect_cbutton4, HitRegion::CButton4);
+  draw_cbutton(4, m_rect_cbutton5, HitRegion::CButton5);
+  draw_cbutton(5, m_rect_cbutton6, HitRegion::CButton6);
 }
 
 void ControlPanelCore::draw_button(Gdiplus::Graphics &g, const RECT &rect,
@@ -1004,7 +1111,7 @@ HitRegion ControlPanelCore::hit_test(int x, int y) const {
     return HitRegion::RepeatButton;
   if (pt_in_rect(m_rect_seekbar, x, y))
     return HitRegion::SeekBar;
-  // Custom buttons #1-4
+  // Custom buttons #1-6
   if (get_nowbar_cbutton_enabled(0) && pt_in_rect(m_rect_cbutton1, x, y))
     return HitRegion::CButton1;
   if (get_nowbar_cbutton_enabled(1) && pt_in_rect(m_rect_cbutton2, x, y))
@@ -1013,6 +1120,10 @@ HitRegion ControlPanelCore::hit_test(int x, int y) const {
     return HitRegion::CButton3;
   if (get_nowbar_cbutton_enabled(3) && pt_in_rect(m_rect_cbutton4, x, y))
     return HitRegion::CButton4;
+  if (get_nowbar_cbutton_enabled(4) && pt_in_rect(m_rect_cbutton5, x, y))
+    return HitRegion::CButton5;
+  if (get_nowbar_cbutton_enabled(5) && pt_in_rect(m_rect_cbutton6, x, y))
+    return HitRegion::CButton6;
   // Volume area - check both icon (positioned left of rect) and slider
   int icon_gap = static_cast<int>(6 * m_dpi_scale * m_size_scale);
   int icon_width =
@@ -1068,6 +1179,31 @@ void ControlPanelCore::on_mouse_move(int x, int y) {
     return;
   }
 
+  // Track hover timer for Play button -> Stop icon transformation
+  // Only show stop icon when playback is active (playing or paused)
+  if (new_region == HitRegion::PlayButton && m_state.is_playing) {
+    if (!m_play_hover_timer_active) {
+      // Start hover timer
+      m_play_hover_start_time = std::chrono::steady_clock::now();
+      m_play_hover_timer_active = true;
+    } else if (!m_show_stop_icon) {
+      // Check if 3 seconds have elapsed
+      auto now = std::chrono::steady_clock::now();
+      auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - m_play_hover_start_time).count();
+      if (elapsed >= 3000) {
+        m_show_stop_icon = true;
+        invalidate();
+      }
+    }
+  } else if (new_region != HitRegion::PlayButton) {
+    // Reset timer when leaving PlayButton region
+    if (m_play_hover_timer_active || m_show_stop_icon) {
+      m_play_hover_timer_active = false;
+      m_show_stop_icon = false;
+      invalidate();
+    }
+  }
+
   if (new_region != m_hover_region) {
     m_hover_region = new_region;
     invalidate();
@@ -1075,6 +1211,12 @@ void ControlPanelCore::on_mouse_move(int x, int y) {
 }
 
 void ControlPanelCore::on_mouse_leave() {
+  // Reset play button hover timer
+  if (m_play_hover_timer_active || m_show_stop_icon) {
+    m_play_hover_timer_active = false;
+    m_show_stop_icon = false;
+  }
+  
   if (m_hover_region != HitRegion::None) {
     m_hover_region = HitRegion::None;
     invalidate();
@@ -1108,7 +1250,14 @@ void ControlPanelCore::on_lbutton_up(int x, int y) {
   } else if (release_region == m_pressed_region) {
     switch (release_region) {
     case HitRegion::PlayButton:
-      do_play_pause();
+      if (m_show_stop_icon) {
+        do_stop();
+        // Reset stop icon state after stopping
+        m_play_hover_timer_active = false;
+        m_show_stop_icon = false;
+      } else {
+        do_play_pause();
+      }
       break;
     case HitRegion::PrevButton:
       do_prev();
@@ -1163,13 +1312,17 @@ void ControlPanelCore::on_lbutton_up(int x, int y) {
     case HitRegion::CButton1:
     case HitRegion::CButton2:
     case HitRegion::CButton3:
-    case HitRegion::CButton4: {
+    case HitRegion::CButton4:
+    case HitRegion::CButton5:
+    case HitRegion::CButton6: {
       // Determine which button was clicked
       int button_index = -1;
       if (release_region == HitRegion::CButton1 || release_region == HitRegion::CustomButton) button_index = 0;
       else if (release_region == HitRegion::CButton2) button_index = 1;
       else if (release_region == HitRegion::CButton3) button_index = 2;
       else if (release_region == HitRegion::CButton4) button_index = 3;
+      else if (release_region == HitRegion::CButton5) button_index = 4;
+      else if (release_region == HitRegion::CButton6) button_index = 5;
       
       if (button_index < 0) break;
       
@@ -1298,6 +1451,8 @@ void ControlPanelCore::do_play_pause() {
 void ControlPanelCore::do_prev() { playback_control::get()->previous(); }
 
 void ControlPanelCore::do_next() { playback_control::get()->next(); }
+
+void ControlPanelCore::do_stop() { playback_control::get()->stop(); }
 
 void ControlPanelCore::do_shuffle_toggle() {
   auto pm = playlist_manager::get();
@@ -2274,6 +2429,53 @@ void ControlPanelCore::draw_alternate_pause_icon(Gdiplus::Graphics &g, const REC
   path.AddLine(svgToNorm(680, -680), svgToNorm(600, -680));
   path.AddLine(svgToNorm(600, -680), svgToNorm(600, -280));
   path.CloseFigure();
+
+  path.SetFillMode(Gdiplus::FillModeWinding);
+  g.FillPath(&brush, &path);
+  g.SetTransform(&oldMatrix);
+}
+
+void ControlPanelCore::draw_stop_icon(Gdiplus::Graphics &g, const RECT &rect,
+                                       const Gdiplus::Color &color, bool filled) {
+  // Stop icon - square (filled or outline) based on stop_24dp.svg
+  // Outer rect: 240, -240 to 720, -720 (480x480)
+  // Inner rect (hole for outline): 320, -320 to 640, -640 (320x320)
+  
+  float iconSize = static_cast<float>(std::min(rect.right - rect.left,
+                                               rect.bottom - rect.top));
+  float cx = (rect.left + rect.right) / 2.0f;
+  float cy = (rect.top + rect.bottom) / 2.0f;
+  float scale = iconSize / 24.0f;
+
+  Gdiplus::Matrix oldMatrix;
+  g.GetTransform(&oldMatrix);
+
+  Gdiplus::Matrix matrix;
+  matrix.Translate(cx - 12 * scale, cy - 12 * scale);
+  matrix.Scale(scale, scale);
+  g.SetTransform(&matrix);
+
+  Gdiplus::SolidBrush brush(color);
+  Gdiplus::GraphicsPath path;
+  
+  // Outer square: 240 to 720 in SVG coords -> normalized to 24x24 viewport
+  // SVG viewport is 960x960, coords range from 240-720
+  path.StartFigure();
+  path.AddLine(svgToNorm(240, -240), svgToNorm(240, -720));
+  path.AddLine(svgToNorm(240, -720), svgToNorm(720, -720));
+  path.AddLine(svgToNorm(720, -720), svgToNorm(720, -240));
+  path.AddLine(svgToNorm(720, -240), svgToNorm(240, -240));
+  path.CloseFigure();
+  
+  if (!filled) {
+    // Add inner hole for outline style
+    path.StartFigure();
+    path.AddLine(svgToNorm(320, -320), svgToNorm(640, -320));
+    path.AddLine(svgToNorm(640, -320), svgToNorm(640, -640));
+    path.AddLine(svgToNorm(640, -640), svgToNorm(320, -640));
+    path.AddLine(svgToNorm(320, -640), svgToNorm(320, -320));
+    path.CloseFigure();
+  }
 
   path.SetFillMode(Gdiplus::FillModeWinding);
   g.FillPath(&brush, &path);
