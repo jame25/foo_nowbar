@@ -642,18 +642,34 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
   int play_w = m_rect_play.right - m_rect_play.left;
   int play_h = m_rect_play.bottom - m_rect_play.top;
 
-  // White/light background circle - this is part of the button design, not hover effect
-  Gdiplus::Color bgColor = (play_hovered && show_hover) ? Gdiplus::Color(255, 255, 255, 255)
-                                        : Gdiplus::Color(255, 230, 230, 230);
-  Gdiplus::SolidBrush bgBrush(bgColor);
-  g.FillEllipse(&bgBrush, m_rect_play.left, m_rect_play.top, play_w, play_h);
-
-  // Draw play or pause icon (black on white background)
-  Gdiplus::Color playIconColor(255, 0, 0, 0);
-  if (m_state.is_playing && !m_state.is_paused) {
-    draw_pause_icon(g, m_rect_play, playIconColor, false);
+  bool use_alternate_icons = get_nowbar_alternate_icons_enabled();
+  
+  if (use_alternate_icons) {
+    // Alternate icons: no background circle, just draw hover effect if enabled
+    if (play_hovered && show_hover) {
+      Gdiplus::SolidBrush hoverBrush(m_button_hover_color);
+      g.FillEllipse(&hoverBrush, m_rect_play.left, m_rect_play.top, play_w, play_h);
+    }
+    // Draw alternate play or pause icon (uses secondary color like other icons)
+    if (m_state.is_playing && !m_state.is_paused) {
+      draw_alternate_pause_icon(g, m_rect_play, m_text_secondary_color);
+    } else {
+      draw_alternate_play_icon(g, m_rect_play, m_text_secondary_color);
+    }
   } else {
-    draw_play_icon(g, m_rect_play, playIconColor, false);
+    // Default icons: white/light background circle
+    Gdiplus::Color bgColor = (play_hovered && show_hover) ? Gdiplus::Color(255, 255, 255, 255)
+                                          : Gdiplus::Color(255, 230, 230, 230);
+    Gdiplus::SolidBrush bgBrush(bgColor);
+    g.FillEllipse(&bgBrush, m_rect_play.left, m_rect_play.top, play_w, play_h);
+
+    // Draw play or pause icon (black on white background)
+    Gdiplus::Color playIconColor(255, 0, 0, 0);
+    if (m_state.is_playing && !m_state.is_paused) {
+      draw_pause_icon(g, m_rect_play, playIconColor, false);
+    } else {
+      draw_play_icon(g, m_rect_play, playIconColor, false);
+    }
   }
 
   // Next button
@@ -2162,6 +2178,106 @@ void ControlPanelCore::draw_numbered_square_icon(Gdiplus::Graphics &g, const REC
   
   Gdiplus::RectF textRect(x, y, w, h);
   g.DrawString(numStr, -1, &font, textRect, &sf, &brush);
+}
+
+// Draw alternate play icon - outline style from play_arrow_24dp.svg
+// Path: M320-200v-560l440 280-440 280Zm80-280Zm0 134 210-134-210-134v268Z
+void ControlPanelCore::draw_alternate_play_icon(Gdiplus::Graphics &g, const RECT &rect,
+                                                 const Gdiplus::Color &color) {
+  float iconSize = static_cast<float>(std::min(rect.right - rect.left,
+                                               rect.bottom - rect.top));
+  float cx = (rect.left + rect.right) / 2.0f;
+  float cy = (rect.top + rect.bottom) / 2.0f;
+  float scale = iconSize / 24.0f;
+
+  Gdiplus::Matrix oldMatrix;
+  g.GetTransform(&oldMatrix);
+
+  Gdiplus::Matrix matrix;
+  matrix.Translate(cx - 12 * scale, cy - 12 * scale);
+  matrix.Scale(scale, scale);
+  g.SetTransform(&matrix);
+
+  Gdiplus::SolidBrush brush(color);
+  Gdiplus::GraphicsPath path;
+
+  // Outer triangle (clockwise)
+  path.StartFigure();
+  path.AddLine(svgToNorm(320, -200), svgToNorm(320, -760));  // v-560
+  path.AddLine(svgToNorm(320, -760), svgToNorm(760, -480));  // l440 280
+  path.AddLine(svgToNorm(760, -480), svgToNorm(320, -200));  // -440 280
+  path.CloseFigure();
+
+  // Inner triangle cutout (counter-clockwise for hole)
+  path.StartFigure();
+  path.AddLine(svgToNorm(400, -346), svgToNorm(400, -614));  // Inner top
+  path.AddLine(svgToNorm(400, -614), svgToNorm(610, -480));  // To right
+  path.AddLine(svgToNorm(610, -480), svgToNorm(400, -346));  // Back down
+  path.CloseFigure();
+
+  path.SetFillMode(Gdiplus::FillModeWinding);
+  g.FillPath(&brush, &path);
+  g.SetTransform(&oldMatrix);
+}
+
+// Draw alternate pause icon - outline style from pause_24dp.svg
+// Two outlined rectangles
+void ControlPanelCore::draw_alternate_pause_icon(Gdiplus::Graphics &g, const RECT &rect,
+                                                  const Gdiplus::Color &color) {
+  float iconSize = static_cast<float>(std::min(rect.right - rect.left,
+                                               rect.bottom - rect.top));
+  float cx = (rect.left + rect.right) / 2.0f;
+  float cy = (rect.top + rect.bottom) / 2.0f;
+  float scale = iconSize / 24.0f;
+
+  Gdiplus::Matrix oldMatrix;
+  g.GetTransform(&oldMatrix);
+
+  Gdiplus::Matrix matrix;
+  matrix.Translate(cx - 12 * scale, cy - 12 * scale);
+  matrix.Scale(scale, scale);
+  g.SetTransform(&matrix);
+
+  Gdiplus::SolidBrush brush(color);
+  Gdiplus::GraphicsPath path;
+  
+  // Left bar - outer rect then inner hole
+  // Outer: 200-200 to 440-760
+  path.StartFigure();
+  path.AddLine(svgToNorm(200, -200), svgToNorm(200, -760));
+  path.AddLine(svgToNorm(200, -760), svgToNorm(440, -760));
+  path.AddLine(svgToNorm(440, -760), svgToNorm(440, -200));
+  path.AddLine(svgToNorm(440, -200), svgToNorm(200, -200));
+  path.CloseFigure();
+  
+  // Left bar inner hole
+  path.StartFigure();
+  path.AddLine(svgToNorm(280, -280), svgToNorm(360, -280));
+  path.AddLine(svgToNorm(360, -280), svgToNorm(360, -680));
+  path.AddLine(svgToNorm(360, -680), svgToNorm(280, -680));
+  path.AddLine(svgToNorm(280, -680), svgToNorm(280, -280));
+  path.CloseFigure();
+
+  // Right bar - outer rect then inner hole
+  // Outer: 520-200 to 760-760
+  path.StartFigure();
+  path.AddLine(svgToNorm(520, -200), svgToNorm(520, -760));
+  path.AddLine(svgToNorm(520, -760), svgToNorm(760, -760));
+  path.AddLine(svgToNorm(760, -760), svgToNorm(760, -200));
+  path.AddLine(svgToNorm(760, -200), svgToNorm(520, -200));
+  path.CloseFigure();
+
+  // Right bar inner hole
+  path.StartFigure();
+  path.AddLine(svgToNorm(600, -280), svgToNorm(680, -280));
+  path.AddLine(svgToNorm(680, -280), svgToNorm(680, -680));
+  path.AddLine(svgToNorm(680, -680), svgToNorm(600, -680));
+  path.AddLine(svgToNorm(600, -680), svgToNorm(600, -280));
+  path.CloseFigure();
+
+  path.SetFillMode(Gdiplus::FillModeWinding);
+  g.FillPath(&brush, &path);
+  g.SetTransform(&oldMatrix);
 }
 
 } // namespace nowbar
