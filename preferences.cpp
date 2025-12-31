@@ -159,11 +159,37 @@ static cfg_string cfg_cbutton4_path(
     ""  // Default: empty
 );
 
+// Custom Button 5 and 6 config
+static cfg_int cfg_cbutton5_enabled(
+    GUID{0xABCDEF20, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xB0}},
+    0  // Default: disabled
+);
+static cfg_int cfg_cbutton5_action(
+    GUID{0xABCDEF21, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xB1}},
+    0  // Default: None
+);
+static cfg_string cfg_cbutton5_path(
+    GUID{0xABCDEF22, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xB2}},
+    ""  // Default: empty
+);
+static cfg_int cfg_cbutton6_enabled(
+    GUID{0xABCDEF23, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xB3}},
+    0  // Default: disabled
+);
+static cfg_int cfg_cbutton6_action(
+    GUID{0xABCDEF24, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xB4}},
+    0  // Default: None
+);
+static cfg_string cfg_cbutton6_path(
+    GUID{0xABCDEF25, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xB5}},
+    ""  // Default: empty
+);
+
 // Configuration accessors
 int get_nowbar_theme_mode() {
     int mode = cfg_nowbar_theme_mode;
     if (mode < 0) mode = 0;
-    if (mode > 2) mode = 2;
+    if (mode > 3) mode = 3;  // 0=Auto, 1=Dark, 2=Light, 3=Custom
     return mode;
 }
 
@@ -223,6 +249,8 @@ bool get_nowbar_cbutton_enabled(int button_index) {
         case 1: return cfg_cbutton2_enabled != 0;
         case 2: return cfg_cbutton3_enabled != 0;
         case 3: return cfg_cbutton4_enabled != 0;
+        case 4: return cfg_cbutton5_enabled != 0;
+        case 5: return cfg_cbutton6_enabled != 0;
         default: return false;
     }
 }
@@ -234,6 +262,8 @@ int get_nowbar_cbutton_action(int button_index) {
         case 1: action = cfg_cbutton2_action; break;
         case 2: action = cfg_cbutton3_action; break;
         case 3: action = cfg_cbutton4_action; break;
+        case 4: action = cfg_cbutton5_action; break;
+        case 5: action = cfg_cbutton6_action; break;
     }
     if (action < 0) action = 0;
     if (action > 3) action = 3;
@@ -246,6 +276,8 @@ pfc::string8 get_nowbar_cbutton_path(int button_index) {
         case 1: return cfg_cbutton2_path.get();
         case 2: return cfg_cbutton3_path.get();
         case 3: return cfg_cbutton4_path.get();
+        case 4: return cfg_cbutton5_path.get();
+        case 5: return cfg_cbutton6_path.get();
         default: return pfc::string8();
     }
 }
@@ -549,6 +581,14 @@ void nowbar_preferences::switch_tab(int tab) {
     ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON4_ACTION), show_cbutton);
     ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON4_PATH), show_cbutton);
     ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON4_BROWSE), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON5_ENABLE), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON5_ACTION), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON5_PATH), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON5_BROWSE), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON6_ENABLE), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON6_ACTION), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON6_PATH), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON6_BROWSE), show_cbutton);
     
     // Fonts tab controls
     BOOL show_fonts = (tab == 2) ? SW_SHOW : SW_HIDE;
@@ -593,6 +633,8 @@ static void update_all_cbutton_path_states(HWND hwnd) {
     update_cbutton_path_state(hwnd, IDC_CBUTTON2_ACTION, IDC_CBUTTON2_PATH, IDC_CBUTTON2_BROWSE);
     update_cbutton_path_state(hwnd, IDC_CBUTTON3_ACTION, IDC_CBUTTON3_PATH, IDC_CBUTTON3_BROWSE);
     update_cbutton_path_state(hwnd, IDC_CBUTTON4_ACTION, IDC_CBUTTON4_PATH, IDC_CBUTTON4_BROWSE);
+    update_cbutton_path_state(hwnd, IDC_CBUTTON5_ACTION, IDC_CBUTTON5_PATH, IDC_CBUTTON5_BROWSE);
+    update_cbutton_path_state(hwnd, IDC_CBUTTON6_ACTION, IDC_CBUTTON6_PATH, IDC_CBUTTON6_BROWSE);
 }
 
 INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
@@ -617,6 +659,7 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         SendMessage(hThemeCombo, CB_ADDSTRING, 0, (LPARAM)L"Auto");
         SendMessage(hThemeCombo, CB_ADDSTRING, 0, (LPARAM)L"Dark");
         SendMessage(hThemeCombo, CB_ADDSTRING, 0, (LPARAM)L"Light");
+        SendMessage(hThemeCombo, CB_ADDSTRING, 0, (LPARAM)L"Custom");
         SendMessage(hThemeCombo, CB_SETCURSEL, cfg_nowbar_theme_mode, 0);
         
         // Initialize cover margin combobox
@@ -660,7 +703,7 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
 
         // Initialize Custom Button tab controls
         // Populate action comboboxes with choices
-        int cbutton_action_combos[] = {IDC_CBUTTON1_ACTION, IDC_CBUTTON2_ACTION, IDC_CBUTTON3_ACTION, IDC_CBUTTON4_ACTION};
+        int cbutton_action_combos[] = {IDC_CBUTTON1_ACTION, IDC_CBUTTON2_ACTION, IDC_CBUTTON3_ACTION, IDC_CBUTTON4_ACTION, IDC_CBUTTON5_ACTION, IDC_CBUTTON6_ACTION};
         for (int id : cbutton_action_combos) {
             HWND hCombo = GetDlgItem(hwnd, id);
             SendMessage(hCombo, CB_ADDSTRING, 0, (LPARAM)L"None");
@@ -674,16 +717,22 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         CheckDlgButton(hwnd, IDC_CBUTTON2_ENABLE, cfg_cbutton2_enabled ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(hwnd, IDC_CBUTTON3_ENABLE, cfg_cbutton3_enabled ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(hwnd, IDC_CBUTTON4_ENABLE, cfg_cbutton4_enabled ? BST_CHECKED : BST_UNCHECKED);
+        CheckDlgButton(hwnd, IDC_CBUTTON5_ENABLE, cfg_cbutton5_enabled ? BST_CHECKED : BST_UNCHECKED);
+        CheckDlgButton(hwnd, IDC_CBUTTON6_ENABLE, cfg_cbutton6_enabled ? BST_CHECKED : BST_UNCHECKED);
         SendMessage(GetDlgItem(hwnd, IDC_CBUTTON1_ACTION), CB_SETCURSEL, cfg_cbutton1_action, 0);
         SendMessage(GetDlgItem(hwnd, IDC_CBUTTON2_ACTION), CB_SETCURSEL, cfg_cbutton2_action, 0);
         SendMessage(GetDlgItem(hwnd, IDC_CBUTTON3_ACTION), CB_SETCURSEL, cfg_cbutton3_action, 0);
         SendMessage(GetDlgItem(hwnd, IDC_CBUTTON4_ACTION), CB_SETCURSEL, cfg_cbutton4_action, 0);
+        SendMessage(GetDlgItem(hwnd, IDC_CBUTTON5_ACTION), CB_SETCURSEL, cfg_cbutton5_action, 0);
+        SendMessage(GetDlgItem(hwnd, IDC_CBUTTON6_ACTION), CB_SETCURSEL, cfg_cbutton6_action, 0);
         
         // Initialize path edit boxes
         uSetDlgItemText(hwnd, IDC_CBUTTON1_PATH, cfg_cbutton1_path);
         uSetDlgItemText(hwnd, IDC_CBUTTON2_PATH, cfg_cbutton2_path);
         uSetDlgItemText(hwnd, IDC_CBUTTON3_PATH, cfg_cbutton3_path);
         uSetDlgItemText(hwnd, IDC_CBUTTON4_PATH, cfg_cbutton4_path);
+        uSetDlgItemText(hwnd, IDC_CBUTTON5_PATH, cfg_cbutton5_path);
+        uSetDlgItemText(hwnd, IDC_CBUTTON6_PATH, cfg_cbutton6_path);
         
         // Update path control states based on action selection
         update_all_cbutton_path_states(hwnd);
@@ -717,6 +766,8 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         case IDC_CBUTTON2_ACTION:
         case IDC_CBUTTON3_ACTION:
         case IDC_CBUTTON4_ACTION:
+        case IDC_CBUTTON5_ACTION:
+        case IDC_CBUTTON6_ACTION:
             if (HIWORD(wp) == CBN_SELCHANGE) {
                 p_this->on_changed();
                 // Update path control states when action changes
@@ -728,6 +779,8 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         case IDC_CBUTTON2_ENABLE:
         case IDC_CBUTTON3_ENABLE:
         case IDC_CBUTTON4_ENABLE:
+        case IDC_CBUTTON5_ENABLE:
+        case IDC_CBUTTON6_ENABLE:
             if (HIWORD(wp) == BN_CLICKED) {
                 p_this->on_changed();
             }
@@ -737,6 +790,8 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         case IDC_CBUTTON2_PATH:
         case IDC_CBUTTON3_PATH:
         case IDC_CBUTTON4_PATH:
+        case IDC_CBUTTON5_PATH:
+        case IDC_CBUTTON6_PATH:
             if (HIWORD(wp) == EN_CHANGE) {
                 p_this->on_changed();
             }
@@ -746,6 +801,8 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         case IDC_CBUTTON2_BROWSE:
         case IDC_CBUTTON3_BROWSE:
         case IDC_CBUTTON4_BROWSE:
+        case IDC_CBUTTON5_BROWSE:
+        case IDC_CBUTTON6_BROWSE:
             if (HIWORD(wp) == BN_CLICKED) {
                 int path_id = 0;
                 switch (LOWORD(wp)) {
@@ -753,6 +810,8 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
                     case IDC_CBUTTON2_BROWSE: path_id = IDC_CBUTTON2_PATH; break;
                     case IDC_CBUTTON3_BROWSE: path_id = IDC_CBUTTON3_PATH; break;
                     case IDC_CBUTTON4_BROWSE: path_id = IDC_CBUTTON4_PATH; break;
+                    case IDC_CBUTTON5_BROWSE: path_id = IDC_CBUTTON5_PATH; break;
+                    case IDC_CBUTTON6_BROWSE: path_id = IDC_CBUTTON6_PATH; break;
                 }
                 wchar_t filename[MAX_PATH] = L"";
                 OPENFILENAMEW ofn = {};
@@ -838,10 +897,14 @@ void nowbar_preferences::apply_settings() {
         cfg_cbutton2_enabled = IsDlgButtonChecked(m_hwnd, IDC_CBUTTON2_ENABLE) == BST_CHECKED ? 1 : 0;
         cfg_cbutton3_enabled = IsDlgButtonChecked(m_hwnd, IDC_CBUTTON3_ENABLE) == BST_CHECKED ? 1 : 0;
         cfg_cbutton4_enabled = IsDlgButtonChecked(m_hwnd, IDC_CBUTTON4_ENABLE) == BST_CHECKED ? 1 : 0;
+        cfg_cbutton5_enabled = IsDlgButtonChecked(m_hwnd, IDC_CBUTTON5_ENABLE) == BST_CHECKED ? 1 : 0;
+        cfg_cbutton6_enabled = IsDlgButtonChecked(m_hwnd, IDC_CBUTTON6_ENABLE) == BST_CHECKED ? 1 : 0;
         cfg_cbutton1_action = (int)SendMessage(GetDlgItem(m_hwnd, IDC_CBUTTON1_ACTION), CB_GETCURSEL, 0, 0);
         cfg_cbutton2_action = (int)SendMessage(GetDlgItem(m_hwnd, IDC_CBUTTON2_ACTION), CB_GETCURSEL, 0, 0);
         cfg_cbutton3_action = (int)SendMessage(GetDlgItem(m_hwnd, IDC_CBUTTON3_ACTION), CB_GETCURSEL, 0, 0);
         cfg_cbutton4_action = (int)SendMessage(GetDlgItem(m_hwnd, IDC_CBUTTON4_ACTION), CB_GETCURSEL, 0, 0);
+        cfg_cbutton5_action = (int)SendMessage(GetDlgItem(m_hwnd, IDC_CBUTTON5_ACTION), CB_GETCURSEL, 0, 0);
+        cfg_cbutton6_action = (int)SendMessage(GetDlgItem(m_hwnd, IDC_CBUTTON6_ACTION), CB_GETCURSEL, 0, 0);
         
         // Save Custom Button paths
         pfc::string8 path;
@@ -853,6 +916,10 @@ void nowbar_preferences::apply_settings() {
         cfg_cbutton3_path = path;
         uGetDlgItemText(m_hwnd, IDC_CBUTTON4_PATH, path);
         cfg_cbutton4_path = path;
+        uGetDlgItemText(m_hwnd, IDC_CBUTTON5_PATH, path);
+        cfg_cbutton5_path = path;
+        uGetDlgItemText(m_hwnd, IDC_CBUTTON6_PATH, path);
+        cfg_cbutton6_path = path;
 
         // Notify all registered instances to update
         nowbar::ControlPanelCore::notify_all_settings_changed();
@@ -885,28 +952,40 @@ void nowbar_preferences::reset_settings() {
             cfg_cbutton2_enabled = 0;
             cfg_cbutton3_enabled = 0;
             cfg_cbutton4_enabled = 0;
+            cfg_cbutton5_enabled = 0;
+            cfg_cbutton6_enabled = 0;
             cfg_cbutton1_action = 0;
             cfg_cbutton2_action = 0;
             cfg_cbutton3_action = 0;
             cfg_cbutton4_action = 0;
+            cfg_cbutton5_action = 0;
+            cfg_cbutton6_action = 0;
             cfg_cbutton1_path = "";
             cfg_cbutton2_path = "";
             cfg_cbutton3_path = "";
             cfg_cbutton4_path = "";
+            cfg_cbutton5_path = "";
+            cfg_cbutton6_path = "";
             
             // Update UI
             CheckDlgButton(m_hwnd, IDC_CBUTTON1_ENABLE, BST_UNCHECKED);
             CheckDlgButton(m_hwnd, IDC_CBUTTON2_ENABLE, BST_UNCHECKED);
             CheckDlgButton(m_hwnd, IDC_CBUTTON3_ENABLE, BST_UNCHECKED);
             CheckDlgButton(m_hwnd, IDC_CBUTTON4_ENABLE, BST_UNCHECKED);
+            CheckDlgButton(m_hwnd, IDC_CBUTTON5_ENABLE, BST_UNCHECKED);
+            CheckDlgButton(m_hwnd, IDC_CBUTTON6_ENABLE, BST_UNCHECKED);
             SendMessage(GetDlgItem(m_hwnd, IDC_CBUTTON1_ACTION), CB_SETCURSEL, 0, 0);
             SendMessage(GetDlgItem(m_hwnd, IDC_CBUTTON2_ACTION), CB_SETCURSEL, 0, 0);
             SendMessage(GetDlgItem(m_hwnd, IDC_CBUTTON3_ACTION), CB_SETCURSEL, 0, 0);
             SendMessage(GetDlgItem(m_hwnd, IDC_CBUTTON4_ACTION), CB_SETCURSEL, 0, 0);
+            SendMessage(GetDlgItem(m_hwnd, IDC_CBUTTON5_ACTION), CB_SETCURSEL, 0, 0);
+            SendMessage(GetDlgItem(m_hwnd, IDC_CBUTTON6_ACTION), CB_SETCURSEL, 0, 0);
             SetDlgItemTextW(m_hwnd, IDC_CBUTTON1_PATH, L"");
             SetDlgItemTextW(m_hwnd, IDC_CBUTTON2_PATH, L"");
             SetDlgItemTextW(m_hwnd, IDC_CBUTTON3_PATH, L"");
             SetDlgItemTextW(m_hwnd, IDC_CBUTTON4_PATH, L"");
+            SetDlgItemTextW(m_hwnd, IDC_CBUTTON5_PATH, L"");
+            SetDlgItemTextW(m_hwnd, IDC_CBUTTON6_PATH, L"");
             update_all_cbutton_path_states(m_hwnd);
         } else if (m_current_tab == 2) {
             // Reset Fonts tab settings
