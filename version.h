@@ -2,9 +2,9 @@
 
 #define FOO_NOWBAR_VERSION_MAJOR 1
 #define FOO_NOWBAR_VERSION_MINOR 0
-#define FOO_NOWBAR_VERSION_PATCH 10
+#define FOO_NOWBAR_VERSION_PATCH 11
 
-#define FOO_NOWBAR_VERSION_STRING "1.0.10"
+#define FOO_NOWBAR_VERSION_STRING "1.0.11"
 #define FOO_NOWBAR_NAME "foo_nowbar"
 #define FOO_NOWBAR_DISPLAY_NAME "Now Bar Control Panel"
 #define FOO_NOWBAR_DESCRIPTION "Custom control panel with artwork, playback controls, seek bar, and volume."
