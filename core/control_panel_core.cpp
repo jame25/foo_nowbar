@@ -382,13 +382,30 @@ void ControlPanelCore::update_layout(const RECT &rect) {
     m_rect_heart = {}; // Clear rect when hidden
   }
 
-  // Custom button - positioned to the right of repeat (if visible)
-  if (get_nowbar_custom_button_visible()) {
-    int custom_x = m_rect_repeat.right + spacing;
-    m_rect_custom = {custom_x, btn_y, custom_x + button_size,
-                     btn_y + button_size};
-  } else {
-    m_rect_custom = {}; // Clear rect when hidden
+  // Custom buttons #1-4 - positioned to the right of repeat (only if enabled)
+  // Position each enabled button in sequence
+  int cbutton_x = m_rect_repeat.right + spacing;
+  m_rect_cbutton1 = {};
+  m_rect_cbutton2 = {};
+  m_rect_cbutton3 = {};
+  m_rect_cbutton4 = {};
+  m_rect_custom = {};  // Legacy - clear it
+  
+  if (get_nowbar_cbutton_enabled(0)) {
+    m_rect_cbutton1 = {cbutton_x, btn_y, cbutton_x + button_size, btn_y + button_size};
+    cbutton_x += button_size + spacing;
+  }
+  if (get_nowbar_cbutton_enabled(1)) {
+    m_rect_cbutton2 = {cbutton_x, btn_y, cbutton_x + button_size, btn_y + button_size};
+    cbutton_x += button_size + spacing;
+  }
+  if (get_nowbar_cbutton_enabled(2)) {
+    m_rect_cbutton3 = {cbutton_x, btn_y, cbutton_x + button_size, btn_y + button_size};
+    cbutton_x += button_size + spacing;
+  }
+  if (get_nowbar_cbutton_enabled(3)) {
+    m_rect_cbutton4 = {cbutton_x, btn_y, cbutton_x + button_size, btn_y + button_size};
+    cbutton_x += button_size + spacing;
   }
 
   // Set MiniPlayer button position now that btn_y is calculated
@@ -400,12 +417,12 @@ void ControlPanelCore::update_layout(const RECT &rect) {
 
   // Set Volume bar position - align vertically with control buttons
   // Apply minimum spacing constraint to prevent overlap with control buttons
-  int rightmost_control_right;
-  if (get_nowbar_custom_button_visible()) {
-    rightmost_control_right = m_rect_custom.right;
-  } else {
-    rightmost_control_right = m_rect_repeat.right;
-  }
+  // Find rightmost control button
+  int rightmost_control_right = m_rect_repeat.right;
+  if (get_nowbar_cbutton_enabled(3)) rightmost_control_right = m_rect_cbutton4.right;
+  else if (get_nowbar_cbutton_enabled(2)) rightmost_control_right = m_rect_cbutton3.right;
+  else if (get_nowbar_cbutton_enabled(1)) rightmost_control_right = m_rect_cbutton2.right;
+  else if (get_nowbar_cbutton_enabled(0)) rightmost_control_right = m_rect_cbutton1.right;
   
   // Clamp volume bar left edge to maintain minimum spacing from controls
   int vol_x_clamped = std::max(vol_x, rightmost_control_right + spacing);
@@ -419,8 +436,9 @@ void ControlPanelCore::update_layout(const RECT &rect) {
   // Add extra spacing to prevent text overlap with progress timer
   int extra_spacing = spacing; // Full spacing instead of 50%
   int reference_left = get_nowbar_mood_icon_visible() ? m_rect_heart.left : m_rect_shuffle.left;
-  // Account for timer space: timer extends ~60px to the left of seekbar (which starts at shuffle)
-  int timer_space = static_cast<int>(75 * m_dpi_scale * m_size_scale); // Timer width + gap
+  // Account for timer space: timer extends to the left of seekbar (which starts at shuffle)
+  // Conservative estimate to accommodate h:mm:ss format for tracks over 59 minutes
+  int timer_space = static_cast<int>(110 * m_dpi_scale * m_size_scale); // Timer width + gap
   int info_right = reference_left - timer_space;
   int info_height =
       static_cast<int>((m_metrics.text_height * 2 + 8) *
@@ -472,7 +490,7 @@ void ControlPanelCore::paint(HDC hdc, const RECT &rect) {
     bool mp_hovered = (m_hover_region == HitRegion::MiniPlayerButton);
     int mp_w = m_rect_miniplayer.right - m_rect_miniplayer.left;
     int mp_h = m_rect_miniplayer.bottom - m_rect_miniplayer.top;
-    if (mp_hovered) {
+    if (mp_hovered && get_nowbar_hover_circles_enabled()) {
       Gdiplus::SolidBrush hoverBrush(m_button_hover_color);
       g.FillEllipse(&hoverBrush, m_rect_miniplayer.left, m_rect_miniplayer.top,
                     mp_w, mp_h);
@@ -569,12 +587,14 @@ void ControlPanelCore::draw_track_info(Gdiplus::Graphics &g) {
 }
 
 void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
+  bool show_hover = get_nowbar_hover_circles_enabled();
+  
   // Heart button (mood toggle) - only if visible
   if (get_nowbar_mood_icon_visible()) {
     bool heart_hovered = (m_hover_region == HitRegion::HeartButton);
     int hw = m_rect_heart.right - m_rect_heart.left;
     int hh = m_rect_heart.bottom - m_rect_heart.top;
-    if (heart_hovered) {
+    if (heart_hovered && show_hover) {
       Gdiplus::SolidBrush hoverBrush(m_button_hover_color);
       g.FillEllipse(&hoverBrush, m_rect_heart.left, m_rect_heart.top, hw, hh);
     }
@@ -594,7 +614,7 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
 
   int sw = m_rect_shuffle.right - m_rect_shuffle.left;
   int sh = m_rect_shuffle.bottom - m_rect_shuffle.top;
-  if (shuffle_hovered) {
+  if (shuffle_hovered && show_hover) {
     Gdiplus::SolidBrush hoverBrush(m_button_hover_color);
     g.FillEllipse(&hoverBrush, m_rect_shuffle.left, m_rect_shuffle.top, sw, sh);
   }
@@ -611,7 +631,7 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
   bool prev_hovered = (m_hover_region == HitRegion::PrevButton);
   int pw = m_rect_prev.right - m_rect_prev.left;
   int ph = m_rect_prev.bottom - m_rect_prev.top;
-  if (prev_hovered) {
+  if (prev_hovered && show_hover) {
     Gdiplus::SolidBrush hoverBrush(m_button_hover_color);
     g.FillEllipse(&hoverBrush, m_rect_prev.left, m_rect_prev.top, pw, ph);
   }
@@ -622,8 +642,8 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
   int play_w = m_rect_play.right - m_rect_play.left;
   int play_h = m_rect_play.bottom - m_rect_play.top;
 
-  // White/light background circle
-  Gdiplus::Color bgColor = play_hovered ? Gdiplus::Color(255, 255, 255, 255)
+  // White/light background circle - this is part of the button design, not hover effect
+  Gdiplus::Color bgColor = (play_hovered && show_hover) ? Gdiplus::Color(255, 255, 255, 255)
                                         : Gdiplus::Color(255, 230, 230, 230);
   Gdiplus::SolidBrush bgBrush(bgColor);
   g.FillEllipse(&bgBrush, m_rect_play.left, m_rect_play.top, play_w, play_h);
@@ -640,7 +660,7 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
   bool next_hovered = (m_hover_region == HitRegion::NextButton);
   int nw = m_rect_next.right - m_rect_next.left;
   int nh = m_rect_next.bottom - m_rect_next.top;
-  if (next_hovered) {
+  if (next_hovered && show_hover) {
     Gdiplus::SolidBrush hoverBrush(m_button_hover_color);
     g.FillEllipse(&hoverBrush, m_rect_next.left, m_rect_next.top, nw, nh);
   }
@@ -654,7 +674,7 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
 
   int rw = m_rect_repeat.right - m_rect_repeat.left;
   int rh = m_rect_repeat.bottom - m_rect_repeat.top;
-  if (repeat_hovered) {
+  if (repeat_hovered && show_hover) {
     Gdiplus::SolidBrush hoverBrush(m_button_hover_color);
     g.FillEllipse(&hoverBrush, m_rect_repeat.left, m_rect_repeat.top, rw, rh);
   }
@@ -667,22 +687,27 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
       m_rect_repeat.right - repeat_inset, m_rect_repeat.bottom - repeat_inset};
   draw_repeat_icon(g, repeatIconRect, repeatColor, repeat_one);
 
-  // Custom button (next to repeat) - only if visible
-  if (get_nowbar_custom_button_visible()) {
-    bool custom_hovered = (m_hover_region == HitRegion::CustomButton);
-    int cw = m_rect_custom.right - m_rect_custom.left;
-    int ch = m_rect_custom.bottom - m_rect_custom.top;
-    if (custom_hovered) {
+  // Custom buttons #1-4 (only render if enabled)
+  auto draw_cbutton = [&](int index, const RECT& rect, HitRegion region) {
+    if (!get_nowbar_cbutton_enabled(index)) return;
+    bool hovered = (m_hover_region == region);
+    int cw = rect.right - rect.left;
+    int ch = rect.bottom - rect.top;
+    if (hovered && show_hover) {
+      // Slightly larger hover circle (5% expansion) to match perceived size of curved icons
+      int expand = cw * 5 / 100;
       Gdiplus::SolidBrush hoverBrush(m_button_hover_color);
-      g.FillEllipse(&hoverBrush, m_rect_custom.left, m_rect_custom.top, cw, ch);
+      g.FillEllipse(&hoverBrush, rect.left - expand, rect.top - expand, cw + expand * 2, ch + expand * 2);
     }
-    int custom_inset = cw * 15 / 100; // 15% inset to match other icons
-    RECT customIconRect = {m_rect_custom.left + custom_inset,
-                           m_rect_custom.top + custom_inset,
-                           m_rect_custom.right - custom_inset,
-                           m_rect_custom.bottom - custom_inset};
-    draw_custom_icon(g, customIconRect, m_text_secondary_color);
-  }
+    int inset = cw * 15 / 100;
+    RECT iconRect = {rect.left + inset, rect.top + inset, rect.right - inset, rect.bottom - inset};
+    draw_numbered_square_icon(g, iconRect, m_text_secondary_color, index + 1);  // 1-based number
+  };
+  
+  draw_cbutton(0, m_rect_cbutton1, HitRegion::CButton1);
+  draw_cbutton(1, m_rect_cbutton2, HitRegion::CButton2);
+  draw_cbutton(2, m_rect_cbutton3, HitRegion::CButton3);
+  draw_cbutton(3, m_rect_cbutton4, HitRegion::CButton4);
 }
 
 void ControlPanelCore::draw_button(Gdiplus::Graphics &g, const RECT &rect,
@@ -827,9 +852,16 @@ void ControlPanelCore::draw_time_display(Gdiplus::Graphics &g) {
   int seekbar_center_y = (m_rect_seekbar.top + m_rect_seekbar.bottom) / 2;
   int time_height = static_cast<int>(m_metrics.text_height * m_size_scale);
 
-  // Scale the time offset by size scale
-  float time_offset = 60 * m_dpi_scale * m_size_scale;
-  float time_width = 55 * m_dpi_scale * m_size_scale;
+  // Measure actual text width needed for longest possible time strings
+  // Use "9:59:59" as reference for elapsed time and "-9:59:59" for remaining time
+  // This handles tracks over 59 minutes that use h:mm:ss format
+  Gdiplus::RectF refBoundRect;
+  g.MeasureString(L"9:59:59", -1, &timeFont, Gdiplus::PointF(0, 0), &refBoundRect);
+  float time_width = refBoundRect.Width + 4 * m_dpi_scale; // Add small padding
+  
+  Gdiplus::RectF refBoundRectRemaining;
+  g.MeasureString(L"-9:59:59", -1, &timeFont, Gdiplus::PointF(0, 0), &refBoundRectRemaining);
+  float time_offset = refBoundRectRemaining.Width + 4 * m_dpi_scale; // Add small padding
 
   // Left side: elapsed time (before seekbar)
   // Position timer to end just before the seekbar (with gap for seek handle)
@@ -956,8 +988,15 @@ HitRegion ControlPanelCore::hit_test(int x, int y) const {
     return HitRegion::RepeatButton;
   if (pt_in_rect(m_rect_seekbar, x, y))
     return HitRegion::SeekBar;
-  if (get_nowbar_custom_button_visible() && pt_in_rect(m_rect_custom, x, y))
-    return HitRegion::CustomButton;
+  // Custom buttons #1-4
+  if (get_nowbar_cbutton_enabled(0) && pt_in_rect(m_rect_cbutton1, x, y))
+    return HitRegion::CButton1;
+  if (get_nowbar_cbutton_enabled(1) && pt_in_rect(m_rect_cbutton2, x, y))
+    return HitRegion::CButton2;
+  if (get_nowbar_cbutton_enabled(2) && pt_in_rect(m_rect_cbutton3, x, y))
+    return HitRegion::CButton3;
+  if (get_nowbar_cbutton_enabled(3) && pt_in_rect(m_rect_cbutton4, x, y))
+    return HitRegion::CButton4;
   // Volume area - check both icon (positioned left of rect) and slider
   int icon_gap = static_cast<int>(6 * m_dpi_scale * m_size_scale);
   int icon_width =
@@ -1104,110 +1143,88 @@ void ControlPanelCore::on_lbutton_up(int x, int y) {
       }
       break;
     }
-    case HitRegion::CustomButton: {
-      int action = get_nowbar_custom_button_action();
-      if (action == 1) {
+    case HitRegion::CustomButton:  // Legacy - fallthrough
+    case HitRegion::CButton1:
+    case HitRegion::CButton2:
+    case HitRegion::CButton3:
+    case HitRegion::CButton4: {
+      // Determine which button was clicked
+      int button_index = -1;
+      if (release_region == HitRegion::CButton1 || release_region == HitRegion::CustomButton) button_index = 0;
+      else if (release_region == HitRegion::CButton2) button_index = 1;
+      else if (release_region == HitRegion::CButton3) button_index = 2;
+      else if (release_region == HitRegion::CButton4) button_index = 3;
+      
+      if (button_index < 0) break;
+      
+      int action = get_nowbar_cbutton_action(button_index);
+      pfc::string8 path = get_nowbar_cbutton_path(button_index);
+      
+      if (action == 1 && !path.is_empty()) {
         // Open URL with title formatting support
-        pfc::string8 url_template = get_nowbar_custom_button_url();
-        if (!url_template.is_empty()) {
-          auto pc = playback_control::get();
-          metadb_handle_ptr track;
-
-          // Get currently playing track
-          if (pc->get_now_playing(track) && track.is_valid()) {
-            // Compile and evaluate title formatting
-            service_ptr_t<titleformat_object> script;
-            titleformat_compiler::get()->compile_safe(script, url_template);
-            if (script.is_valid()) {
-              pfc::string8 evaluated_url;
-              track->format_title(nullptr, evaluated_url, script, nullptr);
-
-              if (!evaluated_url.is_empty()) {
-                pfc::stringcvt::string_wide_from_utf8 wideUrl(evaluated_url);
-                ShellExecuteW(nullptr, L"open", wideUrl, nullptr, nullptr,
-                              SW_SHOWNORMAL);
-              }
-            }
-          } else {
-            // No track playing - try to evaluate without context (will use
-            // defaults/empty values)
-            service_ptr_t<titleformat_object> script;
-            titleformat_compiler::get()->compile_safe(script, url_template);
-            if (script.is_valid()) {
-              pfc::string8 evaluated_url;
-              pc->playback_format_title(nullptr, evaluated_url, script, nullptr,
-                                        playback_control::display_level_all);
-
-              if (!evaluated_url.is_empty()) {
-                pfc::stringcvt::string_wide_from_utf8 wideUrl(evaluated_url);
-                ShellExecuteW(nullptr, L"open", wideUrl, nullptr, nullptr,
-                              SW_SHOWNORMAL);
-              }
-            }
+        auto pc = playback_control::get();
+        metadb_handle_ptr track;
+        pfc::string8 evaluated_url;
+        
+        if (pc->get_now_playing(track) && track.is_valid()) {
+          service_ptr_t<titleformat_object> script;
+          titleformat_compiler::get()->compile_safe(script, path);
+          if (script.is_valid()) {
+            track->format_title(nullptr, evaluated_url, script, nullptr);
+          }
+        } else {
+          service_ptr_t<titleformat_object> script;
+          titleformat_compiler::get()->compile_safe(script, path);
+          if (script.is_valid()) {
+            pc->playback_format_title(nullptr, evaluated_url, script, nullptr, playback_control::display_level_all);
           }
         }
-      } else if (action == 2) {
+        
+        if (!evaluated_url.is_empty()) {
+          pfc::stringcvt::string_wide_from_utf8 wideUrl(evaluated_url);
+          ShellExecuteW(nullptr, L"open", wideUrl, nullptr, nullptr, SW_SHOWNORMAL);
+        }
+      } else if (action == 2 && !path.is_empty()) {
         // Run Executable with file path argument
-        pfc::string8 exe_template = get_nowbar_custom_button_executable();
-        if (!exe_template.is_empty()) {
-          auto pc = playback_control::get();
-          metadb_handle_ptr track;
-          
-          // Get currently playing track
-          if (pc->get_now_playing(track) && track.is_valid()) {
-            // Support title formatting in executable path
-            service_ptr_t<titleformat_object> script;
-            titleformat_compiler::get()->compile_safe(script, exe_template);
-            pfc::string8 exe_path;
-            
-            if (script.is_valid()) {
-              track->format_title(nullptr, exe_path, script, nullptr);
-            } else {
-              exe_path = exe_template;
-            }
-            
-            // Get the file path of the current track
-            const char* file_path = track->get_path();
-            
-            if (!exe_path.is_empty() && file_path) {
-              // Convert foobar2000 file path (which may be file:// URL) to a regular path
-              pfc::string8 physical_path;
-              filesystem::g_get_display_path(file_path, physical_path);
-              
-              // Quote the file path to handle spaces
-              pfc::string8 quoted_path;
-              quoted_path << "\"" << physical_path << "\"";
-              
-              pfc::stringcvt::string_wide_from_utf8 wideExe(exe_path);
-              pfc::stringcvt::string_wide_from_utf8 wideArgs(quoted_path);
-              
-              // Use ShellExecuteW with file path as argument
-              ShellExecuteW(nullptr, L"open", wideExe, wideArgs, nullptr, SW_SHOWNORMAL);
-            }
+        auto pc = playback_control::get();
+        metadb_handle_ptr track;
+        pfc::string8 exe_path;
+        
+        service_ptr_t<titleformat_object> script;
+        titleformat_compiler::get()->compile_safe(script, path);
+        
+        if (pc->get_now_playing(track) && track.is_valid()) {
+          if (script.is_valid()) {
+            track->format_title(nullptr, exe_path, script, nullptr);
           } else {
-            // No track playing - just launch the executable without arguments
-            service_ptr_t<titleformat_object> script;
-            titleformat_compiler::get()->compile_safe(script, exe_template);
-            pfc::string8 exe_path;
+            exe_path = path;
+          }
+          
+          const char* file_path = track->get_path();
+          if (!exe_path.is_empty() && file_path) {
+            pfc::string8 physical_path;
+            filesystem::g_get_display_path(file_path, physical_path);
+            pfc::string8 quoted_path;
+            quoted_path << "\"" << physical_path << "\"";
             
-            if (script.is_valid()) {
-              pc->playback_format_title(nullptr, exe_path, script, nullptr, playback_control::display_level_all);
-            } else {
-              exe_path = exe_template;
-            }
-            
-            if (!exe_path.is_empty()) {
-              pfc::stringcvt::string_wide_from_utf8 wideExe(exe_path);
-              ShellExecuteW(nullptr, L"open", wideExe, nullptr, nullptr, SW_SHOWNORMAL);
-            }
+            pfc::stringcvt::string_wide_from_utf8 wideExe(exe_path);
+            pfc::stringcvt::string_wide_from_utf8 wideArgs(quoted_path);
+            ShellExecuteW(nullptr, L"open", wideExe, wideArgs, nullptr, SW_SHOWNORMAL);
+          }
+        } else {
+          if (script.is_valid()) {
+            pc->playback_format_title(nullptr, exe_path, script, nullptr, playback_control::display_level_all);
+          } else {
+            exe_path = path;
+          }
+          if (!exe_path.is_empty()) {
+            pfc::stringcvt::string_wide_from_utf8 wideExe(exe_path);
+            ShellExecuteW(nullptr, L"open", wideExe, nullptr, nullptr, SW_SHOWNORMAL);
           }
         }
-      } else if (action == 3) {
+      } else if (action == 3 && !path.is_empty()) {
         // Foobar2k Action
-        pfc::string8 fb2k_action = get_nowbar_custom_button_fb2k_action();
-        if (!fb2k_action.is_empty()) {
-          execute_fb2k_action_by_path(fb2k_action.c_str());
-        }
+        execute_fb2k_action_by_path(path.c_str());
       }
       break;
     }
@@ -1995,6 +2012,156 @@ void ControlPanelCore::draw_custom_icon(Gdiplus::Graphics &g, const RECT &rect,
       drawCircle(xPos, yPos, radius);
     }
   }
+}
+
+// Draw link icon - chain link from link_24dp.svg
+void ControlPanelCore::draw_link_icon(Gdiplus::Graphics &g, const RECT &rect,
+                                       const Gdiplus::Color &color) {
+  float iconSize = static_cast<float>(
+      std::min(rect.right - rect.left, rect.bottom - rect.top));
+  float cx = (rect.left + rect.right) / 2.0f;
+  float cy = (rect.top + rect.bottom) / 2.0f;
+  float scale = iconSize / 960.0f;
+  float offsetX = cx - 480.0f * scale;
+  float offsetY = cy - 480.0f * scale;
+
+  Gdiplus::SolidBrush brush(color);
+  Gdiplus::GraphicsPath path;
+  
+  // Transform SVG coords to GDI+
+  auto svgPt = [&](float x, float y) -> Gdiplus::PointF {
+    return Gdiplus::PointF(offsetX + x * scale, offsetY + (960.0f + y) * scale);
+  };
+  
+  // Simplified link icon - two rounded rectangles connected by a bar
+  // Left link part (from SVG path: H280, q-50 curves for rounded edges)
+  float barY = -480.0f;  // Vertical center
+  float barH = 80.0f;    // Bar height
+  float endW = 160.0f;   // End cap width
+  float barMid = 160.0f; // Middle bar width per side
+  
+  // Draw left rounded end
+  path.AddArc(offsetX + 80 * scale, offsetY + (960 - 520) * scale, 
+              160 * scale, 160 * scale, 90, 180);
+  // Top bar to center
+  path.AddLine(svgPt(160, -560), svgPt(320, -560));
+  // Gap in middle
+  path.StartFigure();
+  // Continue from other side of gap
+  path.AddLine(svgPt(640, -560), svgPt(800, -560));
+  // Right rounded end
+  path.AddArc(offsetX + 720 * scale, offsetY + (960 - 520) * scale,
+              160 * scale, 160 * scale, 270, 180);
+  // Bottom bar back
+  path.AddLine(svgPt(800, -400), svgPt(640, -400));
+  path.StartFigure();
+  path.AddLine(svgPt(320, -400), svgPt(160, -400));
+  
+  // Draw middle connecting bar
+  g.FillRectangle(&brush, offsetX + 320 * scale, offsetY + (960 - 520) * scale,
+                  320 * scale, 80 * scale);
+  
+  Gdiplus::Pen pen(color, 80.0f * scale);
+  pen.SetStartCap(Gdiplus::LineCapRound);
+  pen.SetEndCap(Gdiplus::LineCapRound);
+  g.DrawPath(&pen, &path);
+}
+
+// Draw circle icon - circle outline from circle_24dp.svg
+void ControlPanelCore::draw_circle_icon(Gdiplus::Graphics &g, const RECT &rect,
+                                         const Gdiplus::Color &color) {
+  float iconSize = static_cast<float>(
+      std::min(rect.right - rect.left, rect.bottom - rect.top));
+  float cx = (rect.left + rect.right) / 2.0f;
+  float cy = (rect.top + rect.bottom) / 2.0f;
+  
+  // Draw circle outline - 80% of icon size for the outer circle
+  float outerRadius = iconSize * 0.42f;
+  float strokeWidth = iconSize * 0.10f;  // 10% stroke width
+  
+  Gdiplus::Pen pen(color, strokeWidth);
+  g.DrawEllipse(&pen, cx - outerRadius, cy - outerRadius, 
+                outerRadius * 2, outerRadius * 2);
+}
+
+// Draw square icon - square outline from square_24dp.svg
+void ControlPanelCore::draw_square_icon(Gdiplus::Graphics &g, const RECT &rect,
+                                         const Gdiplus::Color &color) {
+  float iconSize = static_cast<float>(
+      std::min(rect.right - rect.left, rect.bottom - rect.top));
+  float cx = (rect.left + rect.right) / 2.0f;
+  float cy = (rect.top + rect.bottom) / 2.0f;
+  
+  // Draw square outline - 80% of icon size
+  float halfSize = iconSize * 0.38f;
+  float strokeWidth = iconSize * 0.10f;  // 10% stroke width
+  float cornerRadius = iconSize * 0.08f;  // Slight corner rounding
+  
+  Gdiplus::Pen pen(color, strokeWidth);
+  Gdiplus::GraphicsPath path;
+  
+  // Create rounded rectangle
+  float x = cx - halfSize;
+  float y = cy - halfSize;
+  float w = halfSize * 2;
+  float h = halfSize * 2;
+  float r = cornerRadius;
+  
+  path.AddArc(x, y, r * 2, r * 2, 180, 90);
+  path.AddArc(x + w - r * 2, y, r * 2, r * 2, 270, 90);
+  path.AddArc(x + w - r * 2, y + h - r * 2, r * 2, r * 2, 0, 90);
+  path.AddArc(x, y + h - r * 2, r * 2, r * 2, 90, 90);
+  path.CloseFigure();
+  
+  g.DrawPath(&pen, &path);
+}
+
+// Draw numbered square icon - square outline with a number in the center
+void ControlPanelCore::draw_numbered_square_icon(Gdiplus::Graphics &g, const RECT &rect,
+                                                  const Gdiplus::Color &color, int number) {
+  float iconSize = static_cast<float>(
+      std::min(rect.right - rect.left, rect.bottom - rect.top));
+  float cx = (rect.left + rect.right) / 2.0f;
+  float cy = (rect.top + rect.bottom) / 2.0f;
+  
+  // Draw square outline - 80% of icon size
+  float halfSize = iconSize * 0.42f;
+  float strokeWidth = iconSize * 0.08f;  // 8% stroke width
+  float cornerRadius = iconSize * 0.10f;  // Slight corner rounding
+  
+  Gdiplus::Pen pen(color, strokeWidth);
+  Gdiplus::GraphicsPath path;
+  
+  // Create rounded rectangle
+  float x = cx - halfSize;
+  float y = cy - halfSize;
+  float w = halfSize * 2;
+  float h = halfSize * 2;
+  float r = cornerRadius;
+  
+  path.AddArc(x, y, r * 2, r * 2, 180, 90);
+  path.AddArc(x + w - r * 2, y, r * 2, r * 2, 270, 90);
+  path.AddArc(x + w - r * 2, y + h - r * 2, r * 2, r * 2, 0, 90);
+  path.AddArc(x, y + h - r * 2, r * 2, r * 2, 90, 90);
+  path.CloseFigure();
+  
+  g.DrawPath(&pen, &path);
+  
+  // Draw number in center
+  wchar_t numStr[4];
+  swprintf_s(numStr, L"%d", number);
+  
+  Gdiplus::FontFamily fontFamily(L"Segoe UI");
+  float fontSize = iconSize * 0.45f;  // Font size relative to icon size
+  Gdiplus::Font font(&fontFamily, fontSize, Gdiplus::FontStyleBold, Gdiplus::UnitPixel);
+  
+  Gdiplus::SolidBrush brush(color);
+  Gdiplus::StringFormat sf;
+  sf.SetAlignment(Gdiplus::StringAlignmentCenter);
+  sf.SetLineAlignment(Gdiplus::StringAlignmentCenter);
+  
+  Gdiplus::RectF textRect(x, y, w, h);
+  g.DrawString(numStr, -1, &font, textRect, &sf, &brush);
 }
 
 } // namespace nowbar
