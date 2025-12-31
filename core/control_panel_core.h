@@ -41,7 +41,11 @@ enum class HitRegion {
     ShuffleButton,
     RepeatButton,
     SeekBar,
-    CustomButton,  // Custom button (left of volume)
+    CustomButton,  // Legacy - kept for compatibility
+    CButton1,      // Custom button #1
+    CButton2,      // Custom button #2
+    CButton3,      // Custom button #3
+    CButton4,      // Custom button #4
     VolumeIcon,    // Click to mute/unmute
     VolumeSlider,  // Drag to adjust volume
     MiniPlayerButton
@@ -127,7 +131,11 @@ private:
     void draw_heart_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color);
     void draw_miniplayer_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color);
     void draw_volume_icon(Gdiplus::Graphics& g, int x, int y, int size, const Gdiplus::Color& color, int level);  // level: 0=mute, 1=low, 2=full
-    void draw_custom_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color);
+    void draw_custom_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color);  // Button #1 icon (dots grid)
+    void draw_link_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color);    // Button #2 icon (link chain)
+    void draw_circle_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color);  // Button #3 icon (circle outline)
+    void draw_square_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color);  // Button #4 icon (square outline)
+    void draw_numbered_square_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color, int number);  // Square with number
     
     // Playback control actions
     void do_play_pause();
@@ -161,7 +169,11 @@ private:
     RECT m_rect_shuffle = {};
     RECT m_rect_repeat = {};
     RECT m_rect_seekbar = {};
-    RECT m_rect_custom = {};
+    RECT m_rect_custom = {};   // Legacy - kept for compatibility
+    RECT m_rect_cbutton1 = {}; // Custom button #1
+    RECT m_rect_cbutton2 = {}; // Custom button #2
+    RECT m_rect_cbutton3 = {}; // Custom button #3
+    RECT m_rect_cbutton4 = {}; // Custom button #4
     RECT m_rect_volume = {};
     RECT m_rect_miniplayer = {};
     RECT m_rect_time = {};
