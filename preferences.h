@@ -9,11 +9,17 @@ bool get_nowbar_cover_margin();  // true=Yes (margin), false=No (edge-to-edge)
 int get_nowbar_bar_style();  // 0=Pill-shaped, 1=Rectangular
 bool get_nowbar_mood_icon_visible();  // true=Show, false=Hidden
 bool get_nowbar_miniplayer_icon_visible();  // true=Show, false=Hidden
+bool get_nowbar_hover_circles_enabled();  // true=Yes (show), false=No (hide)
 bool get_nowbar_custom_button_visible();  // true=Show, false=Hidden
 int get_nowbar_custom_button_action();  // 0=None, 1=Open URL, 2=Run Executable, 3=Foobar2k Action
 pfc::string8 get_nowbar_custom_button_url();
 pfc::string8 get_nowbar_custom_button_executable();
 pfc::string8 get_nowbar_custom_button_fb2k_action();
+
+// Multi-button configuration accessors (for Custom Button tab)
+bool get_nowbar_cbutton_enabled(int button_index);  // 0-3, returns enabled state
+int get_nowbar_cbutton_action(int button_index);    // 0-3, returns action 0-3
+pfc::string8 get_nowbar_cbutton_path(int button_index);  // 0-3, returns path string
 
 // Execute a foobar2000 main menu command by path
 bool execute_fb2k_action_by_path(const char* path);
