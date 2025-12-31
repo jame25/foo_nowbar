@@ -28,6 +28,8 @@
 #define IDC_CUSTOM_EXE_BROWSE      1119
 #define IDC_CUSTOM_FB2K_LABEL      1120
 #define IDC_CUSTOM_FB2K_EDIT       1121
+#define IDC_HOVER_CIRCLES_LABEL    1122
+#define IDC_HOVER_CIRCLES_COMBO    1123
 
 // Fonts tab controls
 #define IDC_FONTS_GROUP            1201
@@ -37,3 +39,24 @@
 #define IDC_ARTIST_FONT_LABEL      1205
 #define IDC_ARTIST_FONT_DISPLAY    1206
 #define IDC_ARTIST_FONT_SELECT     1207
+
+// Custom Button tab controls
+#define IDC_CBUTTON_ENABLE_LABEL   1301
+#define IDC_CBUTTON_ACTION_LABEL   1302
+#define IDC_CBUTTON1_ENABLE        1303
+#define IDC_CBUTTON1_ACTION        1304
+#define IDC_CBUTTON2_ENABLE        1305
+#define IDC_CBUTTON2_ACTION        1306
+#define IDC_CBUTTON3_ENABLE        1307
+#define IDC_CBUTTON3_ACTION        1308
+#define IDC_CBUTTON4_ENABLE        1309
+#define IDC_CBUTTON4_ACTION        1310
+#define IDC_CBUTTON_PATH_LABEL     1311
+#define IDC_CBUTTON1_PATH          1312
+#define IDC_CBUTTON1_BROWSE        1313
+#define IDC_CBUTTON2_PATH          1314
+#define IDC_CBUTTON2_BROWSE        1315
+#define IDC_CBUTTON3_PATH          1316
+#define IDC_CBUTTON3_BROWSE        1317
+#define IDC_CBUTTON4_PATH          1318
+#define IDC_CBUTTON4_BROWSE        1319
