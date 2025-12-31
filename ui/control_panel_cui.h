@@ -41,8 +41,34 @@ private:
     std::unique_ptr<ControlPanelCore> m_core;
     bool m_tracking_mouse = false;
     
+    // CUI colour change callback for Custom theme mode
+    class ColourCallback : public cui::colours::common_callback {
+    public:
+        ColourCallback(ControlPanelCUI* owner) : m_owner(owner) {}
+        
+        void on_colour_changed(uint32_t changed_items_mask) const override {
+            if (m_owner && m_owner->m_core) {
+                m_owner->m_core->on_settings_changed();
+            }
+        }
+        
+        void on_bool_changed(uint32_t changed_items_mask) const override {
+            // Dark mode change - also triggers on_settings_changed
+            if ((changed_items_mask & cui::colours::bool_flag_dark_mode_enabled) && m_owner && m_owner->m_core) {
+                m_owner->m_core->on_settings_changed();
+            }
+        }
+        
+    private:
+        ControlPanelCUI* m_owner;
+    };
+    
+    std::unique_ptr<ColourCallback> m_colour_callback;
+    cui::colours::manager::ptr m_colour_manager;
+    
     void initialize_core(HWND wnd);
     void update_artwork();
+
 };
 
 // Factory registration
