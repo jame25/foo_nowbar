@@ -136,6 +136,8 @@ private:
     void draw_circle_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color);  // Button #3 icon (circle outline)
     void draw_square_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color);  // Button #4 icon (square outline)
     void draw_numbered_square_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color, int number);  // Square with number
+    void draw_alternate_play_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color);   // Alternate play icon (outline)
+    void draw_alternate_pause_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color);  // Alternate pause icon (outline)
     
     // Playback control actions
     void do_play_pause();
