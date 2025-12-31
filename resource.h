@@ -62,3 +62,11 @@
 #define IDC_CBUTTON3_BROWSE        1317
 #define IDC_CBUTTON4_PATH          1318
 #define IDC_CBUTTON4_BROWSE        1319
+#define IDC_CBUTTON5_ENABLE        1320
+#define IDC_CBUTTON5_ACTION        1321
+#define IDC_CBUTTON5_PATH          1322
+#define IDC_CBUTTON5_BROWSE        1323
+#define IDC_CBUTTON6_ENABLE        1324
+#define IDC_CBUTTON6_ACTION        1325
+#define IDC_CBUTTON6_PATH          1326
+#define IDC_CBUTTON6_BROWSE        1327
