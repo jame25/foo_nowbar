@@ -46,6 +46,8 @@ enum class HitRegion {
     CButton2,      // Custom button #2
     CButton3,      // Custom button #3
     CButton4,      // Custom button #4
+    CButton5,      // Custom button #5
+    CButton6,      // Custom button #6
     VolumeIcon,    // Click to mute/unmute
     VolumeSlider,  // Drag to adjust volume
     MiniPlayerButton
@@ -103,6 +105,11 @@ public:
     void on_settings_changed();
     static void notify_all_settings_changed();
     
+    // Custom color scheme support (for DUI color sync)
+    using ColorQueryCallback = std::function<bool(COLORREF& bg, COLORREF& text, COLORREF& highlight)>;
+    void set_color_query_callback(ColorQueryCallback callback);
+    void apply_custom_colors();  // Called when theme mode is "Custom"
+    
 private:
     void update_layout(const RECT& rect);
     void invalidate();
@@ -138,6 +145,7 @@ private:
     void draw_numbered_square_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color, int number);  // Square with number
     void draw_alternate_play_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color);   // Alternate play icon (outline)
     void draw_alternate_pause_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color);  // Alternate pause icon (outline)
+    void draw_stop_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color, bool filled = false);  // Stop icon (square)
     
     // Playback control actions
     void do_play_pause();
@@ -148,6 +156,7 @@ private:
     void do_seek(double position);
     void do_volume_change(float delta);
     void do_toggle_mood();
+    void do_stop();
     void update_mood_state();
     void show_picture_viewer();
     
@@ -176,6 +185,8 @@ private:
     RECT m_rect_cbutton2 = {}; // Custom button #2
     RECT m_rect_cbutton3 = {}; // Custom button #3
     RECT m_rect_cbutton4 = {}; // Custom button #4
+    RECT m_rect_cbutton5 = {}; // Custom button #5
+    RECT m_rect_cbutton6 = {}; // Custom button #6
     RECT m_rect_volume = {};
     RECT m_rect_miniplayer = {};
     RECT m_rect_time = {};
@@ -188,6 +199,11 @@ private:
     float m_prev_volume_db = 0.0f;  // Store previous volume for mute toggle
     bool m_miniplayer_active = false;  // MiniPlayer enabled state for icon color
     bool m_mood_active = false;  // MOOD tag state for heart icon color
+    
+    // Play button hover timer for stop icon
+    std::chrono::steady_clock::time_point m_play_hover_start_time;
+    bool m_play_hover_timer_active = false;
+    bool m_show_stop_icon = false;
     
     // Artwork
     std::unique_ptr<Gdiplus::Bitmap> m_artwork_bitmap;
@@ -207,6 +223,9 @@ private:
     
     // Artwork request callback
     ArtworkRequestCallback m_artwork_request_cb;
+    
+    // Color query callback (for DUI custom colors)
+    ColorQueryCallback m_color_query_cb;
 };
 
 } // namespace nowbar
