@@ -18,9 +18,9 @@ pfc::string8 get_nowbar_custom_button_executable();
 pfc::string8 get_nowbar_custom_button_fb2k_action();
 
 // Multi-button configuration accessors (for Custom Button tab)
-bool get_nowbar_cbutton_enabled(int button_index);  // 0-3, returns enabled state
-int get_nowbar_cbutton_action(int button_index);    // 0-3, returns action 0-3
-pfc::string8 get_nowbar_cbutton_path(int button_index);  // 0-3, returns path string
+bool get_nowbar_cbutton_enabled(int button_index);  // 0-5, returns enabled state
+int get_nowbar_cbutton_action(int button_index);    // 0-5, returns action 0-3
+pfc::string8 get_nowbar_cbutton_path(int button_index);  // 0-5, returns path string
 
 // Execute a foobar2000 main menu command by path
 bool execute_fb2k_action_by_path(const char* path);
