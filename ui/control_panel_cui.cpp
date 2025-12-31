@@ -10,19 +10,42 @@ uie::window_factory<ControlPanelCUI> g_cui_factory;
 void ControlPanelCUI::initialize_core(HWND wnd) {
     if (!m_core) {
         m_core = std::make_unique<ControlPanelCore>();
-        m_core->initialize(wnd);
+        
+        // Set callbacks BEFORE initialize() so they're available when on_settings_changed() is called
         
         // Set artwork request callback
         m_core->set_artwork_request_callback([this]() {
             update_artwork();
         });
         
-        // Note: initialize() already calls on_settings_changed() which respects theme mode preferences
+        // Set color query callback for Custom theme mode (CUI global color scheme sync)
+        m_core->set_color_query_callback([](COLORREF& bg, COLORREF& text, COLORREF& highlight) -> bool {
+            try {
+                // Use empty GUID to get global CUI colors
+                cui::colours::helper colour_helper;
+                bg = colour_helper.get_colour(cui::colours::colour_background);
+                text = colour_helper.get_colour(cui::colours::colour_text);
+                highlight = colour_helper.get_colour(cui::colours::colour_selection_background);
+                return true;
+            } catch (...) {
+                return false;
+            }
+        });
+        
+        // Register for CUI colour change notifications
+        m_colour_callback = std::make_unique<ColourCallback>(this);
+        if (fb2k::std_api_try_get(m_colour_manager)) {
+            m_colour_manager->register_common_callback(m_colour_callback.get());
+        }
+        
+        // Now initialize (which calls on_settings_changed with callbacks available)
+        m_core->initialize(wnd);
         
         // Load artwork for current track
         update_artwork();
     }
 }
+
 
 void ControlPanelCUI::update_artwork() {
     if (!m_core) return;
@@ -59,6 +82,12 @@ LRESULT ControlPanelCUI::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
         
     case WM_DESTROY:
+        // Unregister colour callback before destroying
+        if (m_colour_manager.is_valid() && m_colour_callback) {
+            m_colour_manager->deregister_common_callback(m_colour_callback.get());
+        }
+        m_colour_callback.reset();
+        m_colour_manager.release();
         m_core.reset();
         return 0;
         
@@ -161,13 +190,13 @@ LRESULT ControlPanelCUI::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp) {
             mmi->ptMinTrackSize.x = minSize.cx;
             mmi->ptMinTrackSize.y = minSize.cy;
             
-            // Set maximum height: 1.8 inches, scaled by DPI
-            // At 96 DPI: 1.8 * 96 = 173 pixels
+            // Set maximum height: 1.12 inches, scaled by DPI (~38% reduction from 1.8)
+            // At 96 DPI: 1.12 * 96 = 108 pixels
             // Keeps panel compact and horizontal-focused (matches DUI)
             HDC hdc = GetDC(wnd);
             if (hdc) {
                 int dpi = GetDeviceCaps(hdc, LOGPIXELSY);
-                LONG max_height = static_cast<LONG>(1.8 * dpi);
+                LONG max_height = static_cast<LONG>(1.12 * dpi);
                 mmi->ptMaxTrackSize.y = max_height;
                 ReleaseDC(wnd, hdc);
             }
@@ -176,10 +205,9 @@ LRESULT ControlPanelCUI::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp) {
     }
         
     case WM_SETTINGCHANGE:
-        // Check for dark mode change
+        // System settings changed - trigger theme update
         if (m_core) {
-            bool dark = ui_config_manager::g_is_dark_mode();
-            m_core->set_dark_mode(dark);
+            m_core->on_settings_changed();
         }
         return 0;
     }
