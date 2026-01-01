@@ -26,6 +26,7 @@ PlaybackStateManager::PlaybackStateManager()
         
         metadb_handle_ptr track;
         if (pc->get_now_playing(track)) {
+            m_state.current_track = track;  // Store the track handle
             update_track_info(track);
         }
     }
@@ -57,6 +58,7 @@ void PlaybackStateManager::on_playback_new_track(metadb_handle_ptr p_track) {
     m_state.playback_time = 0.0;
     m_state.track_length = pc->playback_get_length();
     m_state.can_seek = pc->playback_can_seek();
+    m_state.current_track = p_track;  // Store the track handle
     
     update_track_info(p_track);
     notify_track_changed();
@@ -69,6 +71,7 @@ void PlaybackStateManager::on_playback_stop(play_control::t_stop_reason p_reason
     m_state.playback_time = 0.0;
     m_state.track_length = 0.0;
     m_state.can_seek = false;
+    m_state.current_track.release();  // Clear the track handle
     notify_state_changed();
 }
 
