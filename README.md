@@ -13,7 +13,7 @@ A foobar2000 component that provides a "Now Playing" control panel for both Defa
 - **DPI Aware**: Properly scales on high-DPI displays with adaptive sizing
 
 ### Playback Controls
-- **Play/Pause/Stop**: Central play button with hover-to-stop functionality (hold hover to show stop icon)
+- **Play/Pause/Stop**: Central play button with hover-to-stop functionality (hover to show stop icon)
 - **Previous/Next**: Navigate between tracks
 - **Shuffle**: Toggle shuffle mode with visual indicator (blue when active)
 - **Repeat**: Cycle through repeat modes: Off → All → Track (blue when active)
