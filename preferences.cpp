@@ -70,6 +70,17 @@ static cfg_string cfg_nowbar_custom_button_fb2k_action(
     ""  // Default: empty (e.g., "Playback/Matrix Now Playing/Announce current track to Matrix")
 );
 
+// Display format configuration
+static cfg_string cfg_nowbar_line1_format(
+    GUID{0xABCDEF30, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xC0}},
+    "%title%"  // Default: title only
+);
+
+static cfg_string cfg_nowbar_line2_format(
+    GUID{0xABCDEF31, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xC1}},
+    "%artist%"  // Default: artist only
+);
+
 // Font configuration
 static cfg_struct_t<LOGFONT> cfg_nowbar_artist_font(
     GUID{0xABCDEF02, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0x8A}},
@@ -280,6 +291,14 @@ pfc::string8 get_nowbar_cbutton_path(int button_index) {
         case 5: return cfg_cbutton6_path.get();
         default: return pfc::string8();
     }
+}
+
+pfc::string8 get_nowbar_line1_format() {
+    return cfg_nowbar_line1_format.get();
+}
+
+pfc::string8 get_nowbar_line2_format() {
+    return cfg_nowbar_line2_format.get();
 }
 
 // Execute a foobar2000 main menu command by path (e.g., "Playback/Matrix Now Playing/Announce current track to Matrix")
@@ -545,6 +564,13 @@ void nowbar_preferences::switch_tab(int tab) {
     
     // General tab controls
     BOOL show_general = (tab == 0) ? SW_SHOW : SW_HIDE;
+    // Display Format section
+    ShowWindow(GetDlgItem(m_hwnd, IDC_DISPLAY_FORMAT_GROUP), show_general);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_LINE1_FORMAT_LABEL), show_general);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_LINE1_FORMAT_EDIT), show_general);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_LINE2_FORMAT_LABEL), show_general);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_LINE2_FORMAT_EDIT), show_general);
+    // Appearance settings
     ShowWindow(GetDlgItem(m_hwnd, IDC_THEME_MODE_LABEL), show_general);
     ShowWindow(GetDlgItem(m_hwnd, IDC_THEME_MODE_COMBO), show_general);
     ShowWindow(GetDlgItem(m_hwnd, IDC_COVER_MARGIN_LABEL), show_general);
@@ -654,6 +680,10 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         // Initialize tab control
         p_this->init_tab_control();
         
+        // Initialize display format edit controls
+        uSetDlgItemText(hwnd, IDC_LINE1_FORMAT_EDIT, cfg_nowbar_line1_format);
+        uSetDlgItemText(hwnd, IDC_LINE2_FORMAT_EDIT, cfg_nowbar_line2_format);
+        
         // Initialize theme mode combobox
         HWND hThemeCombo = GetDlgItem(hwnd, IDC_THEME_MODE_COMBO);
         SendMessage(hThemeCombo, CB_ADDSTRING, 0, (LPARAM)L"Auto");
@@ -758,6 +788,13 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         case IDC_HOVER_CIRCLES_COMBO:
         case IDC_ALTERNATE_ICONS_COMBO:
             if (HIWORD(wp) == CBN_SELCHANGE) {
+                p_this->on_changed();
+            }
+            break;
+
+        case IDC_LINE1_FORMAT_EDIT:
+        case IDC_LINE2_FORMAT_EDIT:
+            if (HIWORD(wp) == EN_CHANGE) {
                 p_this->on_changed();
             }
             break;
@@ -867,6 +904,13 @@ void nowbar_preferences::on_changed() {
 
 void nowbar_preferences::apply_settings() {
     if (m_hwnd) {
+        // Save display format strings
+        pfc::string8 format_str;
+        uGetDlgItemText(m_hwnd, IDC_LINE1_FORMAT_EDIT, format_str);
+        cfg_nowbar_line1_format = format_str;
+        uGetDlgItemText(m_hwnd, IDC_LINE2_FORMAT_EDIT, format_str);
+        cfg_nowbar_line2_format = format_str;
+        
         // Save theme mode
         cfg_nowbar_theme_mode = (int)SendMessage(GetDlgItem(m_hwnd, IDC_THEME_MODE_COMBO), CB_GETCURSEL, 0, 0);
         
@@ -930,6 +974,8 @@ void nowbar_preferences::reset_settings() {
     if (m_hwnd) {
         if (m_current_tab == 0) {
             // Reset General tab settings
+            cfg_nowbar_line1_format = "%title%";  // Default format
+            cfg_nowbar_line2_format = "%artist%";  // Default format
             cfg_nowbar_theme_mode = 0;  // Auto
             cfg_nowbar_cover_margin = 1;  // Yes (margin enabled)
             cfg_nowbar_bar_style = 0;  // Pill-shaped
@@ -939,6 +985,8 @@ void nowbar_preferences::reset_settings() {
             cfg_nowbar_alternate_icons = 0;  // Disabled
 
             // Update General tab UI
+            uSetDlgItemText(m_hwnd, IDC_LINE1_FORMAT_EDIT, "%title%");
+            uSetDlgItemText(m_hwnd, IDC_LINE2_FORMAT_EDIT, "%artist%");
             SendMessage(GetDlgItem(m_hwnd, IDC_THEME_MODE_COMBO), CB_SETCURSEL, 0, 0);
             SendMessage(GetDlgItem(m_hwnd, IDC_COVER_MARGIN_COMBO), CB_SETCURSEL, 0, 0);
             SendMessage(GetDlgItem(m_hwnd, IDC_BAR_STYLE_COMBO), CB_SETCURSEL, 0, 0);
