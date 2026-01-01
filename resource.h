@@ -6,6 +6,13 @@
 // Tab control
 #define IDC_TAB_CONTROL            1001
 
+// Display Format section (General tab - at top)
+#define IDC_DISPLAY_FORMAT_GROUP   1090
+#define IDC_LINE1_FORMAT_LABEL     1091
+#define IDC_LINE1_FORMAT_EDIT      1092
+#define IDC_LINE2_FORMAT_LABEL     1093
+#define IDC_LINE2_FORMAT_EDIT      1094
+
 // General tab controls
 #define IDC_THEME_MODE_LABEL       1101
 #define IDC_THEME_MODE_COMBO       1102
