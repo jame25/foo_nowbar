@@ -222,6 +222,9 @@ void ControlPanelCore::on_settings_changed() {
 
   // Update fonts from preferences
   update_fonts();
+  
+  // Update and recompile title format strings
+  update_title_formats();
 }
 
 void ControlPanelCore::set_color_query_callback(ColorQueryCallback callback) {
@@ -673,13 +676,14 @@ void ControlPanelCore::draw_track_info(Gdiplus::Graphics &g) {
   sf.SetTrimming(Gdiplus::StringTrimmingEllipsisCharacter);
   sf.SetFormatFlags(Gdiplus::StringFormatFlagsNoWrap);
 
-  std::wstring title = utf8_to_wide(m_state.track_title.c_str());
-  std::wstring artist = utf8_to_wide(m_state.track_artist.c_str());
+  // Use formatted strings from title formatting
+  std::wstring line1 = utf8_to_wide(m_formatted_line1.c_str());
+  std::wstring line2 = utf8_to_wide(m_formatted_line2.c_str());
 
-  g.DrawString(title.c_str(), -1, m_font_title.get(), titleRect, &sf,
+  g.DrawString(line1.c_str(), -1, m_font_title.get(), titleRect, &sf,
                &titleBrush);
-  if (!artist.empty()) {
-    g.DrawString(artist.c_str(), -1, m_font_artist.get(), artistRect, &sf,
+  if (!line2.empty()) {
+    g.DrawString(line2.c_str(), -1, m_font_artist.get(), artistRect, &sf,
                  &artistBrush);
   }
   
@@ -1577,6 +1581,7 @@ void ControlPanelCore::update_mood_state() {
 
 void ControlPanelCore::on_playback_state_changed(const PlaybackState &state) {
   m_state = state;
+  evaluate_title_formats();
   invalidate();
 }
 
@@ -1597,6 +1602,9 @@ void ControlPanelCore::on_volume_changed(float volume_db) {
 void ControlPanelCore::on_track_changed() {
   // Update mood state for new track
   update_mood_state();
+  
+  // Re-evaluate title formats for new track
+  evaluate_title_formats();
 
   // Request artwork update from UI wrapper
   if (m_artwork_request_cb) {
@@ -2480,6 +2488,47 @@ void ControlPanelCore::draw_stop_icon(Gdiplus::Graphics &g, const RECT &rect,
   path.SetFillMode(Gdiplus::FillModeWinding);
   g.FillPath(&brush, &path);
   g.SetTransform(&oldMatrix);
+}
+
+void ControlPanelCore::update_title_formats() {
+  auto compiler = titleformat_compiler::get();
+  pfc::string8 line1_fmt = get_nowbar_line1_format();
+  pfc::string8 line2_fmt = get_nowbar_line2_format();
+
+  m_titleformat_line1.release();
+  m_titleformat_line2.release();
+
+  // Compile format strings (compile_safe_ex returns false on error but populates with fallback)
+  compiler->compile_safe_ex(m_titleformat_line1, line1_fmt.c_str());
+  compiler->compile_safe_ex(m_titleformat_line2, line2_fmt.c_str());
+
+  // Re-evaluate with current track
+  evaluate_title_formats();
+}
+
+void ControlPanelCore::evaluate_title_formats() {
+  if (!m_state.current_track.is_valid()) {
+    // Fallback to raw title/artist when no track handle available
+    m_formatted_line1 = m_state.track_title;
+    m_formatted_line2 = m_state.track_artist;
+    return;
+  }
+
+  // Evaluate Line 1 format
+  if (m_titleformat_line1.is_valid()) {
+    m_state.current_track->format_title(nullptr, m_formatted_line1,
+                                        m_titleformat_line1, nullptr);
+  } else {
+    m_formatted_line1 = m_state.track_title;
+  }
+
+  // Evaluate Line 2 format
+  if (m_titleformat_line2.is_valid()) {
+    m_state.current_track->format_title(nullptr, m_formatted_line2,
+                                        m_titleformat_line2, nullptr);
+  } else {
+    m_formatted_line2 = m_state.track_artist;
+  }
 }
 
 } // namespace nowbar
