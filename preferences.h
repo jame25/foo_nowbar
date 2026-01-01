@@ -22,6 +22,10 @@ bool get_nowbar_cbutton_enabled(int button_index);  // 0-5, returns enabled stat
 int get_nowbar_cbutton_action(int button_index);    // 0-5, returns action 0-3
 pfc::string8 get_nowbar_cbutton_path(int button_index);  // 0-5, returns path string
 
+// Display format configuration functions
+pfc::string8 get_nowbar_line1_format();
+pfc::string8 get_nowbar_line2_format();
+
 // Execute a foobar2000 main menu command by path
 bool execute_fb2k_action_by_path(const char* path);
 
