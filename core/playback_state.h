@@ -22,6 +22,9 @@ struct PlaybackState {
     pfc::string8 track_title;
     pfc::string8 track_artist;
     pfc::string8 track_album;
+    
+    // Track handle for titleformat evaluation
+    metadb_handle_ptr current_track;
 };
 
 // Callback interface for playback state changes
