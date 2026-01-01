@@ -9,7 +9,7 @@ A foobar2000 component that provides a "Now Playing" control panel for both Defa
 ### Core Features
 - **Dual UI Support**: Works seamlessly with both Default UI (DUI) and Columns UI (CUI)
 - **Album Artwork Display**: Shows album art with configurable margin/edge-to-edge display
-- **Track Information**: Displays track title and artist name with customizable fonts
+- **Track Information**: Displays track info with customizable Title Formatting (default: title and artist)
 - **DPI Aware**: Properly scales on high-DPI displays with adaptive sizing
 
 ### Playback Controls
@@ -65,6 +65,16 @@ A foobar2000 component that provides a "Now Playing" control panel for both Defa
 Access preferences via: File → Preferences → Display → Now Bar
 
 ### General Tab
+
+#### Display Format
+Customize the two lines of track information using foobar2000's [Title Formatting](https://wiki.hydrogenaud.io/index.php?title=Foobar2000:Title_Formatting_Reference) syntax:
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| Line 1 | `%title%` | First line of track info (e.g., `%title% · %artist%`) |
+| Line 2 | `%artist%` | Second line of track info (e.g., `%codec% \| %bitrate% kbps`) |
+
+#### Appearance Settings
 | Setting | Options | Description |
 |---------|---------|-------------|
 | Theme Mode | Auto / Dark / Light / Custom | Controls panel color scheme |
