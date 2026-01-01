@@ -226,6 +226,16 @@ private:
     
     // Color query callback (for DUI custom colors)
     ColorQueryCallback m_color_query_cb;
+    
+    // Title formatting
+    titleformat_object::ptr m_titleformat_line1;
+    titleformat_object::ptr m_titleformat_line2;
+    pfc::string8 m_formatted_line1;
+    pfc::string8 m_formatted_line2;
+    
+    // Methods for title formatting
+    void update_title_formats();
+    void evaluate_title_formats();
 };
 
 } // namespace nowbar
