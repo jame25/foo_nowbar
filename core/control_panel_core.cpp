@@ -169,15 +169,17 @@ SIZE ControlPanelCore::get_min_size() const {
   // At 96 DPI: 0.55 * 96 = 53 pixels
   LONG min_height = static_cast<LONG>(0.55 * dpi);
   
-  // Minimum width: 700 pixels (matches DUI)
-  // Calculate minimum width based on layout requirements (at 96 DPI):
-  // - Artwork min: 32px + margins (~16px) = 48px
-  // - Core controls: 5 buttons (~192px including spacing)
-  // - Volume bar: ~100px
-  // - Optional icons (heart, custom, miniplayer): ~114px total when all visible
-  // - Margins and spacing: ~26px
-  // - Extra breathing room: ~220px
-  // Total comfortable minimum: ~1265px (26.5% total increase for custom buttons)
+  // Fixed minimum width that accommodates all elements at any height
+  // - Artwork: ~80px at minimum
+  // - Track info: ~200px
+  // - Heart button: ~40px
+  // - Core controls (shuffle, prev, play, next, repeat, super): ~300px
+  // - Seekbar/timer overlap area: ~120px
+  // - Custom buttons: ~150px
+  // - Volume bar: ~200px  
+  // - MiniPlayer button: ~50px
+  // - Margins and spacing: ~125px
+  // Total: ~1265px is sufficient for all elements including Super button
   LONG min_width = 1265;
   
   return {min_width, min_height};
@@ -416,6 +418,11 @@ void ControlPanelCore::update_layout(const RECT &rect) {
 
   m_rect_repeat = {controls_x, btn_y, controls_x + button_size,
                    btn_y + button_size};
+  controls_x += button_size + spacing;
+  
+  // Super button - positioned after Repeat (cosmetic only)
+  m_rect_super = {controls_x, btn_y, controls_x + button_size,
+                  btn_y + button_size};
 
   // Heart button - positioned to the left of shuffle (if visible)
   if (get_nowbar_mood_icon_visible()) {
@@ -441,7 +448,7 @@ void ControlPanelCore::update_layout(const RECT &rect) {
   m_rect_custom = {};  // Legacy - clear it
   
   // Calculate available space for custom buttons
-  int min_cbutton_left = m_rect_repeat.right + spacing;
+  int min_cbutton_left = m_rect_super.right + spacing;
   int cbutton_right_edge = vol_x - spacing;
   int available_width = cbutton_right_edge - min_cbutton_left;
   
@@ -551,13 +558,14 @@ void ControlPanelCore::update_layout(const RECT &rect) {
       y_center - info_height / 2; // Centered on panel, not offset with controls
   m_rect_track_info = {info_x, info_y, info_right, info_y + info_height};
 
-  // Seekbar (directly below control icons, aligned with shuffle to repeat)
+  // Seekbar (directly below control icons, extended to span from heart to super)
   int seek_y = m_rect_play.bottom + seek_gap;
   
-  // Position seekbar to align exactly with shuffle (left) and repeat (right) buttons
-  // The seekbar position is fixed - no constraints since minimum width ensures enough space
-  int seekbar_left = m_rect_shuffle.left;
-  int seekbar_right = m_rect_repeat.right;
+  // Position seekbar to extend beyond heart icon (left) and super button (right)
+  // Left edge: use heart button left if visible, otherwise shuffle left
+  int seekbar_left = get_nowbar_mood_icon_visible() ? m_rect_heart.left : m_rect_shuffle.left;
+  // Right edge: use super button right
+  int seekbar_right = m_rect_super.right;
   
   m_rect_seekbar = {seekbar_left,
                     seek_y,
@@ -811,6 +819,21 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
       m_rect_repeat.left + repeat_inset, m_rect_repeat.top + repeat_inset,
       m_rect_repeat.right - repeat_inset, m_rect_repeat.bottom - repeat_inset};
   draw_repeat_icon(g, repeatIconRect, repeatColor, repeat_one);
+
+  // Super button (cosmetic - no functionality)
+  bool super_hovered = (m_hover_region == HitRegion::SuperButton);
+  int supw = m_rect_super.right - m_rect_super.left;
+  int suph = m_rect_super.bottom - m_rect_super.top;
+  if (super_hovered && show_hover) {
+    Gdiplus::SolidBrush hoverBrush(m_button_hover_color);
+    g.FillEllipse(&hoverBrush, m_rect_super.left, m_rect_super.top, supw, suph);
+  }
+  // Make icon 15% smaller - create a centered, smaller rect
+  int super_inset = supw * 15 / 100; // 15% inset
+  RECT superIconRect = {
+      m_rect_super.left + super_inset, m_rect_super.top + super_inset,
+      m_rect_super.right - super_inset, m_rect_super.bottom - super_inset};
+  draw_super_icon(g, superIconRect, m_text_secondary_color);
 
   // Custom buttons #1-6 (only render if enabled)
   auto draw_cbutton = [&](int index, const RECT& rect, HitRegion region) {
@@ -1113,6 +1136,8 @@ HitRegion ControlPanelCore::hit_test(int x, int y) const {
     return HitRegion::ShuffleButton;
   if (pt_in_rect(m_rect_repeat, x, y))
     return HitRegion::RepeatButton;
+  if (pt_in_rect(m_rect_super, x, y))
+    return HitRegion::SuperButton;
   if (pt_in_rect(m_rect_seekbar, x, y))
     return HitRegion::SeekBar;
   // Custom buttons #1-6
@@ -2528,6 +2553,36 @@ void ControlPanelCore::evaluate_title_formats() {
                                         m_titleformat_line2, nullptr);
   } else {
     m_formatted_line2 = m_state.track_artist;
+  }
+}
+
+// Draw Super button icon - 3x3 grid of dots (from sbutton_24dp.svg)
+void ControlPanelCore::draw_super_icon(Gdiplus::Graphics &g, const RECT &rect,
+                                       const Gdiplus::Color &color) {
+  float w = static_cast<float>(rect.right - rect.left);
+  float h = static_cast<float>(rect.bottom - rect.top);
+  float x = static_cast<float>(rect.left);
+  float y = static_cast<float>(rect.top);
+
+  // The SVG shows a 3x3 grid of circles in a 960x960 viewBox
+  // Circle radius is approximately 56.5 (from the path d="T240-320q33...")
+  // Grid positions: 240, 480, 720 in the original viewBox
+  // Normalized: 0.25, 0.5, 0.75
+
+  Gdiplus::SolidBrush brush(color);
+
+  // Scale factors
+  float grid_positions[] = {0.25f, 0.5f, 0.75f};
+  float dot_radius = w * 0.09f;  // Approximate radius relative to icon size
+
+  // Draw 3x3 grid of circles
+  for (int row = 0; row < 3; row++) {
+    for (int col = 0; col < 3; col++) {
+      float cx = x + w * grid_positions[col];
+      float cy = y + h * grid_positions[row];
+      g.FillEllipse(&brush, cx - dot_radius, cy - dot_radius, 
+                    dot_radius * 2.0f, dot_radius * 2.0f);
+    }
   }
 }
 
