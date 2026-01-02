@@ -90,15 +90,9 @@ ui_element_min_max_info ControlPanelDUI::get_min_max_info() {
     // Keeps panel compact and horizontal-focused
     info.m_max_height = static_cast<t_uint32>(1.12 * dpi);
     
-    // Calculate minimum width based on layout requirements (at 96 DPI):
-    // - Artwork min: 32px + margins (~16px) = 48px
-    // - Core controls: 5 buttons (~192px including spacing)
-    // - Volume bar: ~100px
-    // - Optional icons (heart, custom, miniplayer): ~114px total when all visible
-    // - Margins and spacing: ~26px
-    // - Extra breathing room: ~520px
-    // Total comfortable minimum: ~1100px (10% increase for custom buttons)
-    info.m_min_width = 1100;
+    // Fixed minimum width that accommodates all elements at any height
+    // Including Super button after Repeat
+    info.m_min_width = 1265;
     
     return info;
 }
@@ -183,11 +177,12 @@ LRESULT ControlPanelDUI::handle_message(UINT msg, WPARAM wp, LPARAM lp) {
         m_core.reset();
         return 0;
         
-    case WM_SIZE:
+    case WM_SIZE: {
         if (m_core) {
             InvalidateRect(m_hwnd, nullptr, FALSE);
         }
         return 0;
+    }
         
     case WM_PAINT: {
         PAINTSTRUCT ps;
