@@ -40,6 +40,7 @@ enum class HitRegion {
     NextButton,
     ShuffleButton,
     RepeatButton,
+    SuperButton,   // Super button (cosmetic)
     SeekBar,
     CustomButton,  // Legacy - kept for compatibility
     CButton1,      // Custom button #1
@@ -146,6 +147,7 @@ private:
     void draw_alternate_play_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color);   // Alternate play icon (outline)
     void draw_alternate_pause_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color);  // Alternate pause icon (outline)
     void draw_stop_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color, bool filled = false);  // Stop icon (square)
+    void draw_super_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color);  // Super button icon (3x3 grid of dots)
     
     // Playback control actions
     void do_play_pause();
@@ -179,6 +181,7 @@ private:
     RECT m_rect_next = {};
     RECT m_rect_shuffle = {};
     RECT m_rect_repeat = {};
+    RECT m_rect_super = {};   // Super button
     RECT m_rect_seekbar = {};
     RECT m_rect_custom = {};   // Legacy - kept for compatibility
     RECT m_rect_cbutton1 = {}; // Custom button #1
