@@ -214,6 +214,13 @@ private:
     bool m_autoplaylist_menu_open = false;
     std::chrono::steady_clock::time_point m_autoplaylist_menu_close_time;
     
+    // Custom button fade animation
+    float m_cbutton_opacity = 1.0f;  // Current opacity (0.0 = hidden, 1.0 = visible)
+    float m_cbutton_target_opacity = 1.0f;  // Target opacity for animation
+    std::chrono::steady_clock::time_point m_cbutton_fade_start_time;
+    bool m_cbutton_fade_active = false;  // Animation in progress
+    static constexpr float CBUTTON_FADE_DURATION_MS = 300.0f;  // Fade duration in milliseconds
+    
     // Artwork
     std::unique_ptr<Gdiplus::Bitmap> m_artwork_bitmap;
     std::unique_ptr<Gdiplus::Bitmap> m_default_artwork;
