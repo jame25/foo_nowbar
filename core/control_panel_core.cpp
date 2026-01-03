@@ -882,15 +882,70 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
   draw_super_icon(g, superIconRect, m_text_secondary_color);
 
   // Custom buttons #1-6 (only render if enabled)
+  // Update fade animation if active
+  if (get_nowbar_cbutton_autohide()) {
+    bool should_hide = m_state.is_playing && !m_state.is_paused;
+    float target = should_hide ? 0.0f : 1.0f;
+    
+    if (target != m_cbutton_target_opacity) {
+      // Start new fade animation
+      m_cbutton_target_opacity = target;
+      m_cbutton_fade_start_time = std::chrono::steady_clock::now();
+      m_cbutton_fade_active = true;
+    }
+    
+    if (m_cbutton_fade_active) {
+      auto now = std::chrono::steady_clock::now();
+      float elapsed_ms = std::chrono::duration<float, std::milli>(now - m_cbutton_fade_start_time).count();
+      float progress = std::min(1.0f, elapsed_ms / CBUTTON_FADE_DURATION_MS);
+      
+      // Ease-out interpolation for smoother animation
+      float ease_progress = 1.0f - (1.0f - progress) * (1.0f - progress);
+      
+      if (m_cbutton_target_opacity > m_cbutton_opacity) {
+        // Fading in
+        m_cbutton_opacity = m_cbutton_opacity + ease_progress * (1.0f - m_cbutton_opacity);
+      } else {
+        // Fading out
+        m_cbutton_opacity = 1.0f - ease_progress;
+      }
+      
+      if (progress >= 1.0f) {
+        m_cbutton_opacity = m_cbutton_target_opacity;
+        m_cbutton_fade_active = false;
+      }
+    }
+  } else {
+    // Auto-hide disabled, always fully visible
+    m_cbutton_opacity = 1.0f;
+    m_cbutton_fade_active = false;
+  }
+  
+  // Skip rendering if fully transparent
+  if (m_cbutton_opacity <= 0.01f) {
+    // Request another paint if animation is still active
+    if (m_cbutton_fade_active) {
+      invalidate();
+    }
+    return;  // Don't draw any custom buttons
+  }
+  
   auto draw_cbutton = [&](int index, const RECT& rect, HitRegion region) {
     if (!get_nowbar_cbutton_enabled(index)) return;
+    if (rect.right <= rect.left || rect.bottom <= rect.top) return;  // Skip empty rects
+    
     bool hovered = (m_hover_region == region);
     int cw = rect.right - rect.left;
     int ch = rect.bottom - rect.top;
-    if (hovered && show_hover) {
+    
+    // Calculate alpha from opacity
+    BYTE alpha = static_cast<BYTE>(m_cbutton_opacity * 255.0f);
+    
+    if (hovered && show_hover && m_cbutton_opacity > 0.5f) {
       // Slightly larger hover circle (5% expansion) to match perceived size of curved icons
       int expand = cw * 5 / 100;
-      Gdiplus::SolidBrush hoverBrush(m_button_hover_color);
+      Gdiplus::Color hoverWithAlpha(alpha, m_button_hover_color.GetR(), m_button_hover_color.GetG(), m_button_hover_color.GetB());
+      Gdiplus::SolidBrush hoverBrush(hoverWithAlpha);
       g.FillEllipse(&hoverBrush, rect.left - expand, rect.top - expand, cw + expand * 2, ch + expand * 2);
     }
     int inset = cw * 15 / 100;
@@ -898,15 +953,29 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
     
     // Check if custom icon is available for this button
     if (m_cbutton_icons[index] && m_cbutton_icons[index]->GetLastStatus() == Gdiplus::Ok) {
-      // Draw custom icon (scaled to fit iconRect)
+      // Draw custom icon with opacity
       int icon_w = iconRect.right - iconRect.left;
       int icon_h = iconRect.bottom - iconRect.top;
-      g.DrawImage(m_cbutton_icons[index].get(), 
-                  iconRect.left, iconRect.top,
-                  icon_w, icon_h);
+      
+      // Create color matrix for alpha blending
+      Gdiplus::ColorMatrix cm = {
+        1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 1.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 0.0f, m_cbutton_opacity, 0.0f,
+        0.0f, 0.0f, 0.0f, 0.0f, 1.0f
+      };
+      Gdiplus::ImageAttributes ia;
+      ia.SetColorMatrix(&cm);
+      
+      Gdiplus::Rect destRect(iconRect.left, iconRect.top, icon_w, icon_h);
+      g.DrawImage(m_cbutton_icons[index].get(), destRect,
+                  0, 0, m_cbutton_icons[index]->GetWidth(), m_cbutton_icons[index]->GetHeight(),
+                  Gdiplus::UnitPixel, &ia);
     } else {
-      // Fallback to default numbered square icon
-      draw_numbered_square_icon(g, iconRect, m_text_secondary_color, index + 1);  // 1-based number
+      // Fallback to default numbered square icon with opacity
+      Gdiplus::Color iconColor(alpha, m_text_secondary_color.GetR(), m_text_secondary_color.GetG(), m_text_secondary_color.GetB());
+      draw_numbered_square_icon(g, iconRect, iconColor, index + 1);  // 1-based number
     }
   };
   
@@ -916,6 +985,11 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
   draw_cbutton(3, m_rect_cbutton4, HitRegion::CButton4);
   draw_cbutton(4, m_rect_cbutton5, HitRegion::CButton5);
   draw_cbutton(5, m_rect_cbutton6, HitRegion::CButton6);
+  
+  // Continue animation loop if fade is in progress
+  if (m_cbutton_fade_active) {
+    invalidate();
+  }
 }
 
 void ControlPanelCore::draw_button(Gdiplus::Graphics &g, const RECT &rect,
@@ -1198,19 +1272,21 @@ HitRegion ControlPanelCore::hit_test(int x, int y) const {
     return HitRegion::SuperButton;
   if (pt_in_rect(m_rect_seekbar, x, y))
     return HitRegion::SeekBar;
-  // Custom buttons #1-6
-  if (get_nowbar_cbutton_enabled(0) && pt_in_rect(m_rect_cbutton1, x, y))
-    return HitRegion::CButton1;
-  if (get_nowbar_cbutton_enabled(1) && pt_in_rect(m_rect_cbutton2, x, y))
-    return HitRegion::CButton2;
-  if (get_nowbar_cbutton_enabled(2) && pt_in_rect(m_rect_cbutton3, x, y))
-    return HitRegion::CButton3;
-  if (get_nowbar_cbutton_enabled(3) && pt_in_rect(m_rect_cbutton4, x, y))
-    return HitRegion::CButton4;
-  if (get_nowbar_cbutton_enabled(4) && pt_in_rect(m_rect_cbutton5, x, y))
-    return HitRegion::CButton5;
-  if (get_nowbar_cbutton_enabled(5) && pt_in_rect(m_rect_cbutton6, x, y))
-    return HitRegion::CButton6;
+  // Custom buttons #1-6 (hidden during active playback if auto-hide enabled or fading)
+  if (m_cbutton_opacity > 0.5f) {
+    if (get_nowbar_cbutton_enabled(0) && pt_in_rect(m_rect_cbutton1, x, y))
+      return HitRegion::CButton1;
+    if (get_nowbar_cbutton_enabled(1) && pt_in_rect(m_rect_cbutton2, x, y))
+      return HitRegion::CButton2;
+    if (get_nowbar_cbutton_enabled(2) && pt_in_rect(m_rect_cbutton3, x, y))
+      return HitRegion::CButton3;
+    if (get_nowbar_cbutton_enabled(3) && pt_in_rect(m_rect_cbutton4, x, y))
+      return HitRegion::CButton4;
+    if (get_nowbar_cbutton_enabled(4) && pt_in_rect(m_rect_cbutton5, x, y))
+      return HitRegion::CButton5;
+    if (get_nowbar_cbutton_enabled(5) && pt_in_rect(m_rect_cbutton6, x, y))
+      return HitRegion::CButton6;
+  }
   // Volume area - check both icon (positioned left of rect) and slider
   int icon_gap = static_cast<int>(6 * m_dpi_scale * m_size_scale);
   int icon_width =
@@ -1903,7 +1979,17 @@ void ControlPanelCore::update_mood_state() {
 }
 
 void ControlPanelCore::on_playback_state_changed(const PlaybackState &state) {
+  bool was_playing = m_state.is_playing && !m_state.is_paused;
   m_state = state;
+  bool is_playing_now = m_state.is_playing && !m_state.is_paused;
+  
+  // Trigger fade animation if playback state changed
+  if (get_nowbar_cbutton_autohide() && was_playing != is_playing_now) {
+    m_cbutton_target_opacity = is_playing_now ? 0.0f : 1.0f;
+    m_cbutton_fade_start_time = std::chrono::steady_clock::now();
+    m_cbutton_fade_active = true;
+  }
+  
   evaluate_title_formats();
   invalidate();
 }
