@@ -161,6 +161,8 @@ private:
     void do_stop();
     void update_mood_state();
     void show_picture_viewer();
+    void show_autoplaylist_menu();
+    void create_autoplaylist(const char* name, const char* query, const char* sort = "");
     
     // Member variables
     HWND m_hwnd = nullptr;
@@ -208,6 +210,10 @@ private:
     bool m_play_hover_timer_active = false;
     bool m_show_stop_icon = false;
     
+    // Autoplaylist menu state for toggle behavior
+    bool m_autoplaylist_menu_open = false;
+    std::chrono::steady_clock::time_point m_autoplaylist_menu_close_time;
+    
     // Artwork
     std::unique_ptr<Gdiplus::Bitmap> m_artwork_bitmap;
     std::unique_ptr<Gdiplus::Bitmap> m_default_artwork;
@@ -239,6 +245,14 @@ private:
     // Methods for title formatting
     void update_title_formats();
     void evaluate_title_formats();
+    
+    // Custom button icons (PNG/ICO custom icons)
+    std::unique_ptr<Gdiplus::Bitmap> m_cbutton_icons[6];  // Cached custom icons
+    pfc::string8 m_cbutton_icon_paths[6];  // Cached paths to detect changes
+    
+    // Methods for custom icon loading
+    void load_custom_icon(int button_index);
+    void reload_all_custom_icons();
 };
 
 } // namespace nowbar
