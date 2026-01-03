@@ -210,6 +210,9 @@ private:
     bool m_play_hover_timer_active = false;
     bool m_show_stop_icon = false;
     
+    // Hover enlarge animation for core controls
+    static constexpr float HOVER_SCALE_FACTOR = 1.15f;  // 15% larger when hovered
+    
     // Autoplaylist menu state for toggle behavior
     bool m_autoplaylist_menu_open = false;
     std::chrono::steady_clock::time_point m_autoplaylist_menu_close_time;
