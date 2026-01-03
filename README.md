@@ -33,12 +33,13 @@ A foobar2000 component that provides a "Now Playing" control panel for both Defa
 - **MiniPlayer Launch**: Quick access button to launch the MiniPlayer
   - Requires [foo_traycontrols](https://github.com/jame25/foo_traycontrols)
   - Blue when active, can be hidden via preferences
+- **Super Button**: Quick access to autoplaylists via popup menu
+  - Preset autoplaylist queries: Never played, Recently played, Unrated, Rated 3-5/4/5, Loved tracks, Recently added, Same artist/title as playing
 - **Up to 6 Custom Buttons**: Fully configurable action buttons
-  - Open URL
-  - Run executable
-  - Execute foobar2000 main menu commands
-  - Arranged in two rows (3 buttons each)
-  - Responsive hiding when panel is resized
+  - Open URL, Run executable, or Execute foobar2000 main menu commands
+  - Custom PNG/ICO icon support per button
+  - Adaptive layout: 2-row (buttons 1-3, 4-6) at larger heights, single row at smaller heights
+  - Auto-hide during playback (optional, with smooth 300ms fade animation)
 
 ### Theming & Appearance
 - **Theme Modes**:
@@ -49,8 +50,10 @@ A foobar2000 component that provides a "Now Playing" control panel for both Defa
 - **Cover Margin**: Enable/disable margin around album artwork
 - **Seek/Volume Bar Style**: Pill-shaped or rectangular
 - **Hover Circles**: Optional hover effect on buttons
-- **Alternate Icons**: Alternative play/pause icon style (outline vs filled)
+- **Hover Enlarge Effect**: Playback controls enlarge 15% on hover
+- **Alternate Icons**: Alternative play/pause/stop icon style (outline vs filled)
 - **Custom Fonts**: Select custom fonts for track title and artist
+- **Extended Seekbar**: Progress bar spans from Heart button (or Shuffle if Heart hidden) to Super button
 
 ## Installation
 
@@ -84,13 +87,18 @@ Customize the two lines of track information using foobar2000's [Title Formattin
 | MiniPlayer Icon | Show / Hidden | Toggle MiniPlayer button visibility |
 | Hover Circles | Yes / No | Show circular hover effect on buttons |
 | Alternate Icons | Enabled / Disabled | Use outline-style play/pause/stop icons |
+| Auto-hide C-buttons | Yes / No | Custom buttons fade out during active playback |
 
 ### Custom Button Tab
 Configure up to 6 custom buttons with the following actions:
 - **None**: Button disabled
-- **Open URL**: Opens a URL in the default browser
-- **Run Executable**: Launches an external program
+- **Open URL**: Opens a URL in the default browser (supports Title Formatting)
+- **Run Executable**: Launches an external program (supports Title Formatting)
 - **Foobar2k Action**: Executes a foobar2000 main menu command (e.g., `Playback/Stop`)
+
+Each button also supports:
+- **Custom Icon (PNG/ICO)**: Optional custom icon image path
+- Automatic fallback to numbered square icons when custom icon is missing
 
 ### Fonts Tab
 - Select custom fonts for track title and artist display
@@ -152,6 +160,7 @@ foo_nowbar/
 | **Previous/Next** | Navigate tracks |
 | **Shuffle** | Toggle shuffle mode (blue when active) |
 | **Repeat** | Cycle repeat modes: Off → All → Track (blue when active) |
+| **Super Button** | Open autoplaylist menu with preset queries |
 | **Seek Bar** | Click or drag to seek within track |
 | **Volume Icon** | Click to mute/unmute |
 | **Volume Bar** | Click or drag to adjust volume |
@@ -187,5 +196,4 @@ struct LayoutMetrics {
 
 ## License
 
-This component is provided as-is for personal use with foobar2000.
 This component is provided as-is for personal use with foobar2000.
