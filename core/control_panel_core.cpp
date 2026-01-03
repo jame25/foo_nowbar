@@ -227,6 +227,9 @@ void ControlPanelCore::on_settings_changed() {
   
   // Update and recompile title format strings
   update_title_formats();
+  
+  // Reload custom button icons
+  reload_all_custom_icons();
 }
 
 void ControlPanelCore::set_color_query_callback(ColorQueryCallback callback) {
@@ -452,80 +455,123 @@ void ControlPanelCore::update_layout(const RECT &rect) {
   int cbutton_right_edge = vol_x - spacing;
   int available_width = cbutton_right_edge - min_cbutton_left;
   
-  // Row spacing and second row position
-  int row_spacing = 2;  // Small gap between rows
-  int row2_y = btn_y + button_size + row_spacing;  // Position below row 1
+  // Determine layout mode based on panel height (size scale)
+  // At smaller heights (scale < 0.75): use single row for all 6 buttons
+  // At larger heights (scale >= 0.75): use 2-row layout (3 buttons per row)
+  bool use_single_row = (m_size_scale < 0.75f);
   
-  // Check which buttons in each row are enabled
-  bool row1_enabled[3] = {get_nowbar_cbutton_enabled(0), get_nowbar_cbutton_enabled(1), get_nowbar_cbutton_enabled(2)};
-  bool row2_enabled[3] = {get_nowbar_cbutton_enabled(3), get_nowbar_cbutton_enabled(4), get_nowbar_cbutton_enabled(5)};
+  // Count total enabled buttons
+  bool btn_enabled[6] = {
+    get_nowbar_cbutton_enabled(0), get_nowbar_cbutton_enabled(1), get_nowbar_cbutton_enabled(2),
+    get_nowbar_cbutton_enabled(3), get_nowbar_cbutton_enabled(4), get_nowbar_cbutton_enabled(5)
+  };
+  int total_enabled = 0;
+  for (int i = 0; i < 6; i++) {
+    if (btn_enabled[i]) total_enabled++;
+  }
   
-  int row1_count = (row1_enabled[0] ? 1 : 0) + (row1_enabled[1] ? 1 : 0) + (row1_enabled[2] ? 1 : 0);
-  int row2_count = (row2_enabled[0] ? 1 : 0) + (row2_enabled[1] ? 1 : 0) + (row2_enabled[2] ? 1 : 0);
-  
-  // Calculate how many buttons fit in each row (both use same button_size)
-  int row1_to_show = 0;
-  for (int count = row1_count; count > 0; count--) {
-    int width_needed = count * button_size + (count - 1) * spacing;
-    if (width_needed <= available_width) {
-      row1_to_show = count;
-      break;
+  if (use_single_row) {
+    // Single row layout - all 6 buttons in one row at btn_y
+    int buttons_to_show = 0;
+    for (int count = total_enabled; count > 0; count--) {
+      int width_needed = count * button_size + (count - 1) * spacing;
+      if (width_needed <= available_width) {
+        buttons_to_show = count;
+        break;
+      }
     }
-  }
-  
-  int row2_to_show = 0;
-  for (int count = row2_count; count > 0; count--) {
-    int width_needed = count * button_size + (count - 1) * spacing;
-    if (width_needed <= available_width) {
-      row2_to_show = count;
-      break;
+    
+    // Calculate total width and starting position (right-aligned)
+    int total_width = buttons_to_show > 0 ? buttons_to_show * button_size + (buttons_to_show - 1) * spacing : 0;
+    int start_x = cbutton_right_edge - total_width;
+    int x = start_x;
+    int shown = 0;
+    
+    // Position buttons in order (1-6) from left to right
+    RECT* rects[6] = {&m_rect_cbutton1, &m_rect_cbutton2, &m_rect_cbutton3, 
+                      &m_rect_cbutton4, &m_rect_cbutton5, &m_rect_cbutton6};
+    for (int i = 0; i < 6 && shown < buttons_to_show; i++) {
+      if (btn_enabled[i]) {
+        *rects[i] = {x, btn_y, x + button_size, btn_y + button_size};
+        x += button_size + spacing;
+        shown++;
+      }
     }
-  }
-  
-  // Calculate the maximum width needed (to align both rows to same left edge)
-  int row1_width = row1_to_show > 0 ? row1_to_show * button_size + (row1_to_show - 1) * spacing : 0;
-  int row2_width = row2_to_show > 0 ? row2_to_show * button_size + (row2_to_show - 1) * spacing : 0;
-  int max_width = std::max(row1_width, row2_width);
-  int start_x = cbutton_right_edge - max_width;
-  
-  // Position Row 1 buttons (1, 2, 3) - starting from aligned left edge
-  int row1_x = start_x;
-  int shown1 = 0;
-  
-  if (row1_enabled[0] && shown1 < row1_to_show) {
-    m_rect_cbutton1 = {row1_x, btn_y, row1_x + button_size, btn_y + button_size};
-    row1_x += button_size + spacing;
-    shown1++;
-  }
-  if (row1_enabled[1] && shown1 < row1_to_show) {
-    m_rect_cbutton2 = {row1_x, btn_y, row1_x + button_size, btn_y + button_size};
-    row1_x += button_size + spacing;
-    shown1++;
-  }
-  if (row1_enabled[2] && shown1 < row1_to_show) {
-    m_rect_cbutton3 = {row1_x, btn_y, row1_x + button_size, btn_y + button_size};
-    row1_x += button_size + spacing;
-    shown1++;
-  }
-  
-  // Position Row 2 buttons (4, 5, 6) - same left edge as row 1
-  int row2_x = start_x;
-  int shown2 = 0;
-  
-  if (row2_enabled[0] && shown2 < row2_to_show) {
-    m_rect_cbutton4 = {row2_x, row2_y, row2_x + button_size, row2_y + button_size};
-    row2_x += button_size + spacing;
-    shown2++;
-  }
-  if (row2_enabled[1] && shown2 < row2_to_show) {
-    m_rect_cbutton5 = {row2_x, row2_y, row2_x + button_size, row2_y + button_size};
-    row2_x += button_size + spacing;
-    shown2++;
-  }
-  if (row2_enabled[2] && shown2 < row2_to_show) {
-    m_rect_cbutton6 = {row2_x, row2_y, row2_x + button_size, row2_y + button_size};
-    row2_x += button_size + spacing;
-    shown2++;
+  } else {
+    // 2-row layout - buttons 1-3 in row 1, buttons 4-6 in row 2
+    int row_spacing = 2;  // Small gap between rows
+    int row2_y = btn_y + button_size + row_spacing;
+    
+    bool row1_enabled[3] = {btn_enabled[0], btn_enabled[1], btn_enabled[2]};
+    bool row2_enabled[3] = {btn_enabled[3], btn_enabled[4], btn_enabled[5]};
+    
+    int row1_count = (row1_enabled[0] ? 1 : 0) + (row1_enabled[1] ? 1 : 0) + (row1_enabled[2] ? 1 : 0);
+    int row2_count = (row2_enabled[0] ? 1 : 0) + (row2_enabled[1] ? 1 : 0) + (row2_enabled[2] ? 1 : 0);
+    
+    // Calculate how many buttons fit in each row
+    int row1_to_show = 0;
+    for (int count = row1_count; count > 0; count--) {
+      int width_needed = count * button_size + (count - 1) * spacing;
+      if (width_needed <= available_width) {
+        row1_to_show = count;
+        break;
+      }
+    }
+    
+    int row2_to_show = 0;
+    for (int count = row2_count; count > 0; count--) {
+      int width_needed = count * button_size + (count - 1) * spacing;
+      if (width_needed <= available_width) {
+        row2_to_show = count;
+        break;
+      }
+    }
+    
+    // Calculate the maximum width needed (to align both rows to same left edge)
+    int row1_width = row1_to_show > 0 ? row1_to_show * button_size + (row1_to_show - 1) * spacing : 0;
+    int row2_width = row2_to_show > 0 ? row2_to_show * button_size + (row2_to_show - 1) * spacing : 0;
+    int max_width = std::max(row1_width, row2_width);
+    int start_x = cbutton_right_edge - max_width;
+    
+    // Position Row 1 buttons (1, 2, 3)
+    int row1_x = start_x;
+    int shown1 = 0;
+    
+    if (row1_enabled[0] && shown1 < row1_to_show) {
+      m_rect_cbutton1 = {row1_x, btn_y, row1_x + button_size, btn_y + button_size};
+      row1_x += button_size + spacing;
+      shown1++;
+    }
+    if (row1_enabled[1] && shown1 < row1_to_show) {
+      m_rect_cbutton2 = {row1_x, btn_y, row1_x + button_size, btn_y + button_size};
+      row1_x += button_size + spacing;
+      shown1++;
+    }
+    if (row1_enabled[2] && shown1 < row1_to_show) {
+      m_rect_cbutton3 = {row1_x, btn_y, row1_x + button_size, btn_y + button_size};
+      row1_x += button_size + spacing;
+      shown1++;
+    }
+    
+    // Position Row 2 buttons (4, 5, 6)
+    int row2_x = start_x;
+    int shown2 = 0;
+    
+    if (row2_enabled[0] && shown2 < row2_to_show) {
+      m_rect_cbutton4 = {row2_x, row2_y, row2_x + button_size, row2_y + button_size};
+      row2_x += button_size + spacing;
+      shown2++;
+    }
+    if (row2_enabled[1] && shown2 < row2_to_show) {
+      m_rect_cbutton5 = {row2_x, row2_y, row2_x + button_size, row2_y + button_size};
+      row2_x += button_size + spacing;
+      shown2++;
+    }
+    if (row2_enabled[2] && shown2 < row2_to_show) {
+      m_rect_cbutton6 = {row2_x, row2_y, row2_x + button_size, row2_y + button_size};
+      row2_x += button_size + spacing;
+      shown2++;
+    }
   }
 
   // Set MiniPlayer button position now that btn_y is calculated
@@ -849,7 +895,19 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
     }
     int inset = cw * 15 / 100;
     RECT iconRect = {rect.left + inset, rect.top + inset, rect.right - inset, rect.bottom - inset};
-    draw_numbered_square_icon(g, iconRect, m_text_secondary_color, index + 1);  // 1-based number
+    
+    // Check if custom icon is available for this button
+    if (m_cbutton_icons[index] && m_cbutton_icons[index]->GetLastStatus() == Gdiplus::Ok) {
+      // Draw custom icon (scaled to fit iconRect)
+      int icon_w = iconRect.right - iconRect.left;
+      int icon_h = iconRect.bottom - iconRect.top;
+      g.DrawImage(m_cbutton_icons[index].get(), 
+                  iconRect.left, iconRect.top,
+                  icon_w, icon_h);
+    } else {
+      // Fallback to default numbered square icon
+      draw_numbered_square_icon(g, iconRect, m_text_secondary_color, index + 1);  // 1-based number
+    }
   };
   
   draw_cbutton(0, m_rect_cbutton1, HitRegion::CButton1);
@@ -1303,6 +1361,9 @@ void ControlPanelCore::on_lbutton_up(int x, int y) {
     case HitRegion::RepeatButton:
       do_repeat_cycle();
       break;
+    case HitRegion::SuperButton:
+      show_autoplaylist_menu();
+      break;
     case HitRegion::MiniPlayerButton: {
       // Toggle MiniPlayer active state for icon color
       m_miniplayer_active = !m_miniplayer_active;
@@ -1337,21 +1398,25 @@ void ControlPanelCore::on_lbutton_up(int x, int y) {
       }
       break;
     }
-    case HitRegion::CustomButton:  // Legacy - fallthrough
+    case HitRegion::CustomButton:  // Legacy - maps to button 0
     case HitRegion::CButton1:
     case HitRegion::CButton2:
     case HitRegion::CButton3:
     case HitRegion::CButton4:
     case HitRegion::CButton5:
     case HitRegion::CButton6: {
-      // Determine which button was clicked
+      // Determine which button was clicked - use m_pressed_region which equals release_region here
       int button_index = -1;
-      if (release_region == HitRegion::CButton1 || release_region == HitRegion::CustomButton) button_index = 0;
-      else if (release_region == HitRegion::CButton2) button_index = 1;
-      else if (release_region == HitRegion::CButton3) button_index = 2;
-      else if (release_region == HitRegion::CButton4) button_index = 3;
-      else if (release_region == HitRegion::CButton5) button_index = 4;
-      else if (release_region == HitRegion::CButton6) button_index = 5;
+      switch (m_pressed_region) {
+        case HitRegion::CustomButton:
+        case HitRegion::CButton1: button_index = 0; break;
+        case HitRegion::CButton2: button_index = 1; break;
+        case HitRegion::CButton3: button_index = 2; break;
+        case HitRegion::CButton4: button_index = 3; break;
+        case HitRegion::CButton5: button_index = 4; break;
+        case HitRegion::CButton6: button_index = 5; break;
+        default: break;
+      }
       
       if (button_index < 0) break;
       
@@ -1360,22 +1425,30 @@ void ControlPanelCore::on_lbutton_up(int x, int y) {
       
       if (action == 1 && !path.is_empty()) {
         // Open URL with title formatting support
-        auto pc = playback_control::get();
-        metadb_handle_ptr track;
         pfc::string8 evaluated_url;
         
-        if (pc->get_now_playing(track) && track.is_valid()) {
-          service_ptr_t<titleformat_object> script;
-          titleformat_compiler::get()->compile_safe(script, path);
-          if (script.is_valid()) {
-            track->format_title(nullptr, evaluated_url, script, nullptr);
+        // Check if path contains title formatting (has % character)
+        if (path.find_first('%') != pfc::infinite_size) {
+          // Has title formatting - evaluate it
+          auto pc = playback_control::get();
+          metadb_handle_ptr track;
+          
+          if (pc->get_now_playing(track) && track.is_valid()) {
+            service_ptr_t<titleformat_object> script;
+            titleformat_compiler::get()->compile_safe(script, path);
+            if (script.is_valid()) {
+              track->format_title(nullptr, evaluated_url, script, nullptr);
+            }
+          } else {
+            service_ptr_t<titleformat_object> script;
+            titleformat_compiler::get()->compile_safe(script, path);
+            if (script.is_valid()) {
+              pc->playback_format_title(nullptr, evaluated_url, script, nullptr, playback_control::display_level_all);
+            }
           }
         } else {
-          service_ptr_t<titleformat_object> script;
-          titleformat_compiler::get()->compile_safe(script, path);
-          if (script.is_valid()) {
-            pc->playback_format_title(nullptr, evaluated_url, script, nullptr, playback_control::display_level_all);
-          }
+          // No title formatting - use path directly as URL
+          evaluated_url = path;
         }
         
         if (!evaluated_url.is_empty()) {
@@ -1384,38 +1457,51 @@ void ControlPanelCore::on_lbutton_up(int x, int y) {
         }
       } else if (action == 2 && !path.is_empty()) {
         // Run Executable with file path argument
-        auto pc = playback_control::get();
-        metadb_handle_ptr track;
         pfc::string8 exe_path;
         
-        service_ptr_t<titleformat_object> script;
-        titleformat_compiler::get()->compile_safe(script, path);
-        
-        if (pc->get_now_playing(track) && track.is_valid()) {
-          if (script.is_valid()) {
-            track->format_title(nullptr, exe_path, script, nullptr);
-          } else {
-            exe_path = path;
-          }
+        // Check if path contains title formatting (has % character)
+        if (path.find_first('%') != pfc::infinite_size) {
+          // Has title formatting - evaluate it
+          auto pc = playback_control::get();
+          metadb_handle_ptr track;
+          service_ptr_t<titleformat_object> script;
+          titleformat_compiler::get()->compile_safe(script, path);
           
-          const char* file_path = track->get_path();
-          if (!exe_path.is_empty() && file_path) {
-            pfc::string8 physical_path;
-            filesystem::g_get_display_path(file_path, physical_path);
-            pfc::string8 quoted_path;
-            quoted_path << "\"" << physical_path << "\"";
-            
-            pfc::stringcvt::string_wide_from_utf8 wideExe(exe_path);
-            pfc::stringcvt::string_wide_from_utf8 wideArgs(quoted_path);
-            ShellExecuteW(nullptr, L"open", wideExe, wideArgs, nullptr, SW_SHOWNORMAL);
+          if (pc->get_now_playing(track) && track.is_valid()) {
+            if (script.is_valid()) {
+              track->format_title(nullptr, exe_path, script, nullptr);
+            }
+          } else {
+            if (script.is_valid()) {
+              pc->playback_format_title(nullptr, exe_path, script, nullptr, playback_control::display_level_all);
+            }
           }
         } else {
-          if (script.is_valid()) {
-            pc->playback_format_title(nullptr, exe_path, script, nullptr, playback_control::display_level_all);
+          // No title formatting - use path directly as executable
+          exe_path = path;
+        }
+        
+        if (!exe_path.is_empty()) {
+          // Try to get current track path as argument if playing
+          auto pc = playback_control::get();
+          metadb_handle_ptr track;
+          
+          if (pc->get_now_playing(track) && track.is_valid()) {
+            const char* file_path = track->get_path();
+            if (file_path) {
+              pfc::string8 physical_path;
+              filesystem::g_get_display_path(file_path, physical_path);
+              pfc::string8 quoted_path;
+              quoted_path << "\"" << physical_path << "\"";
+              
+              pfc::stringcvt::string_wide_from_utf8 wideExe(exe_path);
+              pfc::stringcvt::string_wide_from_utf8 wideArgs(quoted_path);
+              ShellExecuteW(nullptr, L"open", wideExe, wideArgs, nullptr, SW_SHOWNORMAL);
+            } else {
+              pfc::stringcvt::string_wide_from_utf8 wideExe(exe_path);
+              ShellExecuteW(nullptr, L"open", wideExe, nullptr, nullptr, SW_SHOWNORMAL);
+            }
           } else {
-            exe_path = path;
-          }
-          if (!exe_path.is_empty()) {
             pfc::stringcvt::string_wide_from_utf8 wideExe(exe_path);
             ShellExecuteW(nullptr, L"open", wideExe, nullptr, nullptr, SW_SHOWNORMAL);
           }
@@ -1470,6 +1556,218 @@ void ControlPanelCore::show_picture_viewer() {
     metadb_handle_list items;
     items.add_item(track);
     viewer->load_and_show(m_hwnd, items, album_art_ids::cover_front);
+  }
+}
+
+void ControlPanelCore::create_autoplaylist(const char* name, const char* query, const char* sort) {
+  try {
+    auto pm = playlist_manager::get();
+    
+    // First, check if a playlist with this name already exists
+    t_size playlist_count = pm->get_playlist_count();
+    for (t_size i = 0; i < playlist_count; i++) {
+      pfc::string8 playlist_name;
+      pm->playlist_get_name(i, playlist_name);
+      if (pfc::stricmp_ascii(playlist_name.c_str(), name) == 0) {
+        // Playlist with this name exists - just switch to it
+        pm->set_active_playlist(i);
+        return;
+      }
+    }
+    
+    // Playlist doesn't exist - create new one
+    t_size new_playlist = pm->create_playlist(name, strlen(name), pfc_infinite);
+    
+    // Set it as autoplaylist with the query
+    autoplaylist_manager::get()->add_client_simple(query, sort, new_playlist, 0);
+    
+    // Switch to the new playlist
+    pm->set_active_playlist(new_playlist);
+  } catch (const std::exception& e) {
+    pfc::string8 msg;
+    msg << "foo_nowbar: Failed to create autoplaylist - " << e.what();
+    console::print(msg.c_str());
+  }
+}
+
+void ControlPanelCore::show_autoplaylist_menu() {
+  // Toggle behavior: if menu was just closed (within 200ms), don't reopen
+  auto now = std::chrono::steady_clock::now();
+  auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+      now - m_autoplaylist_menu_close_time).count();
+  if (elapsed < 200) {
+    return;  // Don't reopen the menu if it was just closed
+  }
+  
+  // Menu item IDs
+  enum MenuID {
+    ID_NEVER_PLAYED = 1,
+    ID_PLAYED_LAST_5_DAYS,
+    ID_UNRATED,
+    ID_RATED_3_TO_5,
+    ID_RATED_4,
+    ID_RATED_5,
+    ID_LOVED_TRACKS,
+    ID_RECENTLY_ADDED,
+    ID_SAME_ARTIST,
+    ID_SAME_TITLE
+  };
+  
+  // Create popup menu
+  HMENU menu = CreatePopupMenu();
+  if (!menu) return;
+  
+  // Get current track info for dynamic menu items
+  auto pc = playback_control::get();
+  metadb_handle_ptr track;
+  bool has_track = pc->get_now_playing(track) && track.is_valid();
+  
+  pfc::string8 current_artist;
+  pfc::string8 current_title;
+  
+  if (has_track) {
+    metadb_info_container::ptr info_container = track->get_info_ref();
+    if (info_container.is_valid()) {
+      const file_info& info = info_container->info();
+      const char* artist = info.meta_get("artist", 0);
+      const char* title = info.meta_get("title", 0);
+      if (artist) current_artist = artist;
+      if (title) current_title = title;
+    }
+  }
+  
+  // Add menu items - Group 1: Play count related
+  AppendMenuW(menu, MF_STRING, ID_NEVER_PLAYED, L"Tracks never played");
+  AppendMenuW(menu, MF_STRING, ID_PLAYED_LAST_5_DAYS, L"Tracks played in last 5 days");
+  
+  // Separator
+  AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+  
+  // Group 2: Rating related
+  AppendMenuW(menu, MF_STRING, ID_UNRATED, L"Tracks unrated");
+  AppendMenuW(menu, MF_STRING, ID_RATED_3_TO_5, L"Tracks rated 3 to 5");
+  AppendMenuW(menu, MF_STRING, ID_RATED_4, L"Tracks rated 4");
+  AppendMenuW(menu, MF_STRING, ID_RATED_5, L"Tracks rated 5");
+  
+  // Separator
+  AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+  
+  // Group 3: Special
+  AppendMenuW(menu, MF_STRING, ID_LOVED_TRACKS, L"Loved Tracks");
+  AppendMenuW(menu, MF_STRING, ID_RECENTLY_ADDED, L"Recently added");
+  
+  // Separator
+  AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+  
+  // Group 4: Dynamic (based on currently playing)
+  UINT artist_flags = MF_STRING | (current_artist.is_empty() ? MF_GRAYED : 0);
+  UINT title_flags = MF_STRING | (current_title.is_empty() ? MF_GRAYED : 0);
+  AppendMenuW(menu, artist_flags, ID_SAME_ARTIST, L"Same artist as currently playing");
+  AppendMenuW(menu, title_flags, ID_SAME_TITLE, L"Same title as currently playing");
+  
+  // Get Super button position for menu placement
+  POINT pt;
+  pt.x = m_rect_super.left;
+  pt.y = m_rect_super.bottom;
+  ClientToScreen(m_hwnd, &pt);
+  
+  // Show menu and get selection
+  int cmd = TrackPopupMenuEx(menu, TPM_LEFTALIGN | TPM_TOPALIGN | TPM_RETURNCMD | TPM_NONOTIFY,
+                             pt.x, pt.y, m_hwnd, nullptr);
+  
+  DestroyMenu(menu);
+  
+  // Record when menu closed for toggle behavior
+  m_autoplaylist_menu_close_time = std::chrono::steady_clock::now();
+  
+  // Handle selection
+  switch (cmd) {
+    case ID_NEVER_PLAYED:
+      create_autoplaylist("Tracks never played", 
+                          "%play_count% MISSING",
+                          "%album artist% | %album% | %discnumber% | %tracknumber%");
+      break;
+    case ID_PLAYED_LAST_5_DAYS:
+      create_autoplaylist("Tracks played in last 5 days",
+                          "%last_played% DURING LAST 5 DAYS",
+                          "%last_played%");
+      break;
+    case ID_UNRATED:
+      create_autoplaylist("Tracks unrated",
+                          "%rating% MISSING",
+                          "%album artist% | %album% | %discnumber% | %tracknumber%");
+      break;
+    case ID_RATED_3_TO_5:
+      create_autoplaylist("Tracks rated 3 to 5",
+                          "%rating% GREATER 2",
+                          "%rating% | %album artist% | %album%");
+      break;
+    case ID_RATED_4:
+      create_autoplaylist("Tracks rated 4",
+                          "%rating% EQUAL 4",
+                          "%album artist% | %album% | %discnumber% | %tracknumber%");
+      break;
+    case ID_RATED_5:
+      create_autoplaylist("Tracks rated 5",
+                          "%rating% EQUAL 5",
+                          "%album artist% | %album% | %discnumber% | %tracknumber%");
+      break;
+    case ID_LOVED_TRACKS:
+      create_autoplaylist("Loved Tracks",
+                          "%mood% PRESENT",
+                          "%mood% | %album artist% | %album%");
+      break;
+    case ID_RECENTLY_ADDED:
+      create_autoplaylist("Recently added",
+                          "%added% DURING LAST 2 WEEKS",
+                          "%added%");
+      break;
+    case ID_SAME_ARTIST:
+      if (!current_artist.is_empty()) {
+        // Escape double quotes in artist name
+        pfc::string8 escaped_artist;
+        for (t_size i = 0; i < current_artist.get_length(); i++) {
+          char c = current_artist[i];
+          if (c == '"') {
+            escaped_artist.add_char('\\');
+          }
+          escaped_artist.add_char(c);
+        }
+        
+        pfc::string8 query;
+        query << "artist IS \"" << escaped_artist << "\"";
+        
+        pfc::string8 name;
+        name << "Artist: " << current_artist;
+        
+        create_autoplaylist(name.c_str(), query.c_str(),
+                            "%album% | %discnumber% | %tracknumber%");
+      }
+      break;
+    case ID_SAME_TITLE:
+      if (!current_title.is_empty()) {
+        // Escape double quotes in title
+        pfc::string8 escaped_title;
+        for (t_size i = 0; i < current_title.get_length(); i++) {
+          char c = current_title[i];
+          if (c == '"') {
+            escaped_title.add_char('\\');
+          }
+          escaped_title.add_char(c);
+        }
+        
+        pfc::string8 query;
+        query << "title IS \"" << escaped_title << "\"";
+        
+        pfc::string8 name;
+        name << "Title: " << current_title;
+        
+        create_autoplaylist(name.c_str(), query.c_str(),
+                            "%album artist% | %album%");
+      }
+      break;
+    default:
+      break;
   }
 }
 
@@ -2586,4 +2884,58 @@ void ControlPanelCore::draw_super_icon(Gdiplus::Graphics &g, const RECT &rect,
   }
 }
 
+// Load a custom icon for a specific button index
+void ControlPanelCore::load_custom_icon(int button_index) {
+  if (button_index < 0 || button_index >= 6) return;
+  
+  pfc::string8 path = get_nowbar_cbutton_icon_path(button_index);
+  
+  // Check if path changed
+  if (path == m_cbutton_icon_paths[button_index]) {
+    return;  // No change, keep existing icon
+  }
+  
+  // Update cached path
+  m_cbutton_icon_paths[button_index] = path;
+  
+  // Clear existing icon
+  m_cbutton_icons[button_index].reset();
+  
+  // If empty path, use default icon (null bitmap)
+  if (path.is_empty()) {
+    return;
+  }
+  
+  // Convert UTF-8 path to wide string for GDI+
+  int wide_len = MultiByteToWideChar(CP_UTF8, 0, path.c_str(), -1, nullptr, 0);
+  if (wide_len <= 0) return;
+  
+  std::vector<wchar_t> wide_path(wide_len);
+  MultiByteToWideChar(CP_UTF8, 0, path.c_str(), -1, wide_path.data(), wide_len);
+  
+  // Load bitmap from file
+  Gdiplus::Bitmap* bitmap = Gdiplus::Bitmap::FromFile(wide_path.data());
+  if (bitmap && bitmap->GetLastStatus() == Gdiplus::Ok) {
+    m_cbutton_icons[button_index].reset(bitmap);
+  } else {
+    // Load failed, cleanup and use default
+    delete bitmap;
+    m_cbutton_icons[button_index].reset();
+  }
+}
+
+// Reload all custom icons (called on settings change)
+void ControlPanelCore::reload_all_custom_icons() {
+  for (int i = 0; i < 6; i++) {
+    // Force reload by clearing both cached path AND the icon itself
+    m_cbutton_icon_paths[i].reset();
+    m_cbutton_icons[i].reset();  // Also clear the cached icon
+    load_custom_icon(i);
+  }
+  invalidate();
+}
+
 } // namespace nowbar
+
+
+
