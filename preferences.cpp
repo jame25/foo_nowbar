@@ -196,6 +196,32 @@ static cfg_string cfg_cbutton6_path(
     ""  // Default: empty
 );
 
+// Custom Button Icon paths (PNG/ICO files for custom icons)
+static cfg_string cfg_cbutton1_icon(
+    GUID{0xABCDEF30, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xC0}},
+    ""  // Default: empty (use default numbered icon)
+);
+static cfg_string cfg_cbutton2_icon(
+    GUID{0xABCDEF31, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xC1}},
+    ""  // Default: empty
+);
+static cfg_string cfg_cbutton3_icon(
+    GUID{0xABCDEF32, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xC2}},
+    ""  // Default: empty
+);
+static cfg_string cfg_cbutton4_icon(
+    GUID{0xABCDEF33, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xC3}},
+    ""  // Default: empty
+);
+static cfg_string cfg_cbutton5_icon(
+    GUID{0xABCDEF34, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xC4}},
+    ""  // Default: empty
+);
+static cfg_string cfg_cbutton6_icon(
+    GUID{0xABCDEF35, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xC5}},
+    ""  // Default: empty
+);
+
 // Configuration accessors
 int get_nowbar_theme_mode() {
     int mode = cfg_nowbar_theme_mode;
@@ -289,6 +315,18 @@ pfc::string8 get_nowbar_cbutton_path(int button_index) {
         case 3: return cfg_cbutton4_path.get();
         case 4: return cfg_cbutton5_path.get();
         case 5: return cfg_cbutton6_path.get();
+        default: return pfc::string8();
+    }
+}
+
+pfc::string8 get_nowbar_cbutton_icon_path(int button_index) {
+    switch (button_index) {
+        case 0: return cfg_cbutton1_icon.get();
+        case 1: return cfg_cbutton2_icon.get();
+        case 2: return cfg_cbutton3_icon.get();
+        case 3: return cfg_cbutton4_icon.get();
+        case 4: return cfg_cbutton5_icon.get();
+        case 5: return cfg_cbutton6_icon.get();
         default: return pfc::string8();
     }
 }
@@ -616,6 +654,34 @@ void nowbar_preferences::switch_tab(int tab) {
     ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON6_PATH), show_cbutton);
     ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON6_BROWSE), show_cbutton);
     
+    // Custom Button icon controls
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON_ICON_LABEL), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON1_ICON), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON1_ICON_BROWSE), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON1_ICON_CLEAR), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON2_ICON), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON2_ICON_BROWSE), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON2_ICON_CLEAR), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON3_ICON), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON3_ICON_BROWSE), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON3_ICON_CLEAR), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON4_ICON), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON4_ICON_BROWSE), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON4_ICON_CLEAR), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON5_ICON), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON5_ICON_BROWSE), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON5_ICON_CLEAR), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON6_ICON), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON6_ICON_BROWSE), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON6_ICON_CLEAR), show_cbutton);
+    // Icon row number labels
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON1_ICON_LABEL), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON2_ICON_LABEL), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON3_ICON_LABEL), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON4_ICON_LABEL), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON5_ICON_LABEL), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON6_ICON_LABEL), show_cbutton);
+    
     // Fonts tab controls
     BOOL show_fonts = (tab == 2) ? SW_SHOW : SW_HIDE;
     ShowWindow(GetDlgItem(m_hwnd, IDC_FONTS_GROUP), show_fonts);
@@ -764,6 +830,14 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         uSetDlgItemText(hwnd, IDC_CBUTTON5_PATH, cfg_cbutton5_path);
         uSetDlgItemText(hwnd, IDC_CBUTTON6_PATH, cfg_cbutton6_path);
         
+        // Initialize icon path edit boxes
+        uSetDlgItemText(hwnd, IDC_CBUTTON1_ICON, cfg_cbutton1_icon);
+        uSetDlgItemText(hwnd, IDC_CBUTTON2_ICON, cfg_cbutton2_icon);
+        uSetDlgItemText(hwnd, IDC_CBUTTON3_ICON, cfg_cbutton3_icon);
+        uSetDlgItemText(hwnd, IDC_CBUTTON4_ICON, cfg_cbutton4_icon);
+        uSetDlgItemText(hwnd, IDC_CBUTTON5_ICON, cfg_cbutton5_icon);
+        uSetDlgItemText(hwnd, IDC_CBUTTON6_ICON, cfg_cbutton6_icon);
+        
         // Update path control states based on action selection
         update_all_cbutton_path_states(hwnd);
         
@@ -862,6 +936,72 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
                     SetDlgItemTextW(hwnd, path_id, filename);
                     p_this->on_changed();
                 }
+            }
+            break;
+
+        // Icon path edit changes
+        case IDC_CBUTTON1_ICON:
+        case IDC_CBUTTON2_ICON:
+        case IDC_CBUTTON3_ICON:
+        case IDC_CBUTTON4_ICON:
+        case IDC_CBUTTON5_ICON:
+        case IDC_CBUTTON6_ICON:
+            if (HIWORD(wp) == EN_CHANGE) {
+                p_this->on_changed();
+            }
+            break;
+
+        // Icon browse buttons
+        case IDC_CBUTTON1_ICON_BROWSE:
+        case IDC_CBUTTON2_ICON_BROWSE:
+        case IDC_CBUTTON3_ICON_BROWSE:
+        case IDC_CBUTTON4_ICON_BROWSE:
+        case IDC_CBUTTON5_ICON_BROWSE:
+        case IDC_CBUTTON6_ICON_BROWSE:
+            if (HIWORD(wp) == BN_CLICKED) {
+                int icon_id = 0;
+                switch (LOWORD(wp)) {
+                    case IDC_CBUTTON1_ICON_BROWSE: icon_id = IDC_CBUTTON1_ICON; break;
+                    case IDC_CBUTTON2_ICON_BROWSE: icon_id = IDC_CBUTTON2_ICON; break;
+                    case IDC_CBUTTON3_ICON_BROWSE: icon_id = IDC_CBUTTON3_ICON; break;
+                    case IDC_CBUTTON4_ICON_BROWSE: icon_id = IDC_CBUTTON4_ICON; break;
+                    case IDC_CBUTTON5_ICON_BROWSE: icon_id = IDC_CBUTTON5_ICON; break;
+                    case IDC_CBUTTON6_ICON_BROWSE: icon_id = IDC_CBUTTON6_ICON; break;
+                }
+                wchar_t filename[MAX_PATH] = L"";
+                OPENFILENAMEW ofn = {};
+                ofn.lStructSize = sizeof(ofn);
+                ofn.hwndOwner = hwnd;
+                ofn.lpstrFilter = L"Image Files (*.png;*.ico)\0*.png;*.ico\0PNG Files (*.png)\0*.png\0ICO Files (*.ico)\0*.ico\0All Files (*.*)\0*.*\0";
+                ofn.lpstrFile = filename;
+                ofn.nMaxFile = MAX_PATH;
+                ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
+                if (GetOpenFileNameW(&ofn)) {
+                    SetDlgItemTextW(hwnd, icon_id, filename);
+                    p_this->on_changed();
+                }
+            }
+            break;
+
+        // Icon clear buttons
+        case IDC_CBUTTON1_ICON_CLEAR:
+        case IDC_CBUTTON2_ICON_CLEAR:
+        case IDC_CBUTTON3_ICON_CLEAR:
+        case IDC_CBUTTON4_ICON_CLEAR:
+        case IDC_CBUTTON5_ICON_CLEAR:
+        case IDC_CBUTTON6_ICON_CLEAR:
+            if (HIWORD(wp) == BN_CLICKED) {
+                int icon_id = 0;
+                switch (LOWORD(wp)) {
+                    case IDC_CBUTTON1_ICON_CLEAR: icon_id = IDC_CBUTTON1_ICON; break;
+                    case IDC_CBUTTON2_ICON_CLEAR: icon_id = IDC_CBUTTON2_ICON; break;
+                    case IDC_CBUTTON3_ICON_CLEAR: icon_id = IDC_CBUTTON3_ICON; break;
+                    case IDC_CBUTTON4_ICON_CLEAR: icon_id = IDC_CBUTTON4_ICON; break;
+                    case IDC_CBUTTON5_ICON_CLEAR: icon_id = IDC_CBUTTON5_ICON; break;
+                    case IDC_CBUTTON6_ICON_CLEAR: icon_id = IDC_CBUTTON6_ICON; break;
+                }
+                SetDlgItemTextW(hwnd, icon_id, L"");
+                p_this->on_changed();
             }
             break;
 
@@ -964,6 +1104,21 @@ void nowbar_preferences::apply_settings() {
         cfg_cbutton5_path = path;
         uGetDlgItemText(m_hwnd, IDC_CBUTTON6_PATH, path);
         cfg_cbutton6_path = path;
+        
+        // Save Custom Button icon paths
+        pfc::string8 icon_path;
+        uGetDlgItemText(m_hwnd, IDC_CBUTTON1_ICON, icon_path);
+        cfg_cbutton1_icon = icon_path;
+        uGetDlgItemText(m_hwnd, IDC_CBUTTON2_ICON, icon_path);
+        cfg_cbutton2_icon = icon_path;
+        uGetDlgItemText(m_hwnd, IDC_CBUTTON3_ICON, icon_path);
+        cfg_cbutton3_icon = icon_path;
+        uGetDlgItemText(m_hwnd, IDC_CBUTTON4_ICON, icon_path);
+        cfg_cbutton4_icon = icon_path;
+        uGetDlgItemText(m_hwnd, IDC_CBUTTON5_ICON, icon_path);
+        cfg_cbutton5_icon = icon_path;
+        uGetDlgItemText(m_hwnd, IDC_CBUTTON6_ICON, icon_path);
+        cfg_cbutton6_icon = icon_path;
 
         // Notify all registered instances to update
         nowbar::ControlPanelCore::notify_all_settings_changed();
