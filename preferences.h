@@ -11,6 +11,7 @@ bool get_nowbar_mood_icon_visible();  // true=Show, false=Hidden
 bool get_nowbar_miniplayer_icon_visible();  // true=Show, false=Hidden
 bool get_nowbar_hover_circles_enabled();  // true=Yes (show), false=No (hide)
 bool get_nowbar_alternate_icons_enabled();  // true=Enabled, false=Disabled
+bool get_nowbar_cbutton_autohide();  // true=Yes (auto-hide), false=No
 bool get_nowbar_custom_button_visible();  // true=Show, false=Hidden
 int get_nowbar_custom_button_action();  // 0=None, 1=Open URL, 2=Run Executable, 3=Foobar2k Action
 pfc::string8 get_nowbar_custom_button_url();
