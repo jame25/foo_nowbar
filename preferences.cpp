@@ -50,6 +50,11 @@ static cfg_int cfg_nowbar_alternate_icons(
     0  // Default: Disabled
 );
 
+static cfg_int cfg_nowbar_cbutton_autohide(
+    GUID{0xABCDEF1E, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xAE}},
+    1  // Default: Yes (auto-hide during playback)
+);
+
 static cfg_int cfg_nowbar_custom_button_action(
     GUID{0xABCDEF0A, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0x92}},
     0  // Default: None (0=None, 1=Open URL, 2=Run Executable)
@@ -255,6 +260,10 @@ bool get_nowbar_hover_circles_enabled() {
 
 bool get_nowbar_alternate_icons_enabled() {
     return cfg_nowbar_alternate_icons != 0;
+}
+
+bool get_nowbar_cbutton_autohide() {
+    return cfg_nowbar_cbutton_autohide != 0;
 }
 
 bool get_nowbar_custom_button_visible() {
@@ -623,6 +632,8 @@ void nowbar_preferences::switch_tab(int tab) {
     ShowWindow(GetDlgItem(m_hwnd, IDC_HOVER_CIRCLES_COMBO), show_general);
     ShowWindow(GetDlgItem(m_hwnd, IDC_ALTERNATE_ICONS_LABEL), show_general);
     ShowWindow(GetDlgItem(m_hwnd, IDC_ALTERNATE_ICONS_COMBO), show_general);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_AUTOHIDE_CBUTTONS_LABEL), show_general);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_AUTOHIDE_CBUTTONS_COMBO), show_general);
 
     // Custom Button tab controls
     BOOL show_cbutton = (tab == 1) ? SW_SHOW : SW_HIDE;
@@ -794,6 +805,12 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         SendMessage(hAlternateIconsCombo, CB_ADDSTRING, 0, (LPARAM)L"Disabled");
         SendMessage(hAlternateIconsCombo, CB_SETCURSEL, cfg_nowbar_alternate_icons ? 0 : 1, 0);
 
+        // Initialize auto-hide C-buttons combobox
+        HWND hAutohideCbuttonsCombo = GetDlgItem(hwnd, IDC_AUTOHIDE_CBUTTONS_COMBO);
+        SendMessage(hAutohideCbuttonsCombo, CB_ADDSTRING, 0, (LPARAM)L"Yes");
+        SendMessage(hAutohideCbuttonsCombo, CB_ADDSTRING, 0, (LPARAM)L"No");
+        SendMessage(hAutohideCbuttonsCombo, CB_SETCURSEL, cfg_nowbar_cbutton_autohide ? 0 : 1, 0);
+
         // Initialize font displays
         p_this->update_font_displays();
 
@@ -861,6 +878,7 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         case IDC_MINIPLAYER_ICON_COMBO:
         case IDC_HOVER_CIRCLES_COMBO:
         case IDC_ALTERNATE_ICONS_COMBO:
+        case IDC_AUTOHIDE_CBUTTONS_COMBO:
             if (HIWORD(wp) == CBN_SELCHANGE) {
                 p_this->on_changed();
             }
@@ -1076,6 +1094,10 @@ void nowbar_preferences::apply_settings() {
         int alternateIconsSel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_ALTERNATE_ICONS_COMBO), CB_GETCURSEL, 0, 0);
         cfg_nowbar_alternate_icons = (alternateIconsSel == 0) ? 1 : 0;
 
+        // Save auto-hide C-buttons setting (0=Yes, 1=No in combobox -> config 1=Yes, 0=No)
+        int autohideCbuttonsSel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_AUTOHIDE_CBUTTONS_COMBO), CB_GETCURSEL, 0, 0);
+        cfg_nowbar_cbutton_autohide = (autohideCbuttonsSel == 0) ? 1 : 0;
+
         // Save Custom Button tab settings
         cfg_cbutton1_enabled = IsDlgButtonChecked(m_hwnd, IDC_CBUTTON1_ENABLE) == BST_CHECKED ? 1 : 0;
         cfg_cbutton2_enabled = IsDlgButtonChecked(m_hwnd, IDC_CBUTTON2_ENABLE) == BST_CHECKED ? 1 : 0;
@@ -1138,6 +1160,7 @@ void nowbar_preferences::reset_settings() {
             cfg_nowbar_miniplayer_icon_visible = 1;  // Show (visible)
             cfg_nowbar_hover_circles = 1;  // Yes (show hover circles)
             cfg_nowbar_alternate_icons = 0;  // Disabled
+            cfg_nowbar_cbutton_autohide = 1;  // Yes (default)
 
             // Update General tab UI
             uSetDlgItemText(m_hwnd, IDC_LINE1_FORMAT_EDIT, "%title%");
@@ -1149,6 +1172,7 @@ void nowbar_preferences::reset_settings() {
             SendMessage(GetDlgItem(m_hwnd, IDC_MINIPLAYER_ICON_COMBO), CB_SETCURSEL, 0, 0);
             SendMessage(GetDlgItem(m_hwnd, IDC_HOVER_CIRCLES_COMBO), CB_SETCURSEL, 0, 0);
             SendMessage(GetDlgItem(m_hwnd, IDC_ALTERNATE_ICONS_COMBO), CB_SETCURSEL, 1, 0);  // Default: Disabled
+            SendMessage(GetDlgItem(m_hwnd, IDC_AUTOHIDE_CBUTTONS_COMBO), CB_SETCURSEL, 0, 0);  // Default: Yes
         } else if (m_current_tab == 1) {
             // Reset Custom Button tab settings
             cfg_cbutton1_enabled = 0;
