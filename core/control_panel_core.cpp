@@ -655,8 +655,9 @@ void ControlPanelCore::paint(HDC hdc, const RECT &rect) {
     }
     Gdiplus::Color mpColor =
         m_miniplayer_active ? m_accent_color : m_text_secondary_color;
-    // Make icon 15% smaller - create a centered, smaller rect (matching repeat icon)
-    int mp_inset = mp_w * 15 / 100; // 15% inset
+    // Enlarge icon when hovered
+    float mp_scale = mp_hovered ? HOVER_SCALE_FACTOR : 1.0f;
+    int mp_inset = static_cast<int>(mp_w * (1.0f - 0.70f * mp_scale) / 2.0f);
     RECT miniplayerIconRect = {
         m_rect_miniplayer.left + mp_inset, m_rect_miniplayer.top + mp_inset,
         m_rect_miniplayer.right - mp_inset, m_rect_miniplayer.bottom - mp_inset};
@@ -779,11 +780,12 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
   }
   Gdiplus::Color shuffleColor =
       shuffle_active ? m_accent_color : m_text_secondary_color;
-  // Make icon 15% smaller - create a centered, smaller rect
-  int icon_inset = sw * 15 / 100; // 15% inset on each side
+  // Calculate icon inset - smaller when hovered (for enlarge effect)
+  float shuffle_scale = shuffle_hovered ? HOVER_SCALE_FACTOR : 1.0f;
+  int shuffle_icon_inset = static_cast<int>(sw * (1.0f - 0.70f * shuffle_scale) / 2.0f);
   RECT shuffleIconRect = {
-      m_rect_shuffle.left + icon_inset, m_rect_shuffle.top + icon_inset,
-      m_rect_shuffle.right - icon_inset, m_rect_shuffle.bottom - icon_inset};
+      m_rect_shuffle.left + shuffle_icon_inset, m_rect_shuffle.top + shuffle_icon_inset,
+      m_rect_shuffle.right - shuffle_icon_inset, m_rect_shuffle.bottom - shuffle_icon_inset};
   draw_shuffle_icon(g, shuffleIconRect, shuffleColor);
 
   // Previous button
@@ -794,12 +796,27 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
     Gdiplus::SolidBrush hoverBrush(m_button_hover_color);
     g.FillEllipse(&hoverBrush, m_rect_prev.left, m_rect_prev.top, pw, ph);
   }
-  draw_prev_icon(g, m_rect_prev, m_text_secondary_color); // Always grayed
+  // Enlarge icon when hovered
+  float prev_scale = prev_hovered ? HOVER_SCALE_FACTOR : 1.0f;
+  int prev_icon_inset = static_cast<int>(pw * (1.0f - 0.85f * prev_scale) / 2.0f);
+  RECT prevIconRect = {
+      m_rect_prev.left + prev_icon_inset, m_rect_prev.top + prev_icon_inset,
+      m_rect_prev.right - prev_icon_inset, m_rect_prev.bottom - prev_icon_inset};
+  draw_prev_icon(g, prevIconRect, m_text_secondary_color);
 
   // Play/Pause button (circular with background)
   bool play_hovered = (m_hover_region == HitRegion::PlayButton);
   int play_w = m_rect_play.right - m_rect_play.left;
   int play_h = m_rect_play.bottom - m_rect_play.top;
+  
+  // Calculate enlarged rect when hovered
+  float play_scale = play_hovered ? HOVER_SCALE_FACTOR : 1.0f;
+  int play_inset = static_cast<int>(play_w * (1.0f - play_scale) / 2.0f);
+  RECT playRect = {
+      m_rect_play.left + play_inset, m_rect_play.top + play_inset,
+      m_rect_play.right - play_inset, m_rect_play.bottom - play_inset};
+  int play_rect_w = playRect.right - playRect.left;
+  int play_rect_h = playRect.bottom - playRect.top;
 
   bool use_alternate_icons = get_nowbar_alternate_icons_enabled();
   
@@ -807,31 +824,31 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
     // Alternate icons: no background circle, just draw hover effect if enabled
     if (play_hovered && show_hover) {
       Gdiplus::SolidBrush hoverBrush(m_button_hover_color);
-      g.FillEllipse(&hoverBrush, m_rect_play.left, m_rect_play.top, play_w, play_h);
+      g.FillEllipse(&hoverBrush, playRect.left, playRect.top, play_rect_w, play_rect_h);
     }
     // Draw stop icon if hover timer triggered, otherwise play/pause
     if (m_show_stop_icon) {
-      draw_stop_icon(g, m_rect_play, m_text_secondary_color, false);  // Outline for alternate icons
+      draw_stop_icon(g, playRect, m_text_secondary_color, false);
     } else if (m_state.is_playing && !m_state.is_paused) {
-      draw_alternate_pause_icon(g, m_rect_play, m_text_secondary_color);
+      draw_alternate_pause_icon(g, playRect, m_text_secondary_color);
     } else {
-      draw_alternate_play_icon(g, m_rect_play, m_text_secondary_color);
+      draw_alternate_play_icon(g, playRect, m_text_secondary_color);
     }
   } else {
     // Default icons: white/light background circle
     Gdiplus::Color bgColor = (play_hovered && show_hover) ? Gdiplus::Color(255, 255, 255, 255)
                                           : Gdiplus::Color(255, 230, 230, 230);
     Gdiplus::SolidBrush bgBrush(bgColor);
-    g.FillEllipse(&bgBrush, m_rect_play.left, m_rect_play.top, play_w, play_h);
+    g.FillEllipse(&bgBrush, playRect.left, playRect.top, play_rect_w, play_rect_h);
 
     // Draw stop icon if hover timer triggered, otherwise play/pause
     Gdiplus::Color playIconColor(255, 0, 0, 0);
     if (m_show_stop_icon) {
-      draw_stop_icon(g, m_rect_play, playIconColor, true);  // Filled for default icons
+      draw_stop_icon(g, playRect, playIconColor, true);
     } else if (m_state.is_playing && !m_state.is_paused) {
-      draw_pause_icon(g, m_rect_play, playIconColor, false);
+      draw_pause_icon(g, playRect, playIconColor, false);
     } else {
-      draw_play_icon(g, m_rect_play, playIconColor, false);
+      draw_play_icon(g, playRect, playIconColor, false);
     }
   }
 
@@ -843,7 +860,13 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
     Gdiplus::SolidBrush hoverBrush(m_button_hover_color);
     g.FillEllipse(&hoverBrush, m_rect_next.left, m_rect_next.top, nw, nh);
   }
-  draw_next_icon(g, m_rect_next, m_text_secondary_color); // Always grayed
+  // Enlarge icon when hovered
+  float next_scale = next_hovered ? HOVER_SCALE_FACTOR : 1.0f;
+  int next_icon_inset = static_cast<int>(nw * (1.0f - 0.85f * next_scale) / 2.0f);
+  RECT nextIconRect = {
+      m_rect_next.left + next_icon_inset, m_rect_next.top + next_icon_inset,
+      m_rect_next.right - next_icon_inset, m_rect_next.bottom - next_icon_inset};
+  draw_next_icon(g, nextIconRect, m_text_secondary_color);
 
   // Repeat button
   bool repeat_active =
@@ -859,11 +882,12 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
   }
   Gdiplus::Color repeatColor =
       repeat_active ? m_accent_color : m_text_secondary_color;
-  // Make icon 15% smaller - create a centered, smaller rect
-  int repeat_inset = rw * 15 / 100; // 15% inset
+  // Enlarge icon when hovered
+  float repeat_scale = repeat_hovered ? HOVER_SCALE_FACTOR : 1.0f;
+  int repeat_icon_inset = static_cast<int>(rw * (1.0f - 0.70f * repeat_scale) / 2.0f);
   RECT repeatIconRect = {
-      m_rect_repeat.left + repeat_inset, m_rect_repeat.top + repeat_inset,
-      m_rect_repeat.right - repeat_inset, m_rect_repeat.bottom - repeat_inset};
+      m_rect_repeat.left + repeat_icon_inset, m_rect_repeat.top + repeat_icon_inset,
+      m_rect_repeat.right - repeat_icon_inset, m_rect_repeat.bottom - repeat_icon_inset};
   draw_repeat_icon(g, repeatIconRect, repeatColor, repeat_one);
 
   // Super button (cosmetic - no functionality)
