@@ -230,6 +230,9 @@ void ControlPanelCore::on_settings_changed() {
   
   // Reload custom button icons
   reload_all_custom_icons();
+  
+  // Update glass effect state from preferences
+  m_glass_effect_enabled = get_nowbar_glass_effect_enabled();
 }
 
 void ControlPanelCore::set_color_query_callback(ColorQueryCallback callback) {
@@ -665,11 +668,43 @@ void ControlPanelCore::paint(HDC hdc, const RECT &rect) {
   }
 }
 
+float ControlPanelCore::get_hover_opacity(HitRegion region) {
+  if (region == HitRegion::None) return 0.0f;
+  
+  auto now = std::chrono::steady_clock::now();
+  float elapsed_ms = std::chrono::duration<float, std::milli>(now - m_hover_change_time).count();
+  float progress = std::min(1.0f, elapsed_ms / HOVER_FADE_DURATION_MS);
+  
+  // Ease-out interpolation
+  float ease = 1.0f - (1.0f - progress) * (1.0f - progress);
+  
+  if (region == m_hover_region) {
+    // Fading in - this region is currently hovered
+    return ease;
+  } else if (region == m_prev_hover_region) {
+    // Fading out - this was the previous hover region
+    return 1.0f - ease;
+  }
+  
+  return 0.0f;  // Not involved in current transition
+}
+
 void ControlPanelCore::draw_background(Gdiplus::Graphics &g, const RECT &rect) {
-  Gdiplus::SolidBrush brush(m_bg_color);
-  Gdiplus::Rect r(rect.left, rect.top, rect.right - rect.left,
-                  rect.bottom - rect.top);
-  g.FillRectangle(&brush, r);
+  if (m_glass_effect_enabled) {
+    // Glass effect: use semi-transparent background
+    // Alpha 200/255 = ~78% opacity - provides readability while showing backdrop
+    Gdiplus::Color glassColor(200, m_bg_color.GetR(), m_bg_color.GetG(), m_bg_color.GetB());
+    Gdiplus::SolidBrush brush(glassColor);
+    Gdiplus::Rect r(rect.left, rect.top, rect.right - rect.left,
+                    rect.bottom - rect.top);
+    g.FillRectangle(&brush, r);
+  } else {
+    // Normal: opaque solid background
+    Gdiplus::SolidBrush brush(m_bg_color);
+    Gdiplus::Rect r(rect.left, rect.top, rect.right - rect.left,
+                    rect.bottom - rect.top);
+    g.FillRectangle(&brush, r);
+  }
 }
 
 void ControlPanelCore::draw_artwork(Gdiplus::Graphics &g) {
@@ -749,13 +784,21 @@ void ControlPanelCore::draw_track_info(Gdiplus::Graphics &g) {
 void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
   bool show_hover = get_nowbar_hover_circles_enabled();
   
+  // Check if hover animation is in progress (for repaint scheduling)
+  auto now = std::chrono::steady_clock::now();
+  float elapsed_ms = std::chrono::duration<float, std::milli>(now - m_hover_change_time).count();
+  bool hover_animating = (elapsed_ms < HOVER_FADE_DURATION_MS);
+  
   // Heart button (mood toggle) - only if visible
   if (get_nowbar_mood_icon_visible()) {
     bool heart_hovered = (m_hover_region == HitRegion::HeartButton);
+    float heart_opacity = get_hover_opacity(HitRegion::HeartButton);
     int hw = m_rect_heart.right - m_rect_heart.left;
     int hh = m_rect_heart.bottom - m_rect_heart.top;
-    if (heart_hovered && show_hover) {
-      Gdiplus::SolidBrush hoverBrush(m_button_hover_color);
+    if (heart_opacity > 0.01f && show_hover) {
+      BYTE alpha = static_cast<BYTE>(heart_opacity * m_button_hover_color.GetA());
+      Gdiplus::Color hoverColor(alpha, m_button_hover_color.GetR(), m_button_hover_color.GetG(), m_button_hover_color.GetB());
+      Gdiplus::SolidBrush hoverBrush(hoverColor);
       g.FillEllipse(&hoverBrush, m_rect_heart.left, m_rect_heart.top, hw, hh);
     }
     // Red when mood is set, gray when empty
@@ -771,11 +814,14 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
   // Shuffle button
   bool shuffle_active = (m_state.playback_order == 4); // Shuffle tracks
   bool shuffle_hovered = (m_hover_region == HitRegion::ShuffleButton);
+  float shuffle_opacity = get_hover_opacity(HitRegion::ShuffleButton);
 
   int sw = m_rect_shuffle.right - m_rect_shuffle.left;
   int sh = m_rect_shuffle.bottom - m_rect_shuffle.top;
-  if (shuffle_hovered && show_hover) {
-    Gdiplus::SolidBrush hoverBrush(m_button_hover_color);
+  if (shuffle_opacity > 0.01f && show_hover) {
+    BYTE alpha = static_cast<BYTE>(shuffle_opacity * m_button_hover_color.GetA());
+    Gdiplus::Color hoverColor(alpha, m_button_hover_color.GetR(), m_button_hover_color.GetG(), m_button_hover_color.GetB());
+    Gdiplus::SolidBrush hoverBrush(hoverColor);
     g.FillEllipse(&hoverBrush, m_rect_shuffle.left, m_rect_shuffle.top, sw, sh);
   }
   Gdiplus::Color shuffleColor =
@@ -790,10 +836,13 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
 
   // Previous button
   bool prev_hovered = (m_hover_region == HitRegion::PrevButton);
+  float prev_opacity = get_hover_opacity(HitRegion::PrevButton);
   int pw = m_rect_prev.right - m_rect_prev.left;
   int ph = m_rect_prev.bottom - m_rect_prev.top;
-  if (prev_hovered && show_hover) {
-    Gdiplus::SolidBrush hoverBrush(m_button_hover_color);
+  if (prev_opacity > 0.01f && show_hover) {
+    BYTE alpha = static_cast<BYTE>(prev_opacity * m_button_hover_color.GetA());
+    Gdiplus::Color hoverColor(alpha, m_button_hover_color.GetR(), m_button_hover_color.GetG(), m_button_hover_color.GetB());
+    Gdiplus::SolidBrush hoverBrush(hoverColor);
     g.FillEllipse(&hoverBrush, m_rect_prev.left, m_rect_prev.top, pw, ph);
   }
   // Enlarge icon when hovered
@@ -822,8 +871,11 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
   
   if (use_alternate_icons) {
     // Alternate icons: no background circle, just draw hover effect if enabled
-    if (play_hovered && show_hover) {
-      Gdiplus::SolidBrush hoverBrush(m_button_hover_color);
+    float play_opacity = get_hover_opacity(HitRegion::PlayButton);
+    if (play_opacity > 0.01f && show_hover) {
+      BYTE alpha = static_cast<BYTE>(play_opacity * m_button_hover_color.GetA());
+      Gdiplus::Color hoverColor(alpha, m_button_hover_color.GetR(), m_button_hover_color.GetG(), m_button_hover_color.GetB());
+      Gdiplus::SolidBrush hoverBrush(hoverColor);
       g.FillEllipse(&hoverBrush, playRect.left, playRect.top, play_rect_w, play_rect_h);
     }
     // Draw stop icon if hover timer triggered, otherwise play/pause
@@ -854,10 +906,13 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
 
   // Next button
   bool next_hovered = (m_hover_region == HitRegion::NextButton);
+  float next_opacity = get_hover_opacity(HitRegion::NextButton);
   int nw = m_rect_next.right - m_rect_next.left;
   int nh = m_rect_next.bottom - m_rect_next.top;
-  if (next_hovered && show_hover) {
-    Gdiplus::SolidBrush hoverBrush(m_button_hover_color);
+  if (next_opacity > 0.01f && show_hover) {
+    BYTE alpha = static_cast<BYTE>(next_opacity * m_button_hover_color.GetA());
+    Gdiplus::Color hoverColor(alpha, m_button_hover_color.GetR(), m_button_hover_color.GetG(), m_button_hover_color.GetB());
+    Gdiplus::SolidBrush hoverBrush(hoverColor);
     g.FillEllipse(&hoverBrush, m_rect_next.left, m_rect_next.top, nw, nh);
   }
   // Enlarge icon when hovered
@@ -873,11 +928,14 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
       (m_state.playback_order == 1 || m_state.playback_order == 2);
   bool repeat_one = (m_state.playback_order == 2);
   bool repeat_hovered = (m_hover_region == HitRegion::RepeatButton);
+  float repeat_opacity = get_hover_opacity(HitRegion::RepeatButton);
 
   int rw = m_rect_repeat.right - m_rect_repeat.left;
   int rh = m_rect_repeat.bottom - m_rect_repeat.top;
-  if (repeat_hovered && show_hover) {
-    Gdiplus::SolidBrush hoverBrush(m_button_hover_color);
+  if (repeat_opacity > 0.01f && show_hover) {
+    BYTE alpha = static_cast<BYTE>(repeat_opacity * m_button_hover_color.GetA());
+    Gdiplus::Color hoverColor(alpha, m_button_hover_color.GetR(), m_button_hover_color.GetG(), m_button_hover_color.GetB());
+    Gdiplus::SolidBrush hoverBrush(hoverColor);
     g.FillEllipse(&hoverBrush, m_rect_repeat.left, m_rect_repeat.top, rw, rh);
   }
   Gdiplus::Color repeatColor =
@@ -892,10 +950,13 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
 
   // Super button (cosmetic - no functionality)
   bool super_hovered = (m_hover_region == HitRegion::SuperButton);
+  float super_opacity = get_hover_opacity(HitRegion::SuperButton);
   int supw = m_rect_super.right - m_rect_super.left;
   int suph = m_rect_super.bottom - m_rect_super.top;
-  if (super_hovered && show_hover) {
-    Gdiplus::SolidBrush hoverBrush(m_button_hover_color);
+  if (super_opacity > 0.01f && show_hover) {
+    BYTE alpha = static_cast<BYTE>(super_opacity * m_button_hover_color.GetA());
+    Gdiplus::Color hoverColor(alpha, m_button_hover_color.GetR(), m_button_hover_color.GetG(), m_button_hover_color.GetB());
+    Gdiplus::SolidBrush hoverBrush(hoverColor);
     g.FillEllipse(&hoverBrush, m_rect_super.left, m_rect_super.top, supw, suph);
   }
   // Make icon 15% smaller - create a centered, smaller rect
@@ -904,6 +965,11 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
       m_rect_super.left + super_inset, m_rect_super.top + super_inset,
       m_rect_super.right - super_inset, m_rect_super.bottom - super_inset};
   draw_super_icon(g, superIconRect, m_text_secondary_color);
+  
+  // Continue animation loop if hover transition is in progress
+  if (hover_animating) {
+    invalidate();
+  }
 
   // Custom buttons #1-6 (only render if enabled)
   // Update fade animation if active
@@ -1092,10 +1158,30 @@ void ControlPanelCore::draw_seekbar(Gdiplus::Graphics &g) {
     g.FillRectangle(&trackBrush, m_rect_seekbar.left, track_y, w, track_h);
   }
 
-  // Progress - light gray
-  double progress = (m_state.track_length > 0)
-                        ? (m_state.playback_time / m_state.track_length)
-                        : 0.0;
+  // Smooth progress interpolation
+  auto now = std::chrono::steady_clock::now();
+  double delta_seconds = std::chrono::duration<double>(now - m_last_frame_time).count();
+  m_last_frame_time = now;
+  
+  // Clamp delta to reasonable range (prevent large jumps after window focus loss)
+  delta_seconds = std::min(delta_seconds, 0.1);
+  
+  // Lerp animated progress toward target
+  double lerp_factor = 1.0 - std::exp(-PROGRESS_LERP_SPEED * delta_seconds);
+  m_animated_progress += (m_target_progress - m_animated_progress) * lerp_factor;
+  
+  // Use animated progress for drawing (unless seeking, then use direct position)
+  double progress;
+  if (m_seeking) {
+    progress = (m_state.track_length > 0)
+                   ? (m_state.playback_time / m_state.track_length)
+                   : 0.0;
+  } else {
+    progress = m_animated_progress;
+  }
+  
+  // Clamp progress
+  progress = std::max(0.0, std::min(1.0, progress));
   int progress_w = static_cast<int>(w * progress);
 
   if (progress_w > 0) {
@@ -1119,6 +1205,11 @@ void ControlPanelCore::draw_seekbar(Gdiplus::Graphics &g) {
                       track_h);
     }
   }
+  
+  // Continue animation if not at target
+  if (std::abs(m_animated_progress - m_target_progress) > 0.0001 && !m_seeking) {
+    invalidate();
+  }
 
   // Seek handle (only on hover)
   if (m_hover_region == HitRegion::SeekBar || m_seeking) {
@@ -1127,6 +1218,54 @@ void ControlPanelCore::draw_seekbar(Gdiplus::Graphics &g) {
     int handle_y = m_rect_seekbar.top + (h - handle_size) / 2;
     Gdiplus::SolidBrush handleBrush(Gdiplus::Color(255, 255, 255, 255));
     g.FillEllipse(&handleBrush, handle_x, handle_y, handle_size, handle_size);
+  }
+  
+  // Tooltip showing preview time at cursor position
+  if ((m_hover_region == HitRegion::SeekBar || m_seeking) && m_state.track_length > 0) {
+    // Format the preview time
+    std::wstring timeStr = format_time(m_seeking ? m_state.playback_time : m_preview_time);
+    
+    // Measure text size
+    Gdiplus::Font tooltipFont(L"Segoe UI", 10.0f * m_dpi_scale, Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
+    Gdiplus::RectF textBounds;
+    g.MeasureString(timeStr.c_str(), -1, &tooltipFont, Gdiplus::PointF(0, 0), &textBounds);
+    
+    // Tooltip dimensions with padding
+    int padding_h = static_cast<int>(6 * m_dpi_scale);
+    int padding_v = static_cast<int>(3 * m_dpi_scale);
+    int tooltip_w = static_cast<int>(textBounds.Width) + padding_h * 2;
+    int tooltip_h = static_cast<int>(textBounds.Height) + padding_v * 2;
+    
+    // Position: centered on cursor X, above seekbar
+    int cursor_x = m_seeking ? (m_rect_seekbar.left + progress_w) : m_seekbar_hover_x;
+    int tooltip_x = cursor_x - tooltip_w / 2;
+    int tooltip_y = m_rect_seekbar.top - tooltip_h - static_cast<int>(6 * m_dpi_scale);  // Gap above seekbar
+    
+    // Clamp to stay within seekbar bounds
+    int seekbar_left = static_cast<int>(m_rect_seekbar.left);
+    int seekbar_right = static_cast<int>(m_rect_seekbar.right);
+    tooltip_x = std::max(seekbar_left, std::min(tooltip_x, seekbar_right - tooltip_w));
+    
+    // Draw tooltip background (semi-transparent, themed)
+    Gdiplus::Color bgColor = m_dark_mode ? Gdiplus::Color(220, 60, 60, 60) : Gdiplus::Color(220, 40, 40, 40);
+    Gdiplus::SolidBrush bgBrush(bgColor);
+    int corner = static_cast<int>(4 * m_dpi_scale);
+    Gdiplus::GraphicsPath tooltipPath;
+    tooltipPath.AddArc(tooltip_x, tooltip_y, corner * 2, corner * 2, 180, 90);
+    tooltipPath.AddArc(tooltip_x + tooltip_w - corner * 2, tooltip_y, corner * 2, corner * 2, 270, 90);
+    tooltipPath.AddArc(tooltip_x + tooltip_w - corner * 2, tooltip_y + tooltip_h - corner * 2, corner * 2, corner * 2, 0, 90);
+    tooltipPath.AddArc(tooltip_x, tooltip_y + tooltip_h - corner * 2, corner * 2, corner * 2, 90, 90);
+    tooltipPath.CloseFigure();
+    g.FillPath(&bgBrush, &tooltipPath);
+    
+    // Draw tooltip text
+    Gdiplus::SolidBrush textBrush(Gdiplus::Color(255, 255, 255, 255));
+    Gdiplus::StringFormat sf;
+    sf.SetAlignment(Gdiplus::StringAlignmentCenter);
+    sf.SetLineAlignment(Gdiplus::StringAlignmentCenter);
+    Gdiplus::RectF textRect(static_cast<float>(tooltip_x), static_cast<float>(tooltip_y),
+                            static_cast<float>(tooltip_w), static_cast<float>(tooltip_h));
+    g.DrawString(timeStr.c_str(), -1, &tooltipFont, textRect, &sf, &textBrush);
   }
 }
 
@@ -1392,8 +1531,22 @@ void ControlPanelCore::on_mouse_move(int x, int y) {
   }
 
   if (new_region != m_hover_region) {
+    // Track previous hover for fade-out animation
+    m_prev_hover_region = m_hover_region;
+    m_hover_change_time = std::chrono::steady_clock::now();
     m_hover_region = new_region;
     invalidate();
+  }
+  
+  // Track seekbar hover position for tooltip
+  if (new_region == HitRegion::SeekBar && m_state.track_length > 0) {
+    m_seekbar_hover_x = x;
+    // Calculate preview time at this position
+    int bar_w = m_rect_seekbar.right - m_rect_seekbar.left;
+    double pos = static_cast<double>(x - m_rect_seekbar.left) / bar_w;
+    pos = std::max(0.0, std::min(1.0, pos));
+    m_preview_time = pos * m_state.track_length;
+    invalidate();  // Update tooltip
   }
 }
 
@@ -2021,6 +2174,14 @@ void ControlPanelCore::on_playback_state_changed(const PlaybackState &state) {
 void ControlPanelCore::on_playback_time_changed(double time) {
   if (!m_seeking) {
     m_state.playback_time = time;
+    
+    // Update target progress for smooth animation
+    if (m_state.track_length > 0) {
+      m_target_progress = time / m_state.track_length;
+    } else {
+      m_target_progress = 0.0;
+    }
+    
     invalidate();
   }
 }
@@ -2038,6 +2199,10 @@ void ControlPanelCore::on_track_changed() {
   
   // Re-evaluate title formats for new track
   evaluate_title_formats();
+  
+  // Reset progress animation for new track
+  m_animated_progress = 0.0;
+  m_target_progress = 0.0;
 
   // Request artwork update from UI wrapper
   if (m_artwork_request_cb) {
