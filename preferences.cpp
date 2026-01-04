@@ -55,6 +55,11 @@ static cfg_int cfg_nowbar_cbutton_autohide(
     1  // Default: Yes (auto-hide during playback)
 );
 
+static cfg_int cfg_nowbar_glass_effect(
+    GUID{0xABCDEF1F, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xAF}},
+    0  // Default: Disabled
+);
+
 static cfg_int cfg_nowbar_custom_button_action(
     GUID{0xABCDEF0A, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0x92}},
     0  // Default: None (0=None, 1=Open URL, 2=Run Executable)
@@ -264,6 +269,10 @@ bool get_nowbar_alternate_icons_enabled() {
 
 bool get_nowbar_cbutton_autohide() {
     return cfg_nowbar_cbutton_autohide != 0;
+}
+
+bool get_nowbar_glass_effect_enabled() {
+    return cfg_nowbar_glass_effect != 0;
 }
 
 bool get_nowbar_custom_button_visible() {
@@ -634,6 +643,8 @@ void nowbar_preferences::switch_tab(int tab) {
     ShowWindow(GetDlgItem(m_hwnd, IDC_ALTERNATE_ICONS_COMBO), show_general);
     ShowWindow(GetDlgItem(m_hwnd, IDC_AUTOHIDE_CBUTTONS_LABEL), show_general);
     ShowWindow(GetDlgItem(m_hwnd, IDC_AUTOHIDE_CBUTTONS_COMBO), show_general);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_GLASS_EFFECT_LABEL), show_general);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_GLASS_EFFECT_COMBO), show_general);
 
     // Custom Button tab controls
     BOOL show_cbutton = (tab == 1) ? SW_SHOW : SW_HIDE;
@@ -811,6 +822,12 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         SendMessage(hAutohideCbuttonsCombo, CB_ADDSTRING, 0, (LPARAM)L"No");
         SendMessage(hAutohideCbuttonsCombo, CB_SETCURSEL, cfg_nowbar_cbutton_autohide ? 0 : 1, 0);
 
+        // Initialize glass effect combobox
+        HWND hGlassEffectCombo = GetDlgItem(hwnd, IDC_GLASS_EFFECT_COMBO);
+        SendMessage(hGlassEffectCombo, CB_ADDSTRING, 0, (LPARAM)L"Disabled");
+        SendMessage(hGlassEffectCombo, CB_ADDSTRING, 0, (LPARAM)L"Enabled");
+        SendMessage(hGlassEffectCombo, CB_SETCURSEL, cfg_nowbar_glass_effect ? 1 : 0, 0);
+
         // Initialize font displays
         p_this->update_font_displays();
 
@@ -879,6 +896,7 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         case IDC_HOVER_CIRCLES_COMBO:
         case IDC_ALTERNATE_ICONS_COMBO:
         case IDC_AUTOHIDE_CBUTTONS_COMBO:
+        case IDC_GLASS_EFFECT_COMBO:
             if (HIWORD(wp) == CBN_SELCHANGE) {
                 p_this->on_changed();
             }
@@ -1098,6 +1116,10 @@ void nowbar_preferences::apply_settings() {
         int autohideCbuttonsSel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_AUTOHIDE_CBUTTONS_COMBO), CB_GETCURSEL, 0, 0);
         cfg_nowbar_cbutton_autohide = (autohideCbuttonsSel == 0) ? 1 : 0;
 
+        // Save glass effect setting (0=Disabled, 1=Enabled in combobox -> config 0=Disabled, 1=Enabled)
+        int glassEffectSel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_GLASS_EFFECT_COMBO), CB_GETCURSEL, 0, 0);
+        cfg_nowbar_glass_effect = (glassEffectSel == 1) ? 1 : 0;
+
         // Save Custom Button tab settings
         cfg_cbutton1_enabled = IsDlgButtonChecked(m_hwnd, IDC_CBUTTON1_ENABLE) == BST_CHECKED ? 1 : 0;
         cfg_cbutton2_enabled = IsDlgButtonChecked(m_hwnd, IDC_CBUTTON2_ENABLE) == BST_CHECKED ? 1 : 0;
@@ -1173,6 +1195,7 @@ void nowbar_preferences::reset_settings() {
             SendMessage(GetDlgItem(m_hwnd, IDC_HOVER_CIRCLES_COMBO), CB_SETCURSEL, 0, 0);
             SendMessage(GetDlgItem(m_hwnd, IDC_ALTERNATE_ICONS_COMBO), CB_SETCURSEL, 1, 0);  // Default: Disabled
             SendMessage(GetDlgItem(m_hwnd, IDC_AUTOHIDE_CBUTTONS_COMBO), CB_SETCURSEL, 0, 0);  // Default: Yes
+            SendMessage(GetDlgItem(m_hwnd, IDC_GLASS_EFFECT_COMBO), CB_SETCURSEL, 0, 0);  // Default: Disabled
         } else if (m_current_tab == 1) {
             // Reset Custom Button tab settings
             cfg_cbutton1_enabled = 0;
