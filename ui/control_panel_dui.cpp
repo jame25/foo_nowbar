@@ -2,6 +2,53 @@
 #include "control_panel_dui.h"
 #include "../preferences.h"
 
+// Windows 11 Build 22000+ DWM backdrop attribute (for older SDK headers)
+#ifndef DWMWA_SYSTEMBACKDROP_TYPE
+#define DWMWA_SYSTEMBACKDROP_TYPE 38
+#endif
+// DWM_SYSTEMBACKDROP_TYPE enum values are in dwmapi.h on SDK 10.0.22000+
+
+// Try to enable Windows 11 acrylic backdrop for a window
+// Returns true if successfully applied, false if unsupported or failed
+static bool try_enable_acrylic_backdrop(HWND hwnd) {
+    // Check Windows 11 Build 22000+
+    DWORD buildNumber = 0;
+    HKEY hKey;
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion",
+                      0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+        DWORD size = sizeof(DWORD);
+        RegQueryValueExW(hKey, L"CurrentBuildNumber", nullptr, nullptr,
+                         reinterpret_cast<LPBYTE>(&buildNumber), &size);
+        
+        // CurrentBuildNumber is stored as string, need to re-query
+        wchar_t buildStr[16] = {};
+        size = sizeof(buildStr);
+        if (RegQueryValueExW(hKey, L"CurrentBuildNumber", nullptr, nullptr,
+                             reinterpret_cast<LPBYTE>(buildStr), &size) == ERROR_SUCCESS) {
+            buildNumber = _wtoi(buildStr);
+        }
+        RegCloseKey(hKey);
+    }
+    
+    // Windows 11 Build 22000 or later required for DWMWA_SYSTEMBACKDROP_TYPE
+    if (buildNumber < 22000) {
+        return false;
+    }
+    
+    // Try to set acrylic backdrop
+    DWM_SYSTEMBACKDROP_TYPE backdropType = DWMSBT_TRANSIENTWINDOW;  // Acrylic
+    HRESULT hr = DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE,
+                                       &backdropType, sizeof(backdropType));
+    return SUCCEEDED(hr);
+}
+
+// Disable the backdrop effect
+static void disable_acrylic_backdrop(HWND hwnd) {
+    DWM_SYSTEMBACKDROP_TYPE backdropType = DWMSBT_NONE;
+    DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE,
+                          &backdropType, sizeof(backdropType));
+}
+
 namespace nowbar {
 
 // Window class name
@@ -169,6 +216,11 @@ LRESULT ControlPanelDUI::handle_message(UINT msg, WPARAM wp, LPARAM lp) {
         
         // Now initialize (which calls on_settings_changed with callbacks available)
         m_core->initialize(m_hwnd);
+        
+        // Apply glass effect if enabled in preferences
+        if (get_nowbar_glass_effect_enabled()) {
+            m_glass_effect_active = try_enable_acrylic_backdrop(m_hwnd);
+        }
         
         update_artwork();
         return 0;
