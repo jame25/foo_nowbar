@@ -15,6 +15,10 @@
 #include <gdiplus.h>
 #pragma comment(lib, "gdiplus.lib")
 
+// DWM API for Windows 11 acrylic/backdrop effects
+#include <dwmapi.h>
+#pragma comment(lib, "dwmapi.lib")
+
 // ATL base only (no WTL)
 #include <atlbase.h>
 
