@@ -40,6 +40,7 @@ public:
 private:
     std::unique_ptr<ControlPanelCore> m_core;
     bool m_tracking_mouse = false;
+    bool m_glass_effect_active = false;  // Tracks if acrylic backdrop is currently applied
     
     // CUI colour change callback for Custom theme mode
     class ColourCallback : public cui::colours::common_callback {
