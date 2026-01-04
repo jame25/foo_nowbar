@@ -2,6 +2,35 @@
 #include "control_panel_cui.h"
 #include "../preferences.h"
 
+// Windows 11 Build 22000+ DWM backdrop attribute (for older SDK headers)
+#ifndef DWMWA_SYSTEMBACKDROP_TYPE
+#define DWMWA_SYSTEMBACKDROP_TYPE 38
+#endif
+// DWM_SYSTEMBACKDROP_TYPE enum values are in dwmapi.h on SDK 10.0.22000+
+
+// Try to enable Windows 11 acrylic backdrop for a window
+static bool try_enable_acrylic_backdrop_cui(HWND hwnd) {
+    DWORD buildNumber = 0;
+    HKEY hKey;
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion",
+                      0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+        wchar_t buildStr[16] = {};
+        DWORD size = sizeof(buildStr);
+        if (RegQueryValueExW(hKey, L"CurrentBuildNumber", nullptr, nullptr,
+                             reinterpret_cast<LPBYTE>(buildStr), &size) == ERROR_SUCCESS) {
+            buildNumber = _wtoi(buildStr);
+        }
+        RegCloseKey(hKey);
+    }
+    
+    if (buildNumber < 22000) return false;
+    
+    DWM_SYSTEMBACKDROP_TYPE backdropType = DWMSBT_TRANSIENTWINDOW;
+    HRESULT hr = DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE,
+                                       &backdropType, sizeof(backdropType));
+    return SUCCEEDED(hr);
+}
+
 namespace nowbar {
 
 // Register with Columns UI
@@ -40,6 +69,11 @@ void ControlPanelCUI::initialize_core(HWND wnd) {
         
         // Now initialize (which calls on_settings_changed with callbacks available)
         m_core->initialize(wnd);
+        
+        // Apply glass effect if enabled in preferences
+        if (get_nowbar_glass_effect_enabled()) {
+            m_glass_effect_active = try_enable_acrylic_backdrop_cui(wnd);
+        }
         
         // Load artwork for current track
         update_artwork();
