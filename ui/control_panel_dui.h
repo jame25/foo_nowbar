@@ -42,6 +42,7 @@ private:
     ui_element_instance_callback::ptr m_callback;
     std::unique_ptr<ControlPanelCore> m_core;
     bool m_tracking_mouse = false;
+    bool m_glass_effect_active = false;  // Tracks if acrylic backdrop is currently applied
 };
 
 } // namespace nowbar
