@@ -53,7 +53,7 @@ A foobar2000 component that provides a "Now Playing" control panel for both Defa
 - **Hover Enlarge Effect**: Playback controls enlarge 15% on hover
 - **Alternate Icons**: Alternative play/pause/stop icon style (outline vs filled)
 - **Custom Fonts**: Select custom fonts for track title and artist
-- **Extended Seekbar**: Progress bar spans from Heart button (or Shuffle if Heart hidden) to Super button
+- **Glass Effect**: Windows 11 acrylic backdrop blur behind the panel (semi-transparent background)
 
 ## Installation
 
@@ -88,6 +88,7 @@ Customize the two lines of track information using foobar2000's [Title Formattin
 | Hover Circles | Yes / No | Show circular hover effect on buttons |
 | Alternate Icons | Enabled / Disabled | Use outline-style play/pause/stop icons |
 | Auto-hide C-buttons | Yes / No | Custom buttons fade out during active playback |
+| Glass Effect (Win11) | Disabled / Enabled | Windows 11 acrylic backdrop blur effect |
 
 ### Custom Button Tab
 Configure up to 6 custom buttons with the following actions:
