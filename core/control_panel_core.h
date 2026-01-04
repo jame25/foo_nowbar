@@ -164,9 +164,13 @@ private:
     void show_autoplaylist_menu();
     void create_autoplaylist(const char* name, const char* query, const char* sort = "");
     
+    // Animation helpers
+    float get_hover_opacity(HitRegion region);  // Get animated hover opacity for a region
+    
     // Member variables
     HWND m_hwnd = nullptr;
     bool m_dark_mode = true;
+    bool m_glass_effect_enabled = false;  // Windows 11 acrylic backdrop
     float m_dpi_scale = 1.0f;
     float m_size_scale = 1.0f;  // Scale factor for controls based on panel height
     LayoutMetrics m_metrics;
@@ -205,6 +209,10 @@ private:
     bool m_miniplayer_active = false;  // MiniPlayer enabled state for icon color
     bool m_mood_active = false;  // MOOD tag state for heart icon color
     
+    // Seekbar tooltip
+    int m_seekbar_hover_x = 0;      // Current X position on seekbar (for tooltip)
+    double m_preview_time = 0.0;    // Preview time at cursor position
+    
     // Play button hover timer for stop icon
     std::chrono::steady_clock::time_point m_play_hover_start_time;
     bool m_play_hover_timer_active = false;
@@ -223,6 +231,18 @@ private:
     std::chrono::steady_clock::time_point m_cbutton_fade_start_time;
     bool m_cbutton_fade_active = false;  // Animation in progress
     static constexpr float CBUTTON_FADE_DURATION_MS = 300.0f;  // Fade duration in milliseconds
+    
+    // Smooth progress bar animation
+    double m_animated_progress = 0.0;      // Current animated progress (0.0 - 1.0)
+    double m_target_progress = 0.0;        // Target progress position
+    std::chrono::steady_clock::time_point m_last_frame_time;
+    static constexpr double PROGRESS_LERP_SPEED = 8.0;  // Interpolation speed multiplier
+    
+    // Button hover fade animation
+    float m_hover_opacity[16] = {};  // Per-region hover opacity (0.0 - 1.0)
+    HitRegion m_prev_hover_region = HitRegion::None;
+    std::chrono::steady_clock::time_point m_hover_change_time;
+    static constexpr float HOVER_FADE_DURATION_MS = 150.0f;  // Quick fade for responsiveness
     
     // Artwork
     std::unique_ptr<Gdiplus::Bitmap> m_artwork_bitmap;
