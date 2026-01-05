@@ -115,6 +115,8 @@ private:
     void update_layout(const RECT& rect);
     void invalidate();
     void update_fonts();
+    void extract_artwork_colors();  // Extract dominant colors from artwork for dynamic background
+    void create_blurred_artwork();  // Create blurred version of artwork for background
     
     // Drawing helpers
     void draw_background(Gdiplus::Graphics& g, const RECT& rect);
@@ -254,6 +256,14 @@ private:
     Gdiplus::Color m_text_secondary_color;
     Gdiplus::Color m_accent_color;
     Gdiplus::Color m_button_hover_color;
+    
+    // Artwork-extracted colors for dynamic background
+    Gdiplus::Color m_artwork_color_primary;
+    Gdiplus::Color m_artwork_color_secondary;
+    bool m_artwork_colors_valid = false;
+    
+    // Blurred artwork for background
+    std::unique_ptr<Gdiplus::Bitmap> m_blurred_artwork;
     
     // Fonts
     std::unique_ptr<Gdiplus::Font> m_font_title;
