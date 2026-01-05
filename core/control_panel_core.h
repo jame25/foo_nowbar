@@ -116,7 +116,7 @@ private:
     void invalidate();
     void update_fonts();
     void extract_artwork_colors();  // Extract dominant colors from artwork for dynamic background
-    void create_blurred_artwork();  // Create blurred version of artwork for background
+    void create_blurred_artwork(int target_width, int target_height);  // Create blurred version at exact size
     
     // Drawing helpers
     void draw_background(Gdiplus::Graphics& g, const RECT& rect);
@@ -264,6 +264,7 @@ private:
     
     // Blurred artwork for background
     std::unique_ptr<Gdiplus::Bitmap> m_blurred_artwork;
+    SIZE m_blurred_artwork_size = {0, 0};  // Size the blur was created for
     
     // Fonts
     std::unique_ptr<Gdiplus::Font> m_font_title;
