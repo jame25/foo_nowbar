@@ -205,6 +205,7 @@
     <ClCompile Include="preferences.cpp" />
     <ClCompile Include="ui\control_panel_cui.cpp" />
     <ClCompile Include="ui\control_panel_dui.cpp" />
+    <ClCompile Include="mainmenu_commands.cpp" />
   </ItemGroup>
   
   <ItemGroup>
