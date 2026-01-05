@@ -541,10 +541,12 @@ void ControlPanelCore::update_layout(const RECT &rect) {
   // Heart and custom buttons appear at the edges without shifting the core
   // controls
 
-  // Calculate fixed width for core controls only (shuffle, prev, play, next,
-  // repeat)
-  int core_buttons = 5; // shuffle, prev, play, next, repeat
-  int core_width = button_size * (core_buttons - 1) + play_button_size +
+  // Calculate fixed width for core controls only (shuffle, prev, play, [stop], next,
+  // repeat) - Stop button is optional and same size as Play button
+  bool stop_visible = get_nowbar_stop_icon_visible();
+  int core_buttons = stop_visible ? 6 : 5; // shuffle, prev, play, [stop], next, repeat
+  int play_buttons_width = stop_visible ? (play_button_size * 2 + spacing) : play_button_size;
+  int core_width = button_size * (core_buttons - (stop_visible ? 2 : 1)) + play_buttons_width +
                    spacing * (core_buttons - 1);
   int core_start_x = rect.left + (w - core_width) / 2;
   
@@ -591,6 +593,15 @@ void ControlPanelCore::update_layout(const RECT &rect) {
   m_rect_play = {controls_x, play_y, controls_x + play_button_size,
                  play_y + play_button_size};
   controls_x += play_button_size + spacing;
+
+  // Stop button - optional, same size as Play button
+  if (stop_visible) {
+    m_rect_stop = {controls_x, play_y, controls_x + play_button_size,
+                   play_y + play_button_size};
+    controls_x += play_button_size + spacing;
+  } else {
+    m_rect_stop = {};  // Clear when hidden
+  }
 
   m_rect_next = {controls_x, btn_y, controls_x + button_size,
                  btn_y + button_size};
@@ -1125,6 +1136,34 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
     }
   }
 
+  // Stop button (optional - always outline style, no background circle)
+  if (get_nowbar_stop_icon_visible()) {
+    bool stop_hovered = (m_hover_region == HitRegion::StopButton);
+    int stop_w = m_rect_stop.right - m_rect_stop.left;
+    int stop_h = m_rect_stop.bottom - m_rect_stop.top;
+    
+    // Calculate enlarged rect when hovered
+    float stop_scale = stop_hovered ? HOVER_SCALE_FACTOR : 1.0f;
+    int stop_inset = static_cast<int>(stop_w * (1.0f - stop_scale) / 2.0f);
+    RECT stopRect = {
+        m_rect_stop.left + stop_inset, m_rect_stop.top + stop_inset,
+        m_rect_stop.right - stop_inset, m_rect_stop.bottom - stop_inset};
+    int stop_rect_w = stopRect.right - stopRect.left;
+    int stop_rect_h = stopRect.bottom - stopRect.top;
+
+    // Draw hover circle effect if hovered
+    float stop_opacity = get_hover_opacity(HitRegion::StopButton);
+    if (stop_opacity > 0.01f && show_hover) {
+      BYTE alpha = static_cast<BYTE>(stop_opacity * m_button_hover_color.GetA());
+      Gdiplus::Color hoverColor(alpha, m_button_hover_color.GetR(), m_button_hover_color.GetG(), m_button_hover_color.GetB());
+      Gdiplus::SolidBrush hoverBrush(hoverColor);
+      g.FillEllipse(&hoverBrush, stopRect.left, stopRect.top, stop_rect_w, stop_rect_h);
+    }
+    
+    // Always draw outline (not filled) stop icon
+    draw_stop_icon(g, stopRect, m_text_secondary_color, false);
+  }
+
   // Next button
   bool next_hovered = (m_hover_region == HitRegion::NextButton);
   float next_opacity = get_hover_opacity(HitRegion::NextButton);
@@ -1646,6 +1685,8 @@ void ControlPanelCore::draw_volume(Gdiplus::Graphics &g) {
 HitRegion ControlPanelCore::hit_test(int x, int y) const {
   if (pt_in_rect(m_rect_play, x, y))
     return HitRegion::PlayButton;
+  if (get_nowbar_stop_icon_visible() && pt_in_rect(m_rect_stop, x, y))
+    return HitRegion::StopButton;
   if (pt_in_rect(m_rect_prev, x, y))
     return HitRegion::PrevButton;
   if (pt_in_rect(m_rect_next, x, y))
@@ -1787,6 +1828,9 @@ void ControlPanelCore::on_lbutton_up(int x, int y) {
     switch (release_region) {
     case HitRegion::PlayButton:
       do_play_pause();
+      break;
+    case HitRegion::StopButton:
+      do_stop();
       break;
     case HitRegion::PrevButton:
       do_prev();
@@ -2216,6 +2260,7 @@ void ControlPanelCore::do_prev() { playback_control::get()->previous(); }
 
 void ControlPanelCore::do_next() { playback_control::get()->next(); }
 
+void ControlPanelCore::do_stop() { playback_control::get()->stop(); }
 
 
 void ControlPanelCore::do_shuffle_toggle() {
@@ -3306,6 +3351,48 @@ void ControlPanelCore::draw_super_icon(Gdiplus::Graphics &g, const RECT &rect,
       g.FillEllipse(&brush, cx - dot_radius, cy - dot_radius, 
                     dot_radius * 2.0f, dot_radius * 2.0f);
     }
+  }
+}
+
+// Draw Stop icon - square (filled or outline) based on stop_24dp.svg
+// SVG path: M320-640v320-320Zm-80 400v-480h480v480H240Zm80-80h320v-320H320v320Z
+void ControlPanelCore::draw_stop_icon(Gdiplus::Graphics &g, const RECT &rect,
+                                       const Gdiplus::Color &color, bool filled) {
+  float w = static_cast<float>(rect.right - rect.left);
+  float h = static_cast<float>(rect.bottom - rect.top);
+  float x = static_cast<float>(rect.left);
+  float y = static_cast<float>(rect.top);
+  
+  // The SVG shows a square icon in a 960x960 viewBox
+  // Outer square: 240, 240 to 720, 720 (normalized: 0.25 to 0.75)
+  // Inner square for outline: 320, 320 to 640, 640 (normalized: 0.333 to 0.667)
+  
+  Gdiplus::SolidBrush brush(color);
+  
+  // Calculate square dimensions (centered in icon rect)
+  float outer_inset = w * 0.25f;  // 25% inset from each edge
+  float inner_inset = w * 0.333f; // 33% inset for inner border
+  
+  if (filled) {
+    // Draw filled square
+    g.FillRectangle(&brush, x + outer_inset, y + outer_inset, 
+                    w - outer_inset * 2.0f, h - outer_inset * 2.0f);
+  } else {
+    // Draw square outline (outer - inner creates border)
+    float border = inner_inset - outer_inset;
+    
+    // Top edge
+    g.FillRectangle(&brush, x + outer_inset, y + outer_inset, 
+                    w - outer_inset * 2.0f, border);
+    // Bottom edge
+    g.FillRectangle(&brush, x + outer_inset, y + h - outer_inset - border, 
+                    w - outer_inset * 2.0f, border);
+    // Left edge
+    g.FillRectangle(&brush, x + outer_inset, y + outer_inset + border, 
+                    border, h - outer_inset * 2.0f - border * 2.0f);
+    // Right edge
+    g.FillRectangle(&brush, x + w - outer_inset - border, y + outer_inset + border, 
+                    border, h - outer_inset * 2.0f - border * 2.0f);
   }
 }
 
