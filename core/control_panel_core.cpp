@@ -598,7 +598,11 @@ void ControlPanelCore::update_layout(const RECT &rect) {
                  play_y + play_button_size};
   controls_x += play_button_size + spacing;
 
-  // Stop button - optional, same size as Play button
+  m_rect_next = {controls_x, btn_y, controls_x + button_size,
+                 btn_y + button_size};
+  controls_x += button_size + spacing;
+
+  // Stop button - optional, positioned after Next, same size as Play button
   if (stop_visible) {
     m_rect_stop = {controls_x, play_y, controls_x + play_button_size,
                    play_y + play_button_size};
@@ -606,10 +610,6 @@ void ControlPanelCore::update_layout(const RECT &rect) {
   } else {
     m_rect_stop = {};  // Clear when hidden
   }
-
-  m_rect_next = {controls_x, btn_y, controls_x + button_size,
-                 btn_y + button_size};
-  controls_x += button_size + spacing;
 
   m_rect_repeat = {controls_x, btn_y, controls_x + button_size,
                    btn_y + button_size};
@@ -691,15 +691,26 @@ void ControlPanelCore::update_layout(const RECT &rect) {
     }
   } else {
     // 2-row layout - buttons 1-3 in row 1, buttons 4-6 in row 2
-    // Use right_btn_y for vertical centering of right-side elements
-    int row_spacing = 2;  // Small gap between rows
-    int row2_y = right_btn_y + button_size + row_spacing;
-    
     bool row1_enabled[3] = {btn_enabled[0], btn_enabled[1], btn_enabled[2]};
     bool row2_enabled[3] = {btn_enabled[3], btn_enabled[4], btn_enabled[5]};
     
     int row1_count = (row1_enabled[0] ? 1 : 0) + (row1_enabled[1] ? 1 : 0) + (row1_enabled[2] ? 1 : 0);
     int row2_count = (row2_enabled[0] ? 1 : 0) + (row2_enabled[1] ? 1 : 0) + (row2_enabled[2] ? 1 : 0);
+    
+    // Calculate vertical positions based on how many rows are actually used
+    int row_spacing = 2;  // Small gap between rows
+    int row1_y, row2_y;
+    
+    if (row2_count > 0) {
+      // Both rows have buttons - center both rows together
+      int total_height = button_size * 2 + row_spacing;
+      row1_y = y_center - total_height / 2;
+      row2_y = row1_y + button_size + row_spacing;
+    } else {
+      // Only row 1 has buttons - center just row 1
+      row1_y = y_center - button_size / 2;
+      row2_y = 0;  // Not used
+    }
     
     // Calculate how many buttons fit in each row
     int row1_to_show = 0;
@@ -731,17 +742,17 @@ void ControlPanelCore::update_layout(const RECT &rect) {
     int shown1 = 0;
     
     if (row1_enabled[0] && shown1 < row1_to_show) {
-      m_rect_cbutton1 = {row1_x, right_btn_y, row1_x + button_size, right_btn_y + button_size};
+      m_rect_cbutton1 = {row1_x, row1_y, row1_x + button_size, row1_y + button_size};
       row1_x += button_size + spacing;
       shown1++;
     }
     if (row1_enabled[1] && shown1 < row1_to_show) {
-      m_rect_cbutton2 = {row1_x, right_btn_y, row1_x + button_size, right_btn_y + button_size};
+      m_rect_cbutton2 = {row1_x, row1_y, row1_x + button_size, row1_y + button_size};
       row1_x += button_size + spacing;
       shown1++;
     }
     if (row1_enabled[2] && shown1 < row1_to_show) {
-      m_rect_cbutton3 = {row1_x, right_btn_y, row1_x + button_size, right_btn_y + button_size};
+      m_rect_cbutton3 = {row1_x, row1_y, row1_x + button_size, row1_y + button_size};
       row1_x += button_size + spacing;
       shown1++;
     }
@@ -1141,7 +1152,26 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
     }
   }
 
-  // Stop button (optional - always outline style, no background circle)
+  // Next button
+  bool next_hovered = (m_hover_region == HitRegion::NextButton);
+  float next_opacity = get_hover_opacity(HitRegion::NextButton);
+  int nw = m_rect_next.right - m_rect_next.left;
+  int nh = m_rect_next.bottom - m_rect_next.top;
+  if (next_opacity > 0.01f && show_hover) {
+    BYTE alpha = static_cast<BYTE>(next_opacity * m_button_hover_color.GetA());
+    Gdiplus::Color hoverColor(alpha, m_button_hover_color.GetR(), m_button_hover_color.GetG(), m_button_hover_color.GetB());
+    Gdiplus::SolidBrush hoverBrush(hoverColor);
+    g.FillEllipse(&hoverBrush, m_rect_next.left, m_rect_next.top, nw, nh);
+  }
+  // Enlarge icon when hovered
+  float next_scale = next_hovered ? HOVER_SCALE_FACTOR : 1.0f;
+  int next_icon_inset = static_cast<int>(nw * (1.0f - 0.85f * next_scale) / 2.0f);
+  RECT nextIconRect = {
+      m_rect_next.left + next_icon_inset, m_rect_next.top + next_icon_inset,
+      m_rect_next.right - next_icon_inset, m_rect_next.bottom - next_icon_inset};
+  draw_next_icon(g, nextIconRect, m_text_secondary_color);
+
+  // Stop button (optional - positioned after Next, always outline style, no background circle)
   if (get_nowbar_stop_icon_visible()) {
     bool stop_hovered = (m_hover_region == HitRegion::StopButton);
     int stop_w = m_rect_stop.right - m_rect_stop.left;
@@ -1168,25 +1198,6 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
     // Always draw outline (not filled) stop icon
     draw_stop_icon(g, stopRect, m_text_secondary_color, false);
   }
-
-  // Next button
-  bool next_hovered = (m_hover_region == HitRegion::NextButton);
-  float next_opacity = get_hover_opacity(HitRegion::NextButton);
-  int nw = m_rect_next.right - m_rect_next.left;
-  int nh = m_rect_next.bottom - m_rect_next.top;
-  if (next_opacity > 0.01f && show_hover) {
-    BYTE alpha = static_cast<BYTE>(next_opacity * m_button_hover_color.GetA());
-    Gdiplus::Color hoverColor(alpha, m_button_hover_color.GetR(), m_button_hover_color.GetG(), m_button_hover_color.GetB());
-    Gdiplus::SolidBrush hoverBrush(hoverColor);
-    g.FillEllipse(&hoverBrush, m_rect_next.left, m_rect_next.top, nw, nh);
-  }
-  // Enlarge icon when hovered
-  float next_scale = next_hovered ? HOVER_SCALE_FACTOR : 1.0f;
-  int next_icon_inset = static_cast<int>(nw * (1.0f - 0.85f * next_scale) / 2.0f);
-  RECT nextIconRect = {
-      m_rect_next.left + next_icon_inset, m_rect_next.top + next_icon_inset,
-      m_rect_next.right - next_icon_inset, m_rect_next.bottom - next_icon_inset};
-  draw_next_icon(g, nextIconRect, m_text_secondary_color);
 
   // Repeat button
   bool repeat_active =
@@ -1350,6 +1361,62 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
   draw_cbutton(3, m_rect_cbutton4, HitRegion::CButton4);
   draw_cbutton(4, m_rect_cbutton5, HitRegion::CButton5);
   draw_cbutton(5, m_rect_cbutton6, HitRegion::CButton6);
+  
+  // Draw tooltip for hovered custom button
+  int tooltip_button_index = -1;
+  RECT tooltip_button_rect = {};
+  switch (m_hover_region) {
+    case HitRegion::CButton1: tooltip_button_index = 0; tooltip_button_rect = m_rect_cbutton1; break;
+    case HitRegion::CButton2: tooltip_button_index = 1; tooltip_button_rect = m_rect_cbutton2; break;
+    case HitRegion::CButton3: tooltip_button_index = 2; tooltip_button_rect = m_rect_cbutton3; break;
+    case HitRegion::CButton4: tooltip_button_index = 3; tooltip_button_rect = m_rect_cbutton4; break;
+    case HitRegion::CButton5: tooltip_button_index = 4; tooltip_button_rect = m_rect_cbutton5; break;
+    case HitRegion::CButton6: tooltip_button_index = 5; tooltip_button_rect = m_rect_cbutton6; break;
+    default: break;
+  }
+  
+  if (tooltip_button_index >= 0 && get_nowbar_cbutton_enabled(tooltip_button_index)) {
+    // Get the tooltip label
+    pfc::string8 label = get_nowbar_cbutton_label(tooltip_button_index);
+    std::wstring labelW = pfc::stringcvt::string_wide_from_utf8(label.c_str()).get_ptr();
+    
+    // Measure text size
+    Gdiplus::Font tooltipFont(L"Segoe UI", 10.0f * m_dpi_scale, Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
+    Gdiplus::RectF textBounds;
+    g.MeasureString(labelW.c_str(), -1, &tooltipFont, Gdiplus::PointF(0, 0), &textBounds);
+    
+    // Tooltip dimensions with padding
+    int padding_h = static_cast<int>(6 * m_dpi_scale);
+    int padding_v = static_cast<int>(3 * m_dpi_scale);
+    int tooltip_w = static_cast<int>(textBounds.Width) + padding_h * 2;
+    int tooltip_h = static_cast<int>(textBounds.Height) + padding_v * 2;
+    
+    // Position: centered above the button
+    int button_center_x = (tooltip_button_rect.left + tooltip_button_rect.right) / 2;
+    int tooltip_x = button_center_x - tooltip_w / 2;
+    int tooltip_y = tooltip_button_rect.top - tooltip_h - static_cast<int>(6 * m_dpi_scale);
+    
+    // Draw tooltip background
+    Gdiplus::Color bgColor = m_dark_mode ? Gdiplus::Color(220, 60, 60, 60) : Gdiplus::Color(220, 40, 40, 40);
+    Gdiplus::SolidBrush bgBrush(bgColor);
+    int corner = static_cast<int>(4 * m_dpi_scale);
+    Gdiplus::GraphicsPath tooltipPath;
+    tooltipPath.AddArc(tooltip_x, tooltip_y, corner * 2, corner * 2, 180, 90);
+    tooltipPath.AddArc(tooltip_x + tooltip_w - corner * 2, tooltip_y, corner * 2, corner * 2, 270, 90);
+    tooltipPath.AddArc(tooltip_x + tooltip_w - corner * 2, tooltip_y + tooltip_h - corner * 2, corner * 2, corner * 2, 0, 90);
+    tooltipPath.AddArc(tooltip_x, tooltip_y + tooltip_h - corner * 2, corner * 2, corner * 2, 90, 90);
+    tooltipPath.CloseFigure();
+    g.FillPath(&bgBrush, &tooltipPath);
+    
+    // Draw tooltip text
+    Gdiplus::SolidBrush textBrush(Gdiplus::Color(255, 255, 255, 255));
+    Gdiplus::StringFormat sf;
+    sf.SetAlignment(Gdiplus::StringAlignmentCenter);
+    sf.SetLineAlignment(Gdiplus::StringAlignmentCenter);
+    Gdiplus::RectF textRect(static_cast<float>(tooltip_x), static_cast<float>(tooltip_y),
+                            static_cast<float>(tooltip_w), static_cast<float>(tooltip_h));
+    g.DrawString(labelW.c_str(), -1, &tooltipFont, textRect, &sf, &textBrush);
+  }
   
   // Continue animation loop if fade is in progress
   if (m_cbutton_fade_active) {
