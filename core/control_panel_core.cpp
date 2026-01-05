@@ -361,15 +361,19 @@ void ControlPanelCore::extract_artwork_colors() {
   m_artwork_colors_valid = true;
 }
 
-void ControlPanelCore::create_blurred_artwork() {
+void ControlPanelCore::create_blurred_artwork(int target_width, int target_height) {
   m_blurred_artwork.reset();
+  m_blurred_artwork_size = {0, 0};
   
   if (!m_artwork_bitmap || m_artwork_bitmap->GetLastStatus() != Gdiplus::Ok) {
     return;
   }
   
-  // Create a small scaled-down version for blur (faster than blurring full size)
-  // Using 64x64 as intermediate size for smooth blur
+  if (target_width <= 0 || target_height <= 0) {
+    return;
+  }
+  
+  // First, scale source artwork to intermediate size for blur
   const int blur_size = 64;
   std::unique_ptr<Gdiplus::Bitmap> scaled(new Gdiplus::Bitmap(blur_size, blur_size, PixelFormat32bppARGB));
   
@@ -379,18 +383,15 @@ void ControlPanelCore::create_blurred_artwork() {
     gfx.DrawImage(m_artwork_bitmap.get(), 0, 0, blur_size, blur_size);
   }
   
-  // Apply simple box blur by averaging neighboring pixels
-  // Create output bitmap
-  std::unique_ptr<Gdiplus::Bitmap> blurred(new Gdiplus::Bitmap(blur_size, blur_size, PixelFormat32bppARGB));
-  
-  const int radius = 3;  // Blur radius
+  // Apply box blur
+  std::unique_ptr<Gdiplus::Bitmap> blurred_square(new Gdiplus::Bitmap(blur_size, blur_size, PixelFormat32bppARGB));
+  const int radius = 4;
   
   for (int y = 0; y < blur_size; y++) {
     for (int x = 0; x < blur_size; x++) {
       int total_r = 0, total_g = 0, total_b = 0, total_a = 0;
       int count = 0;
       
-      // Sample neighborhood
       for (int dy = -radius; dy <= radius; dy++) {
         for (int dx = -radius; dx <= radius; dx++) {
           int sx = x + dx;
@@ -407,18 +408,72 @@ void ControlPanelCore::create_blurred_artwork() {
         }
       }
       
-      // Set averaged color
       Gdiplus::Color avgColor(
           total_a / count,
           total_r / count,
           total_g / count,
           total_b / count
       );
-      blurred->SetPixel(x, y, avgColor);
+      blurred_square->SetPixel(x, y, avgColor);
     }
   }
   
-  m_blurred_artwork = std::move(blurred);
+  // Create output bitmap at exact target size using direct pixel sampling
+  // This bypasses DrawImage source rect issues that cause gaps
+  m_blurred_artwork.reset(new Gdiplus::Bitmap(target_width, target_height, PixelFormat32bppARGB));
+  m_blurred_artwork_size = {(LONG)target_width, (LONG)target_height};
+  
+  // Calculate source crop from the blurred square (center-crop to match target aspect)
+  float targetAspect = (float)target_width / (float)target_height;
+  float srcX = 0, srcY = 0, srcW = (float)blur_size, srcH = (float)blur_size;
+  
+  if (targetAspect > 1.0f) {
+    // Target is wider than source - crop vertically from center
+    srcH = blur_size / targetAspect;
+    srcY = (blur_size - srcH) / 2.0f;
+  } else {
+    // Target is taller than source - crop horizontally from center
+    srcW = blur_size * targetAspect;
+    srcX = (blur_size - srcW) / 2.0f;
+  }
+  
+  // Direct pixel sampling with bilinear interpolation for smooth result
+  for (int y = 0; y < target_height; y++) {
+    for (int x = 0; x < target_width; x++) {
+      // Map target coordinates to source coordinates
+      float sx = srcX + (x / (float)target_width) * srcW;
+      float sy = srcY + (y / (float)target_height) * srcH;
+      
+      // Bilinear interpolation
+      int x0 = (int)sx;
+      int y0 = (int)sy;
+      int x1 = (std::min)(x0 + 1, blur_size - 1);
+      int y1 = (std::min)(y0 + 1, blur_size - 1);
+      x0 = (std::max)(0, (std::min)(x0, blur_size - 1));
+      y0 = (std::max)(0, (std::min)(y0, blur_size - 1));
+      
+      float fx = sx - (int)sx;
+      float fy = sy - (int)sy;
+      
+      Gdiplus::Color c00, c10, c01, c11;
+      blurred_square->GetPixel(x0, y0, &c00);
+      blurred_square->GetPixel(x1, y0, &c10);
+      blurred_square->GetPixel(x0, y1, &c01);
+      blurred_square->GetPixel(x1, y1, &c11);
+      
+      // Interpolate
+      BYTE r = (BYTE)((c00.GetR() * (1-fx) + c10.GetR() * fx) * (1-fy) + 
+                      (c01.GetR() * (1-fx) + c11.GetR() * fx) * fy);
+      BYTE g = (BYTE)((c00.GetG() * (1-fx) + c10.GetG() * fx) * (1-fy) + 
+                      (c01.GetG() * (1-fx) + c11.GetG() * fx) * fy);
+      BYTE b = (BYTE)((c00.GetB() * (1-fx) + c10.GetB() * fx) * (1-fy) + 
+                      (c01.GetB() * (1-fx) + c11.GetB() * fx) * fy);
+      BYTE a = (BYTE)((c00.GetA() * (1-fx) + c10.GetA() * fx) * (1-fy) + 
+                      (c01.GetA() * (1-fx) + c11.GetA() * fx) * fy);
+      
+      m_blurred_artwork->SetPixel(x, y, Gdiplus::Color(a, r, g, b));
+    }
+  }
 }
 
 void ControlPanelCore::update_layout(const RECT &rect) {
@@ -831,35 +886,19 @@ void ControlPanelCore::draw_background(Gdiplus::Graphics &g, const RECT &rect) {
     Gdiplus::Color overlayColor(overlay_alpha, 0, 0, 0);
     Gdiplus::SolidBrush overlayBrush(overlayColor);
     g.FillRectangle(&overlayBrush, r);
-  } else if (bg_style == 2 && m_blurred_artwork) {
-    // Blurred Artwork mode: draw center-cropped blurred artwork as background
-    // Use "cover" style: fill the panel completely, cropping from center
-    g.SetInterpolationMode(Gdiplus::InterpolationModeBilinear);
-    
-    int srcW = m_blurred_artwork->GetWidth();
-    int srcH = m_blurred_artwork->GetHeight();
-    
-    // Calculate source rectangle for center crop
-    // We want to fill the target rect, so we need to determine which dimension to crop
-    float targetAspect = (float)r.Width / (float)r.Height;
-    float srcAspect = (float)srcW / (float)srcH;
-    
-    int cropX = 0, cropY = 0, cropW = srcW, cropH = srcH;
-    
-    if (srcAspect > targetAspect) {
-      // Source is wider than target - crop horizontally (center)
-      cropW = (int)(srcH * targetAspect);
-      cropX = (srcW - cropW) / 2;
-    } else {
-      // Source is taller than target - crop vertically (center) 
-      cropH = (int)(srcW / targetAspect);
-      cropY = (srcH - cropH) / 2;
+  } else if (bg_style == 2 && m_artwork_bitmap) {
+    // Blurred Artwork mode: lazily create blur at exact panel size (no stretching)
+    // Regenerate if size has changed
+    if (!m_blurred_artwork || 
+        m_blurred_artwork_size.cx != width || 
+        m_blurred_artwork_size.cy != height) {
+      create_blurred_artwork(width, height);
     }
     
-    g.DrawImage(m_blurred_artwork.get(), 
-                Gdiplus::Rect(r.X, r.Y, r.Width, r.Height),
-                cropX, cropY, cropW, cropH,
-                Gdiplus::UnitPixel);
+    if (m_blurred_artwork) {
+      // Draw 1:1 at exact size - no stretching or scaling
+      g.DrawImage(m_blurred_artwork.get(), r.X, r.Y);
+    }
     
     // Add semi-transparent dark overlay for text readability
     // Light mode needs more overlay since text is black
@@ -2422,8 +2461,9 @@ void ControlPanelCore::set_artwork(album_art_data_ptr data) {
         // Extract colors for dynamic background
         extract_artwork_colors();
         
-        // Create blurred version for background
-        create_blurred_artwork();
+        // Invalidate blurred artwork cache so it regenerates with new artwork
+        m_blurred_artwork.reset();
+        m_blurred_artwork_size = {0, 0};
       }
     }
   }
@@ -2435,6 +2475,7 @@ void ControlPanelCore::clear_artwork() {
   m_artwork_bitmap.reset();
   m_artwork_colors_valid = false;
   m_blurred_artwork.reset();
+  m_blurred_artwork_size = {0, 0};
   invalidate();
 }
 
