@@ -1103,10 +1103,8 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
       Gdiplus::SolidBrush hoverBrush(hoverColor);
       g.FillEllipse(&hoverBrush, playRect.left, playRect.top, play_rect_w, play_rect_h);
     }
-    // Draw stop icon if hover timer triggered, otherwise play/pause
-    if (m_show_stop_icon) {
-      draw_stop_icon(g, playRect, m_text_secondary_color, false);
-    } else if (m_state.is_playing && !m_state.is_paused) {
+    // Draw play or pause icon
+    if (m_state.is_playing && !m_state.is_paused) {
       draw_alternate_pause_icon(g, playRect, m_text_secondary_color);
     } else {
       draw_alternate_play_icon(g, playRect, m_text_secondary_color);
@@ -1118,11 +1116,9 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
     Gdiplus::SolidBrush bgBrush(bgColor);
     g.FillEllipse(&bgBrush, playRect.left, playRect.top, play_rect_w, play_rect_h);
 
-    // Draw stop icon if hover timer triggered, otherwise play/pause
+    // Draw play or pause icon
     Gdiplus::Color playIconColor(255, 0, 0, 0);
-    if (m_show_stop_icon) {
-      draw_stop_icon(g, playRect, playIconColor, true);
-    } else if (m_state.is_playing && !m_state.is_paused) {
+    if (m_state.is_playing && !m_state.is_paused) {
       draw_pause_icon(g, playRect, playIconColor, false);
     } else {
       draw_play_icon(g, playRect, playIconColor, false);
@@ -1204,7 +1200,8 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
     float target = should_hide ? 0.0f : 1.0f;
     
     if (target != m_cbutton_target_opacity) {
-      // Start new fade animation
+      // Start new fade animation - save current opacity as starting point
+      m_cbutton_start_opacity = m_cbutton_opacity;
       m_cbutton_target_opacity = target;
       m_cbutton_fade_start_time = std::chrono::steady_clock::now();
       m_cbutton_fade_active = true;
@@ -1218,13 +1215,8 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
       // Ease-out interpolation for smoother animation
       float ease_progress = 1.0f - (1.0f - progress) * (1.0f - progress);
       
-      if (m_cbutton_target_opacity > m_cbutton_opacity) {
-        // Fading in
-        m_cbutton_opacity = m_cbutton_opacity + ease_progress * (1.0f - m_cbutton_opacity);
-      } else {
-        // Fading out
-        m_cbutton_opacity = 1.0f - ease_progress;
-      }
+      // Lerp from start opacity to target opacity
+      m_cbutton_opacity = m_cbutton_start_opacity + ease_progress * (m_cbutton_target_opacity - m_cbutton_start_opacity);
       
       if (progress >= 1.0f) {
         m_cbutton_opacity = m_cbutton_target_opacity;
@@ -1738,30 +1730,6 @@ void ControlPanelCore::on_mouse_move(int x, int y) {
     return;
   }
 
-  // Track hover timer for Play button -> Stop icon transformation
-  // Only show stop icon when playback is active (playing or paused)
-  if (new_region == HitRegion::PlayButton && m_state.is_playing) {
-    if (!m_play_hover_timer_active) {
-      // Start hover timer
-      m_play_hover_start_time = std::chrono::steady_clock::now();
-      m_play_hover_timer_active = true;
-    } else if (!m_show_stop_icon) {
-      // Check if 3 seconds have elapsed
-      auto now = std::chrono::steady_clock::now();
-      auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - m_play_hover_start_time).count();
-      if (elapsed >= 3000) {
-        m_show_stop_icon = true;
-        invalidate();
-      }
-    }
-  } else if (new_region != HitRegion::PlayButton) {
-    // Reset timer when leaving PlayButton region
-    if (m_play_hover_timer_active || m_show_stop_icon) {
-      m_play_hover_timer_active = false;
-      m_show_stop_icon = false;
-      invalidate();
-    }
-  }
 
   if (new_region != m_hover_region) {
     // Track previous hover for fade-out animation
@@ -1784,11 +1752,6 @@ void ControlPanelCore::on_mouse_move(int x, int y) {
 }
 
 void ControlPanelCore::on_mouse_leave() {
-  // Reset play button hover timer
-  if (m_play_hover_timer_active || m_show_stop_icon) {
-    m_play_hover_timer_active = false;
-    m_show_stop_icon = false;
-  }
   
   if (m_hover_region != HitRegion::None) {
     m_hover_region = HitRegion::None;
@@ -1823,14 +1786,7 @@ void ControlPanelCore::on_lbutton_up(int x, int y) {
   } else if (release_region == m_pressed_region) {
     switch (release_region) {
     case HitRegion::PlayButton:
-      if (m_show_stop_icon) {
-        do_stop();
-        // Reset stop icon state after stopping
-        m_play_hover_timer_active = false;
-        m_show_stop_icon = false;
-      } else {
-        do_play_pause();
-      }
+      do_play_pause();
       break;
     case HitRegion::PrevButton:
       do_prev();
@@ -2260,7 +2216,7 @@ void ControlPanelCore::do_prev() { playback_control::get()->previous(); }
 
 void ControlPanelCore::do_next() { playback_control::get()->next(); }
 
-void ControlPanelCore::do_stop() { playback_control::get()->stop(); }
+
 
 void ControlPanelCore::do_shuffle_toggle() {
   auto pm = playlist_manager::get();
@@ -2390,6 +2346,7 @@ void ControlPanelCore::on_playback_state_changed(const PlaybackState &state) {
   
   // Trigger fade animation if playback state changed
   if (get_nowbar_cbutton_autohide() && was_playing != is_playing_now) {
+    m_cbutton_start_opacity = m_cbutton_opacity;  // Start from current opacity
     m_cbutton_target_opacity = is_playing_now ? 0.0f : 1.0f;
     m_cbutton_fade_start_time = std::chrono::steady_clock::now();
     m_cbutton_fade_active = true;
@@ -3279,52 +3236,7 @@ void ControlPanelCore::draw_alternate_pause_icon(Gdiplus::Graphics &g, const REC
   g.SetTransform(&oldMatrix);
 }
 
-void ControlPanelCore::draw_stop_icon(Gdiplus::Graphics &g, const RECT &rect,
-                                       const Gdiplus::Color &color, bool filled) {
-  // Stop icon - square (filled or outline) based on stop_24dp.svg
-  // Outer rect: 240, -240 to 720, -720 (480x480)
-  // Inner rect (hole for outline): 320, -320 to 640, -640 (320x320)
-  
-  float iconSize = static_cast<float>(std::min(rect.right - rect.left,
-                                               rect.bottom - rect.top));
-  float cx = (rect.left + rect.right) / 2.0f;
-  float cy = (rect.top + rect.bottom) / 2.0f;
-  float scale = iconSize / 24.0f;
 
-  Gdiplus::Matrix oldMatrix;
-  g.GetTransform(&oldMatrix);
-
-  Gdiplus::Matrix matrix;
-  matrix.Translate(cx - 12 * scale, cy - 12 * scale);
-  matrix.Scale(scale, scale);
-  g.SetTransform(&matrix);
-
-  Gdiplus::SolidBrush brush(color);
-  Gdiplus::GraphicsPath path;
-  
-  // Outer square: 240 to 720 in SVG coords -> normalized to 24x24 viewport
-  // SVG viewport is 960x960, coords range from 240-720
-  path.StartFigure();
-  path.AddLine(svgToNorm(240, -240), svgToNorm(240, -720));
-  path.AddLine(svgToNorm(240, -720), svgToNorm(720, -720));
-  path.AddLine(svgToNorm(720, -720), svgToNorm(720, -240));
-  path.AddLine(svgToNorm(720, -240), svgToNorm(240, -240));
-  path.CloseFigure();
-  
-  if (!filled) {
-    // Add inner hole for outline style
-    path.StartFigure();
-    path.AddLine(svgToNorm(320, -320), svgToNorm(640, -320));
-    path.AddLine(svgToNorm(640, -320), svgToNorm(640, -640));
-    path.AddLine(svgToNorm(640, -640), svgToNorm(320, -640));
-    path.AddLine(svgToNorm(320, -640), svgToNorm(320, -320));
-    path.CloseFigure();
-  }
-
-  path.SetFillMode(Gdiplus::FillModeWinding);
-  g.FillPath(&brush, &path);
-  g.SetTransform(&oldMatrix);
-}
 
 void ControlPanelCore::update_title_formats() {
   auto compiler = titleformat_compiler::get();
