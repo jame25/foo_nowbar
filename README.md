@@ -2,7 +2,7 @@
 
 A foobar2000 component that provides a "Now Playing" control panel for both Default UI and Columns UI.
 
-<img width="1265" height="109" alt="now_bar" src="https://github.com/user-attachments/assets/d0cc89e0-e469-45d6-a554-c976970e6120" />
+<img width="1430" height="107" alt="nowbar" src="https://github.com/user-attachments/assets/97373332-c90e-4809-a52e-62f8c5a1bc9e" />
 
 ## Features
 
@@ -13,7 +13,8 @@ A foobar2000 component that provides a "Now Playing" control panel for both Defa
 - **DPI Aware**: Properly scales on high-DPI displays with adaptive sizing
 
 ### Playback Controls
-- **Play/Pause/Stop**: Central play button with hover-to-stop functionality (hover to show stop icon)
+- **Play/Pause**: Central play button to toggle playback
+- **Stop**: Optional stop button (hidden by default) - stops playback
 - **Previous/Next**: Navigate between tracks
 - **Shuffle**: Toggle shuffle mode with visual indicator (blue when active)
 - **Repeat**: Cycle through repeat modes: Off → All → Track (blue when active)
@@ -54,6 +55,10 @@ A foobar2000 component that provides a "Now Playing" control panel for both Defa
 - **Alternate Icons**: Alternative play/pause/stop icon style (outline vs filled)
 - **Custom Fonts**: Select custom fonts for track title and artist
 - **Glass Effect**: Windows 11 acrylic backdrop blur behind the panel (semi-transparent background)
+- **Background Style**:
+- **Solid**: Standard solid color background
+- **Artwork Colors**: Dynamic gradient extracted from album art's dominant colors
+- **Blurred Artwork**: Album art blurred as ambient background
 
 ## Installation
 
@@ -89,6 +94,7 @@ Customize the two lines of track information using foobar2000's [Title Formattin
 | Alternate Icons | Enabled / Disabled | Use outline-style play/pause/stop icons |
 | Auto-hide C-buttons | Yes / No | Custom buttons fade out during active playback |
 | Glass Effect (Win11) | Disabled / Enabled | Windows 11 acrylic backdrop blur effect |
+| Background Style | Solid / Artwork Colors / Blurred Artwork | Panel background appearance |
 
 ### Custom Button Tab
 Configure up to 6 custom buttons with the following actions:
@@ -104,6 +110,14 @@ Each button also supports:
 ### Fonts Tab
 - Select custom fonts for track title and artist display
 - Reset to default fonts option
+
+### Keyboard Shortcuts
+Custom button actions can be triggered via keyboard shortcuts:
+
+1. Go to **Preferences → Keyboard Shortcuts**
+2. Find commands under **Playback → Now Bar**:
+   - `Custom Button 1` through `Custom Button 6`
+3. Assign any keyboard shortcut to trigger the corresponding button's action
 
 ## Building from Source
 
@@ -148,6 +162,7 @@ foo_nowbar/
 ├── resource.h                   # Resource IDs
 ├── component.cpp                # Component initialization
 ├── component_client.cpp         # foobar2000 component client
+├── mainmenu_commands.cpp        # Main menu commands for keyboard shortcuts
 ├── guids.h                      # Component GUIDs
 ├── pch.h / pch.cpp              # Precompiled headers
 └── version.h                    # Version information
