@@ -578,6 +578,10 @@ void ControlPanelCore::update_layout(const RECT &rect) {
 
   int btn_y = y_center - button_size / 2 - vertical_offset;
   int play_y = y_center - play_button_size / 2 - vertical_offset;
+  
+  // Right-side elements (volume, miniplayer, custom buttons) should be vertically
+  // centered without the seekbar offset since they don't have seekbar below them
+  int right_btn_y = y_center - button_size / 2;
 
   // Position core controls at fixed positions
   int controls_x = core_start_x;
@@ -659,7 +663,7 @@ void ControlPanelCore::update_layout(const RECT &rect) {
   }
   
   if (use_single_row) {
-    // Single row layout - all 6 buttons in one row at btn_y
+    // Single row layout - all 6 buttons in one row, vertically centered
     int buttons_to_show = 0;
     for (int count = total_enabled; count > 0; count--) {
       int width_needed = count * button_size + (count - 1) * spacing;
@@ -675,20 +679,21 @@ void ControlPanelCore::update_layout(const RECT &rect) {
     int x = start_x;
     int shown = 0;
     
-    // Position buttons in order (1-6) from left to right
+    // Position buttons in order (1-6) from left to right, using right_btn_y for vertical centering
     RECT* rects[6] = {&m_rect_cbutton1, &m_rect_cbutton2, &m_rect_cbutton3, 
                       &m_rect_cbutton4, &m_rect_cbutton5, &m_rect_cbutton6};
     for (int i = 0; i < 6 && shown < buttons_to_show; i++) {
       if (btn_enabled[i]) {
-        *rects[i] = {x, btn_y, x + button_size, btn_y + button_size};
+        *rects[i] = {x, right_btn_y, x + button_size, right_btn_y + button_size};
         x += button_size + spacing;
         shown++;
       }
     }
   } else {
     // 2-row layout - buttons 1-3 in row 1, buttons 4-6 in row 2
+    // Use right_btn_y for vertical centering of right-side elements
     int row_spacing = 2;  // Small gap between rows
-    int row2_y = btn_y + button_size + row_spacing;
+    int row2_y = right_btn_y + button_size + row_spacing;
     
     bool row1_enabled[3] = {btn_enabled[0], btn_enabled[1], btn_enabled[2]};
     bool row2_enabled[3] = {btn_enabled[3], btn_enabled[4], btn_enabled[5]};
@@ -726,17 +731,17 @@ void ControlPanelCore::update_layout(const RECT &rect) {
     int shown1 = 0;
     
     if (row1_enabled[0] && shown1 < row1_to_show) {
-      m_rect_cbutton1 = {row1_x, btn_y, row1_x + button_size, btn_y + button_size};
+      m_rect_cbutton1 = {row1_x, right_btn_y, row1_x + button_size, right_btn_y + button_size};
       row1_x += button_size + spacing;
       shown1++;
     }
     if (row1_enabled[1] && shown1 < row1_to_show) {
-      m_rect_cbutton2 = {row1_x, btn_y, row1_x + button_size, btn_y + button_size};
+      m_rect_cbutton2 = {row1_x, right_btn_y, row1_x + button_size, right_btn_y + button_size};
       row1_x += button_size + spacing;
       shown1++;
     }
     if (row1_enabled[2] && shown1 < row1_to_show) {
-      m_rect_cbutton3 = {row1_x, btn_y, row1_x + button_size, btn_y + button_size};
+      m_rect_cbutton3 = {row1_x, right_btn_y, row1_x + button_size, right_btn_y + button_size};
       row1_x += button_size + spacing;
       shown1++;
     }
@@ -762,16 +767,16 @@ void ControlPanelCore::update_layout(const RECT &rect) {
     }
   }
 
-  // Set MiniPlayer button position now that btn_y is calculated
+  // Set MiniPlayer button position - vertically centered (right-side element)
   if (get_nowbar_miniplayer_icon_visible()) {
     int mp_x = right_margin - button_size;
-    m_rect_miniplayer = {mp_x, btn_y, mp_x + button_size,
-                         btn_y + button_size};
+    m_rect_miniplayer = {mp_x, right_btn_y, mp_x + button_size,
+                         right_btn_y + button_size};
   }
 
-  // Set Volume bar position - align vertically with control buttons
+  // Set Volume bar position - vertically centered (right-side element)
   // No need to clamp based on custom buttons since they're now to the left
-  m_rect_volume = {vol_x, btn_y, volume_right_edge, btn_y + button_size};
+  m_rect_volume = {vol_x, right_btn_y, volume_right_edge, right_btn_y + button_size};
 
 
   // Track info (between artwork and controls) - truly vertically centered on
@@ -1322,10 +1327,16 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
       Gdiplus::ImageAttributes ia;
       ia.SetColorMatrix(&cm);
       
+      // Use high-quality interpolation for sharp icon scaling (especially for ICO files)
+      Gdiplus::InterpolationMode oldMode = g.GetInterpolationMode();
+      g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+      
       Gdiplus::Rect destRect(iconRect.left, iconRect.top, icon_w, icon_h);
       g.DrawImage(m_cbutton_icons[index].get(), destRect,
                   0, 0, m_cbutton_icons[index]->GetWidth(), m_cbutton_icons[index]->GetHeight(),
                   Gdiplus::UnitPixel, &ia);
+      
+      g.SetInterpolationMode(oldMode);  // Restore original mode
     } else {
       // Fallback to default numbered square icon with opacity
       Gdiplus::Color iconColor(alpha, m_text_secondary_color.GetR(), m_text_secondary_color.GetG(), m_text_secondary_color.GetB());
@@ -1968,11 +1979,20 @@ void ControlPanelCore::on_lbutton_up(int x, int y) {
         }
         
         if (!exe_path.is_empty()) {
-          // Try to get current track path as argument if playing
-          auto pc = playback_control::get();
+          // Get the focused/selected track from the active playlist (not the playing track)
+          auto pm = playlist_manager::get();
           metadb_handle_ptr track;
+          bool has_track = false;
           
-          if (pc->get_now_playing(track) && track.is_valid()) {
+          t_size active_playlist = pm->get_active_playlist();
+          if (active_playlist != pfc_infinite) {
+            t_size focus = pm->playlist_get_focus_item(active_playlist);
+            if (focus != pfc_infinite) {
+              has_track = pm->playlist_get_item_handle(track, active_playlist, focus);
+            }
+          }
+          
+          if (has_track && track.is_valid()) {
             const char* file_path = track->get_path();
             if (file_path) {
               pfc::string8 physical_path;
@@ -1988,6 +2008,7 @@ void ControlPanelCore::on_lbutton_up(int x, int y) {
               ShellExecuteW(nullptr, L"open", wideExe, nullptr, nullptr, SW_SHOWNORMAL);
             }
           } else {
+            // No track selected - just run the executable without arguments
             pfc::stringcvt::string_wide_from_utf8 wideExe(exe_path);
             ShellExecuteW(nullptr, L"open", wideExe, nullptr, nullptr, SW_SHOWNORMAL);
           }
@@ -3428,6 +3449,27 @@ void ControlPanelCore::load_custom_icon(int button_index) {
   // Load bitmap from file
   Gdiplus::Bitmap* bitmap = Gdiplus::Bitmap::FromFile(wide_path.data());
   if (bitmap && bitmap->GetLastStatus() == Gdiplus::Ok) {
+    // For ICO files, select the largest available frame for best quality
+    // ICO files contain multiple resolutions; we want the biggest one
+    UINT frameCount = bitmap->GetFrameCount(&Gdiplus::FrameDimensionResolution);
+    if (frameCount > 1) {
+      // Find the frame with the largest dimensions
+      UINT bestFrame = 0;
+      UINT bestSize = 0;
+      
+      for (UINT i = 0; i < frameCount; i++) {
+        bitmap->SelectActiveFrame(&Gdiplus::FrameDimensionResolution, i);
+        UINT size = bitmap->GetWidth() * bitmap->GetHeight();
+        if (size > bestSize) {
+          bestSize = size;
+          bestFrame = i;
+        }
+      }
+      
+      // Select the best frame
+      bitmap->SelectActiveFrame(&Gdiplus::FrameDimensionResolution, bestFrame);
+    }
+    
     m_cbutton_icons[button_index].reset(bitmap);
   } else {
     // Load failed, cleanup and use default
