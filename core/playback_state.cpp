@@ -59,6 +59,7 @@ void PlaybackStateManager::on_playback_new_track(metadb_handle_ptr p_track) {
     m_state.track_length = pc->playback_get_length();
     m_state.can_seek = pc->playback_can_seek();
     m_state.current_track = p_track;  // Store the track handle
+    m_state.playback_order = playlist_manager::get()->playback_order_get_active();  // Refresh playback order
     
     update_track_info(p_track);
     notify_track_changed();
