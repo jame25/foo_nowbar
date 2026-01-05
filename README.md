@@ -2,7 +2,7 @@
 
 A foobar2000 component that provides a "Now Playing" control panel for both Default UI and Columns UI.
 
-<img width="1430" height="107" alt="nowbar" src="https://github.com/user-attachments/assets/97373332-c90e-4809-a52e-62f8c5a1bc9e" />
+<img width="1426" height="106" alt="nowbar" src="https://github.com/user-attachments/assets/ab291b50-8457-4060-a964-6536d648f0af" />
 
 ## Features
 
