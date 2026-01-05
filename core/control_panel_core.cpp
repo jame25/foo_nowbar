@@ -541,12 +541,11 @@ void ControlPanelCore::update_layout(const RECT &rect) {
   // Heart and custom buttons appear at the edges without shifting the core
   // controls
 
-  // Calculate fixed width for core controls only (shuffle, prev, play, [stop], next,
-  // repeat) - Stop button is optional and same size as Play button
+  // Calculate fixed width for core controls only (shuffle, prev, play, next, [stop], repeat)
+  // Stop button is optional and same size as other buttons (not Play)
   bool stop_visible = get_nowbar_stop_icon_visible();
-  int core_buttons = stop_visible ? 6 : 5; // shuffle, prev, play, [stop], next, repeat
-  int play_buttons_width = stop_visible ? (play_button_size * 2 + spacing) : play_button_size;
-  int core_width = button_size * (core_buttons - (stop_visible ? 2 : 1)) + play_buttons_width +
+  int core_buttons = stop_visible ? 6 : 5; // shuffle, prev, play, next, [stop], repeat
+  int core_width = button_size * (core_buttons - 1) + play_button_size +
                    spacing * (core_buttons - 1);
   int core_start_x = rect.left + (w - core_width) / 2;
   
@@ -602,11 +601,11 @@ void ControlPanelCore::update_layout(const RECT &rect) {
                  btn_y + button_size};
   controls_x += button_size + spacing;
 
-  // Stop button - optional, positioned after Next, same size as Play button
+  // Stop button - optional, positioned after Next, same size as Shuffle
   if (stop_visible) {
-    m_rect_stop = {controls_x, play_y, controls_x + play_button_size,
-                   play_y + play_button_size};
-    controls_x += play_button_size + spacing;
+    m_rect_stop = {controls_x, btn_y, controls_x + button_size,
+                   btn_y + button_size};
+    controls_x += button_size + spacing;
   } else {
     m_rect_stop = {};  // Clear when hidden
   }
