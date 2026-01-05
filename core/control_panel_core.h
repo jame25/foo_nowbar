@@ -37,6 +37,7 @@ enum class HitRegion {
     HeartButton,   // Mood/favorite toggle
     PrevButton,
     PlayButton,
+    StopButton,    // Optional stop button
     NextButton,
     ShuffleButton,
     RepeatButton,
@@ -150,6 +151,7 @@ private:
     void draw_alternate_pause_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color);  // Alternate pause icon (outline)
 
     void draw_super_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color);  // Super button icon (3x3 grid of dots)
+    void draw_stop_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color, bool filled = false);  // Stop icon (square)
     
     // Playback control actions
     void do_play_pause();
@@ -157,6 +159,7 @@ private:
     void do_next();
     void do_shuffle_toggle();
     void do_repeat_cycle();
+    void do_stop();
     void do_seek(double position);
     void do_volume_change(float delta);
     void do_toggle_mood();
@@ -186,6 +189,7 @@ private:
     RECT m_rect_heart = {};
     RECT m_rect_prev = {};
     RECT m_rect_play = {};
+    RECT m_rect_stop = {};  // Optional stop button
     RECT m_rect_next = {};
     RECT m_rect_shuffle = {};
     RECT m_rect_repeat = {};
