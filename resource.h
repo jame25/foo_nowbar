@@ -114,3 +114,12 @@
 #define IDC_CBUTTON4_ICON_LABEL    1353
 #define IDC_CBUTTON5_ICON_LABEL    1354
 #define IDC_CBUTTON6_ICON_LABEL    1355
+
+// Custom Button Tooltip/Label controls
+#define IDC_CBUTTON_LABEL_LABEL    1360
+#define IDC_CBUTTON1_LABEL         1361
+#define IDC_CBUTTON2_LABEL         1362
+#define IDC_CBUTTON3_LABEL         1363
+#define IDC_CBUTTON4_LABEL         1364
+#define IDC_CBUTTON5_LABEL         1365
+#define IDC_CBUTTON6_LABEL         1366
