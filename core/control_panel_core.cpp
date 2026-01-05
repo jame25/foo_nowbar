@@ -692,8 +692,11 @@ float ControlPanelCore::get_hover_opacity(HitRegion region) {
 void ControlPanelCore::draw_background(Gdiplus::Graphics &g, const RECT &rect) {
   if (m_glass_effect_enabled) {
     // Glass effect: use semi-transparent background
-    // Alpha 200/255 = ~78% opacity - provides readability while showing backdrop
-    Gdiplus::Color glassColor(200, m_bg_color.GetR(), m_bg_color.GetG(), m_bg_color.GetB());
+    // Use different alpha values for dark vs light mode:
+    // - Dark mode: lower alpha (150 ~59%) for more visible backdrop blur
+    // - Light mode: higher alpha (200 ~78%) for better readability
+    BYTE glass_alpha = m_dark_mode ? 150 : 200;
+    Gdiplus::Color glassColor(glass_alpha, m_bg_color.GetR(), m_bg_color.GetG(), m_bg_color.GetB());
     Gdiplus::SolidBrush brush(glassColor);
     Gdiplus::Rect r(rect.left, rect.top, rect.right - rect.left,
                     rect.bottom - rect.top);
@@ -804,7 +807,9 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
     // Red when mood is set, gray when empty
     Gdiplus::Color heartColor = m_mood_active ? Gdiplus::Color(255, 239, 83, 80)
                                               : m_text_secondary_color;
-    int heart_inset = hw * 15 / 100;
+    // Calculate icon inset - smaller when hovered (for enlarge effect) like other buttons
+    float heart_scale = heart_hovered ? HOVER_SCALE_FACTOR : 1.0f;
+    int heart_inset = static_cast<int>(hw * (1.0f - 0.70f * heart_scale) / 2.0f);
     RECT heartIconRect = {
         m_rect_heart.left + heart_inset, m_rect_heart.top + heart_inset,
         m_rect_heart.right - heart_inset, m_rect_heart.bottom - heart_inset};
@@ -959,8 +964,9 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
     Gdiplus::SolidBrush hoverBrush(hoverColor);
     g.FillEllipse(&hoverBrush, m_rect_super.left, m_rect_super.top, supw, suph);
   }
-  // Make icon 15% smaller - create a centered, smaller rect
-  int super_inset = supw * 15 / 100; // 15% inset
+  // Calculate icon inset - smaller when hovered (for enlarge effect) like other buttons
+  float super_scale = super_hovered ? HOVER_SCALE_FACTOR : 1.0f;
+  int super_inset = static_cast<int>(supw * (1.0f - 0.70f * super_scale) / 2.0f);
   RECT superIconRect = {
       m_rect_super.left + super_inset, m_rect_super.top + super_inset,
       m_rect_super.right - super_inset, m_rect_super.bottom - super_inset};
@@ -1032,13 +1038,20 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
     BYTE alpha = static_cast<BYTE>(m_cbutton_opacity * 255.0f);
     
     if (hovered && show_hover && m_cbutton_opacity > 0.5f) {
-      // Slightly larger hover circle (5% expansion) to match perceived size of curved icons
-      int expand = cw * 5 / 100;
-      Gdiplus::Color hoverWithAlpha(alpha, m_button_hover_color.GetR(), m_button_hover_color.GetG(), m_button_hover_color.GetB());
-      Gdiplus::SolidBrush hoverBrush(hoverWithAlpha);
-      g.FillEllipse(&hoverBrush, rect.left - expand, rect.top - expand, cw + expand * 2, ch + expand * 2);
+      // Use get_hover_opacity for consistent animated hover effect like other buttons
+      float hover_opacity = get_hover_opacity(region);
+      if (hover_opacity > 0.01f) {
+        // Slightly larger hover circle (5% expansion) to match perceived size of curved icons
+        int expand = cw * 5 / 100;
+        BYTE hover_alpha = static_cast<BYTE>(hover_opacity * m_button_hover_color.GetA());
+        Gdiplus::Color hoverWithAlpha(hover_alpha, m_button_hover_color.GetR(), m_button_hover_color.GetG(), m_button_hover_color.GetB());
+        Gdiplus::SolidBrush hoverBrush(hoverWithAlpha);
+        g.FillEllipse(&hoverBrush, rect.left - expand, rect.top - expand, cw + expand * 2, ch + expand * 2);
+      }
     }
-    int inset = cw * 15 / 100;
+    // Calculate icon inset - smaller when hovered (for enlarge effect) like other buttons
+    float cbutton_scale = hovered ? HOVER_SCALE_FACTOR : 1.0f;
+    int inset = static_cast<int>(cw * (1.0f - 0.70f * cbutton_scale) / 2.0f);
     RECT iconRect = {rect.left + inset, rect.top + inset, rect.right - inset, rect.bottom - inset};
     
     // Check if custom icon is available for this button
@@ -1870,15 +1883,24 @@ void ControlPanelCore::show_autoplaylist_menu() {
   HMENU menu = CreatePopupMenu();
   if (!menu) return;
   
-  // Get current track info for dynamic menu items
-  auto pc = playback_control::get();
+  // Get currently selected track for dynamic menu items
+  // Try to get the focused item in the active playlist
+  auto pm = playlist_manager::get();
   metadb_handle_ptr track;
-  bool has_track = pc->get_now_playing(track) && track.is_valid();
+  bool has_track = false;
+  
+  t_size active_playlist = pm->get_active_playlist();
+  if (active_playlist != pfc_infinite) {
+    t_size focus = pm->playlist_get_focus_item(active_playlist);
+    if (focus != pfc_infinite) {
+      has_track = pm->playlist_get_item_handle(track, active_playlist, focus);
+    }
+  }
   
   pfc::string8 current_artist;
   pfc::string8 current_title;
   
-  if (has_track) {
+  if (has_track && track.is_valid()) {
     metadb_info_container::ptr info_container = track->get_info_ref();
     if (info_container.is_valid()) {
       const file_info& info = info_container->info();
@@ -1912,11 +1934,11 @@ void ControlPanelCore::show_autoplaylist_menu() {
   // Separator
   AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
   
-  // Group 4: Dynamic (based on currently playing)
+  // Group 4: Dynamic (based on currently selected track)
   UINT artist_flags = MF_STRING | (current_artist.is_empty() ? MF_GRAYED : 0);
   UINT title_flags = MF_STRING | (current_title.is_empty() ? MF_GRAYED : 0);
-  AppendMenuW(menu, artist_flags, ID_SAME_ARTIST, L"Same artist as currently playing");
-  AppendMenuW(menu, title_flags, ID_SAME_TITLE, L"Same title as currently playing");
+  AppendMenuW(menu, artist_flags, ID_SAME_ARTIST, L"Same artist as currently selected");
+  AppendMenuW(menu, title_flags, ID_SAME_TITLE, L"Same title as currently selected");
   
   // Get Super button position for menu placement
   POINT pt;
@@ -1977,15 +1999,8 @@ void ControlPanelCore::show_autoplaylist_menu() {
       break;
     case ID_SAME_ARTIST:
       if (!current_artist.is_empty()) {
-        // Escape double quotes in artist name
-        pfc::string8 escaped_artist;
-        for (t_size i = 0; i < current_artist.get_length(); i++) {
-          char c = current_artist[i];
-          if (c == '"') {
-            escaped_artist.add_char('\\');
-          }
-          escaped_artist.add_char(c);
-        }
+        // Escape double quotes in artist name using UTF-8 safe replace
+        pfc::string8 escaped_artist = current_artist.replace("\"", "\\\"");
         
         pfc::string8 query;
         query << "artist IS \"" << escaped_artist << "\"";
@@ -1999,15 +2014,8 @@ void ControlPanelCore::show_autoplaylist_menu() {
       break;
     case ID_SAME_TITLE:
       if (!current_title.is_empty()) {
-        // Escape double quotes in title
-        pfc::string8 escaped_title;
-        for (t_size i = 0; i < current_title.get_length(); i++) {
-          char c = current_title[i];
-          if (c == '"') {
-            escaped_title.add_char('\\');
-          }
-          escaped_title.add_char(c);
-        }
+        // Escape double quotes in title using UTF-8 safe replace
+        pfc::string8 escaped_title = current_title.replace("\"", "\\\"");
         
         pfc::string8 query;
         query << "title IS \"" << escaped_title << "\"";
