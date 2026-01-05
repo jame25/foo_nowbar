@@ -26,6 +26,7 @@ bool get_nowbar_cbutton_enabled(int button_index);  // 0-5, returns enabled stat
 int get_nowbar_cbutton_action(int button_index);    // 0-5, returns action 0-3
 pfc::string8 get_nowbar_cbutton_path(int button_index);  // 0-5, returns path string
 pfc::string8 get_nowbar_cbutton_icon_path(int button_index);  // 0-5, returns custom icon path (PNG/ICO)
+pfc::string8 get_nowbar_cbutton_label(int button_index);  // 0-5, returns tooltip label (or "Button #N" if empty)
 
 // Display format configuration functions
 pfc::string8 get_nowbar_line1_format();
