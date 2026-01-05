@@ -84,11 +84,20 @@ static void execute_cbutton_action(int button_index) {
         }
         
         if (!exe_path.is_empty()) {
-            // Try to get current track path as argument if playing
-            auto pc = playback_control::get();
+            // Get the focused/selected track from the active playlist (not the playing track)
+            auto pm = playlist_manager::get();
             metadb_handle_ptr track;
+            bool has_track = false;
             
-            if (pc->get_now_playing(track) && track.is_valid()) {
+            t_size active_playlist = pm->get_active_playlist();
+            if (active_playlist != pfc_infinite) {
+                t_size focus = pm->playlist_get_focus_item(active_playlist);
+                if (focus != pfc_infinite) {
+                    has_track = pm->playlist_get_item_handle(track, active_playlist, focus);
+                }
+            }
+            
+            if (has_track && track.is_valid()) {
                 const char* file_path = track->get_path();
                 if (file_path) {
                     pfc::string8 physical_path;
@@ -104,6 +113,7 @@ static void execute_cbutton_action(int button_index) {
                     ShellExecuteW(nullptr, L"open", wideExe, nullptr, nullptr, SW_SHOWNORMAL);
                 }
             } else {
+                // No track selected - just run the executable without arguments
                 pfc::stringcvt::string_wide_from_utf8 wideExe(exe_path);
                 ShellExecuteW(nullptr, L"open", wideExe, nullptr, nullptr, SW_SHOWNORMAL);
             }
