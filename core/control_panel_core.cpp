@@ -306,6 +306,121 @@ void ControlPanelCore::update_fonts() {
   invalidate();
 }
 
+void ControlPanelCore::extract_artwork_colors() {
+  m_artwork_colors_valid = false;
+  
+  if (!m_artwork_bitmap || m_artwork_bitmap->GetLastStatus() != Gdiplus::Ok) {
+    return;
+  }
+  
+  // Downscale artwork to 8x8 for fast color averaging
+  const int sample_size = 8;
+  std::unique_ptr<Gdiplus::Bitmap> downscaled(new Gdiplus::Bitmap(sample_size, sample_size, PixelFormat32bppARGB));
+  
+  {
+    Gdiplus::Graphics gfx(downscaled.get());
+    gfx.SetInterpolationMode(Gdiplus::InterpolationModeBilinear);
+    gfx.DrawImage(m_artwork_bitmap.get(), 0, 0, sample_size, sample_size);
+  }
+  
+  // Calculate average color from all pixels
+  int total_r = 0, total_g = 0, total_b = 0;
+  int pixel_count = 0;
+  
+  for (int y = 0; y < sample_size; y++) {
+    for (int x = 0; x < sample_size; x++) {
+      Gdiplus::Color color;
+      downscaled->GetPixel(x, y, &color);
+      
+      // Skip very transparent pixels
+      if (color.GetA() < 128) continue;
+      
+      total_r += color.GetR();
+      total_g += color.GetG();
+      total_b += color.GetB();
+      pixel_count++;
+    }
+  }
+  
+  if (pixel_count == 0) return;
+  
+  // Calculate average (primary color)
+  int avg_r = total_r / pixel_count;
+  int avg_g = total_g / pixel_count;
+  int avg_b = total_b / pixel_count;
+  
+  // Primary color - the average artwork color
+  m_artwork_color_primary = Gdiplus::Color(255, avg_r, avg_g, avg_b);
+  
+  // Secondary color - darker variant for gradient (30% darker)
+  int dark_r = avg_r * 70 / 100;
+  int dark_g = avg_g * 70 / 100;
+  int dark_b = avg_b * 70 / 100;
+  m_artwork_color_secondary = Gdiplus::Color(255, dark_r, dark_g, dark_b);
+  
+  m_artwork_colors_valid = true;
+}
+
+void ControlPanelCore::create_blurred_artwork() {
+  m_blurred_artwork.reset();
+  
+  if (!m_artwork_bitmap || m_artwork_bitmap->GetLastStatus() != Gdiplus::Ok) {
+    return;
+  }
+  
+  // Create a small scaled-down version for blur (faster than blurring full size)
+  // Using 64x64 as intermediate size for smooth blur
+  const int blur_size = 64;
+  std::unique_ptr<Gdiplus::Bitmap> scaled(new Gdiplus::Bitmap(blur_size, blur_size, PixelFormat32bppARGB));
+  
+  {
+    Gdiplus::Graphics gfx(scaled.get());
+    gfx.SetInterpolationMode(Gdiplus::InterpolationModeBilinear);
+    gfx.DrawImage(m_artwork_bitmap.get(), 0, 0, blur_size, blur_size);
+  }
+  
+  // Apply simple box blur by averaging neighboring pixels
+  // Create output bitmap
+  std::unique_ptr<Gdiplus::Bitmap> blurred(new Gdiplus::Bitmap(blur_size, blur_size, PixelFormat32bppARGB));
+  
+  const int radius = 3;  // Blur radius
+  
+  for (int y = 0; y < blur_size; y++) {
+    for (int x = 0; x < blur_size; x++) {
+      int total_r = 0, total_g = 0, total_b = 0, total_a = 0;
+      int count = 0;
+      
+      // Sample neighborhood
+      for (int dy = -radius; dy <= radius; dy++) {
+        for (int dx = -radius; dx <= radius; dx++) {
+          int sx = x + dx;
+          int sy = y + dy;
+          if (sx >= 0 && sx < blur_size && sy >= 0 && sy < blur_size) {
+            Gdiplus::Color c;
+            scaled->GetPixel(sx, sy, &c);
+            total_r += c.GetR();
+            total_g += c.GetG();
+            total_b += c.GetB();
+            total_a += c.GetA();
+            count++;
+          }
+        }
+      }
+      
+      // Set averaged color
+      Gdiplus::Color avgColor(
+          total_a / count,
+          total_r / count,
+          total_g / count,
+          total_b / count
+      );
+      blurred->SetPixel(x, y, avgColor);
+    }
+  }
+  
+  m_blurred_artwork = std::move(blurred);
+}
+
 void ControlPanelCore::update_layout(const RECT &rect) {
   int w = rect.right - rect.left;
   int h = rect.bottom - rect.top;
@@ -694,7 +809,65 @@ float ControlPanelCore::get_hover_opacity(HitRegion region) {
 }
 
 void ControlPanelCore::draw_background(Gdiplus::Graphics &g, const RECT &rect) {
-  if (m_glass_effect_enabled) {
+  int width = rect.right - rect.left;
+  int height = rect.bottom - rect.top;
+  Gdiplus::Rect r(rect.left, rect.top, width, height);
+  
+  // Check if we should use artwork-based gradient background
+  int bg_style = get_nowbar_background_style();
+  if (bg_style == 1 && m_artwork_colors_valid) {
+    // Artwork Colors mode: draw horizontal gradient from primary to secondary
+    Gdiplus::LinearGradientBrush gradientBrush(
+        Gdiplus::Point(rect.left, 0),
+        Gdiplus::Point(rect.right, 0),
+        m_artwork_color_secondary,  // Start with darker color on left
+        m_artwork_color_primary     // Lighter color on right (near artwork)
+    );
+    g.FillRectangle(&gradientBrush, r);
+    
+    // Add semi-transparent dark overlay for text readability
+    // More overlay in dark mode, less in light mode
+    BYTE overlay_alpha = m_dark_mode ? 120 : 80;
+    Gdiplus::Color overlayColor(overlay_alpha, 0, 0, 0);
+    Gdiplus::SolidBrush overlayBrush(overlayColor);
+    g.FillRectangle(&overlayBrush, r);
+  } else if (bg_style == 2 && m_blurred_artwork) {
+    // Blurred Artwork mode: draw center-cropped blurred artwork as background
+    // Use "cover" style: fill the panel completely, cropping from center
+    g.SetInterpolationMode(Gdiplus::InterpolationModeBilinear);
+    
+    int srcW = m_blurred_artwork->GetWidth();
+    int srcH = m_blurred_artwork->GetHeight();
+    
+    // Calculate source rectangle for center crop
+    // We want to fill the target rect, so we need to determine which dimension to crop
+    float targetAspect = (float)r.Width / (float)r.Height;
+    float srcAspect = (float)srcW / (float)srcH;
+    
+    int cropX = 0, cropY = 0, cropW = srcW, cropH = srcH;
+    
+    if (srcAspect > targetAspect) {
+      // Source is wider than target - crop horizontally (center)
+      cropW = (int)(srcH * targetAspect);
+      cropX = (srcW - cropW) / 2;
+    } else {
+      // Source is taller than target - crop vertically (center) 
+      cropH = (int)(srcW / targetAspect);
+      cropY = (srcH - cropH) / 2;
+    }
+    
+    g.DrawImage(m_blurred_artwork.get(), 
+                Gdiplus::Rect(r.X, r.Y, r.Width, r.Height),
+                cropX, cropY, cropW, cropH,
+                Gdiplus::UnitPixel);
+    
+    // Add semi-transparent dark overlay for text readability
+    // Light mode needs more overlay since text is black
+    BYTE overlay_alpha = m_dark_mode ? 140 : 180;
+    Gdiplus::Color overlayColor(overlay_alpha, 0, 0, 0);
+    Gdiplus::SolidBrush overlayBrush(overlayColor);
+    g.FillRectangle(&overlayBrush, r);
+  } else if (m_glass_effect_enabled) {
     // Glass effect: use semi-transparent background
     // Use different alpha values for dark vs light mode:
     // - Dark mode: lower alpha (150 ~59%) for more visible backdrop blur
@@ -702,14 +875,10 @@ void ControlPanelCore::draw_background(Gdiplus::Graphics &g, const RECT &rect) {
     BYTE glass_alpha = m_dark_mode ? 150 : 200;
     Gdiplus::Color glassColor(glass_alpha, m_bg_color.GetR(), m_bg_color.GetG(), m_bg_color.GetB());
     Gdiplus::SolidBrush brush(glassColor);
-    Gdiplus::Rect r(rect.left, rect.top, rect.right - rect.left,
-                    rect.bottom - rect.top);
     g.FillRectangle(&brush, r);
   } else {
     // Normal: opaque solid background
     Gdiplus::SolidBrush brush(m_bg_color);
-    Gdiplus::Rect r(rect.left, rect.top, rect.right - rect.left,
-                    rect.bottom - rect.top);
     g.FillRectangle(&brush, r);
   }
 }
@@ -751,8 +920,16 @@ void ControlPanelCore::draw_track_info(Gdiplus::Graphics &g) {
   );
   g.SetClip(clipRect);
   
-  Gdiplus::SolidBrush titleBrush(m_text_color);
-  Gdiplus::SolidBrush artistBrush(m_text_secondary_color);
+  // When blurred artwork background is active, always use white text for readability
+  // (the dark overlay makes the background dark regardless of theme)
+  int bg_style = get_nowbar_background_style();
+  bool use_white_text = (bg_style == 2 && m_blurred_artwork);
+  
+  Gdiplus::Color textColor = use_white_text ? Gdiplus::Color(255, 255, 255, 255) : m_text_color;
+  Gdiplus::Color textSecondary = use_white_text ? Gdiplus::Color(255, 200, 200, 200) : m_text_secondary_color;
+  
+  Gdiplus::SolidBrush titleBrush(textColor);
+  Gdiplus::SolidBrush artistBrush(textSecondary);
 
   Gdiplus::RectF titleRect(
       (float)m_rect_track_info.left, (float)m_rect_track_info.top,
@@ -2241,6 +2418,12 @@ void ControlPanelCore::set_artwork(album_art_data_ptr data) {
       if (SUCCEEDED(CreateStreamOnHGlobal(hMem, TRUE, &stream))) {
         m_artwork_bitmap.reset(Gdiplus::Bitmap::FromStream(stream));
         stream->Release();
+        
+        // Extract colors for dynamic background
+        extract_artwork_colors();
+        
+        // Create blurred version for background
+        create_blurred_artwork();
       }
     }
   }
@@ -2250,6 +2433,8 @@ void ControlPanelCore::set_artwork(album_art_data_ptr data) {
 
 void ControlPanelCore::clear_artwork() {
   m_artwork_bitmap.reset();
+  m_artwork_colors_valid = false;
+  m_blurred_artwork.reset();
   invalidate();
 }
 
