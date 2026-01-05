@@ -60,5 +60,14 @@
     <ClCompile Include="ui\control_panel_dui.cpp">
       <Filter>UI</Filter>
     </ClCompile>
+    <ClCompile Include="mainmenu_commands.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="preferences.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="component_client.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>
