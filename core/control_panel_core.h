@@ -148,7 +148,7 @@ private:
     void draw_numbered_square_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color, int number);  // Square with number
     void draw_alternate_play_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color);   // Alternate play icon (outline)
     void draw_alternate_pause_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color);  // Alternate pause icon (outline)
-    void draw_stop_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color, bool filled = false);  // Stop icon (square)
+
     void draw_super_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color);  // Super button icon (3x3 grid of dots)
     
     // Playback control actions
@@ -160,7 +160,7 @@ private:
     void do_seek(double position);
     void do_volume_change(float delta);
     void do_toggle_mood();
-    void do_stop();
+
     void update_mood_state();
     void show_picture_viewer();
     void show_autoplaylist_menu();
@@ -215,10 +215,7 @@ private:
     int m_seekbar_hover_x = 0;      // Current X position on seekbar (for tooltip)
     double m_preview_time = 0.0;    // Preview time at cursor position
     
-    // Play button hover timer for stop icon
-    std::chrono::steady_clock::time_point m_play_hover_start_time;
-    bool m_play_hover_timer_active = false;
-    bool m_show_stop_icon = false;
+
     
     // Hover enlarge animation for core controls
     static constexpr float HOVER_SCALE_FACTOR = 1.15f;  // 15% larger when hovered
@@ -229,6 +226,7 @@ private:
     
     // Custom button fade animation
     float m_cbutton_opacity = 1.0f;  // Current opacity (0.0 = hidden, 1.0 = visible)
+    float m_cbutton_start_opacity = 1.0f;  // Opacity when animation started
     float m_cbutton_target_opacity = 1.0f;  // Target opacity for animation
     std::chrono::steady_clock::time_point m_cbutton_fade_start_time;
     bool m_cbutton_fade_active = false;  // Animation in progress
