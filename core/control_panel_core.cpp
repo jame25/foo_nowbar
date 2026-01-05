@@ -141,11 +141,15 @@ void ControlPanelCore::set_dark_mode(bool dark) {
     m_text_color = Gdiplus::Color(255, 255, 255, 255);
     m_text_secondary_color =
         Gdiplus::Color(255, 120, 120, 120); // Darker gray for icons
+    // White hover circle for dark mode
+    m_button_hover_color = Gdiplus::Color(40, 255, 255, 255);
   } else {
     m_bg_color = Gdiplus::Color(255, 245, 245, 245);
     m_text_color = Gdiplus::Color(255, 0, 0, 0);
     m_text_secondary_color =
         Gdiplus::Color(255, 70, 70, 70); // Darker gray for icons
+    // Dark hover circle for light mode
+    m_button_hover_color = Gdiplus::Color(40, 0, 0, 0);
   }
   invalidate();
 }
