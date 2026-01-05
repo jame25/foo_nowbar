@@ -30,6 +30,11 @@ static cfg_int cfg_nowbar_mood_icon_visible(
     1  // Default: Show (visible)
 );
 
+static cfg_int cfg_nowbar_stop_icon_visible(
+    GUID{0xABCDEF51, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xE1}},
+    0  // Default: Hidden
+);
+
 static cfg_int cfg_nowbar_miniplayer_icon_visible(
     GUID{0xABCDEF08, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0x90}},
     1  // Default: Show (visible)
@@ -260,12 +265,16 @@ bool get_nowbar_mood_icon_visible() {
     return cfg_nowbar_mood_icon_visible != 0;
 }
 
+bool get_nowbar_stop_icon_visible() {
+    return cfg_nowbar_stop_icon_visible != 0;
+}
+
 bool get_nowbar_miniplayer_icon_visible() {
     return cfg_nowbar_miniplayer_icon_visible != 0;
 }
 
 bool get_nowbar_hover_circles_enabled() {
-    return cfg_nowbar_hover_circles != 0;
+    return true;  // Hover circles always enabled (preference option removed)
 }
 
 bool get_nowbar_alternate_icons_enabled() {
@@ -647,10 +656,10 @@ void nowbar_preferences::switch_tab(int tab) {
     ShowWindow(GetDlgItem(m_hwnd, IDC_BAR_STYLE_COMBO), show_general);
     ShowWindow(GetDlgItem(m_hwnd, IDC_MOOD_ICON_LABEL), show_general);
     ShowWindow(GetDlgItem(m_hwnd, IDC_MOOD_ICON_COMBO), show_general);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_STOP_ICON_LABEL), show_general);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_STOP_ICON_COMBO), show_general);
     ShowWindow(GetDlgItem(m_hwnd, IDC_MINIPLAYER_ICON_LABEL), show_general);
     ShowWindow(GetDlgItem(m_hwnd, IDC_MINIPLAYER_ICON_COMBO), show_general);
-    ShowWindow(GetDlgItem(m_hwnd, IDC_HOVER_CIRCLES_LABEL), show_general);
-    ShowWindow(GetDlgItem(m_hwnd, IDC_HOVER_CIRCLES_COMBO), show_general);
     ShowWindow(GetDlgItem(m_hwnd, IDC_ALTERNATE_ICONS_LABEL), show_general);
     ShowWindow(GetDlgItem(m_hwnd, IDC_ALTERNATE_ICONS_COMBO), show_general);
     ShowWindow(GetDlgItem(m_hwnd, IDC_AUTOHIDE_CBUTTONS_LABEL), show_general);
@@ -812,17 +821,17 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         SendMessage(hMoodIconCombo, CB_ADDSTRING, 0, (LPARAM)L"Hidden");
         SendMessage(hMoodIconCombo, CB_SETCURSEL, cfg_nowbar_mood_icon_visible ? 0 : 1, 0);
         
+        // Initialize stop icon visibility combobox
+        HWND hStopIconCombo = GetDlgItem(hwnd, IDC_STOP_ICON_COMBO);
+        SendMessage(hStopIconCombo, CB_ADDSTRING, 0, (LPARAM)L"Show");
+        SendMessage(hStopIconCombo, CB_ADDSTRING, 0, (LPARAM)L"Hidden");
+        SendMessage(hStopIconCombo, CB_SETCURSEL, cfg_nowbar_stop_icon_visible ? 0 : 1, 0);
+        
         // Initialize miniplayer icon visibility combobox
         HWND hMiniplayerIconCombo = GetDlgItem(hwnd, IDC_MINIPLAYER_ICON_COMBO);
         SendMessage(hMiniplayerIconCombo, CB_ADDSTRING, 0, (LPARAM)L"Show");
         SendMessage(hMiniplayerIconCombo, CB_ADDSTRING, 0, (LPARAM)L"Hidden");
         SendMessage(hMiniplayerIconCombo, CB_SETCURSEL, cfg_nowbar_miniplayer_icon_visible ? 0 : 1, 0);
-
-        // Initialize hover circles combobox
-        HWND hHoverCirclesCombo = GetDlgItem(hwnd, IDC_HOVER_CIRCLES_COMBO);
-        SendMessage(hHoverCirclesCombo, CB_ADDSTRING, 0, (LPARAM)L"Yes");
-        SendMessage(hHoverCirclesCombo, CB_ADDSTRING, 0, (LPARAM)L"No");
-        SendMessage(hHoverCirclesCombo, CB_SETCURSEL, cfg_nowbar_hover_circles ? 0 : 1, 0);
 
         // Initialize alternate icons combobox
         HWND hAlternateIconsCombo = GetDlgItem(hwnd, IDC_ALTERNATE_ICONS_COMBO);
@@ -913,8 +922,8 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         case IDC_COVER_MARGIN_COMBO:
         case IDC_BAR_STYLE_COMBO:
         case IDC_MOOD_ICON_COMBO:
+        case IDC_STOP_ICON_COMBO:
         case IDC_MINIPLAYER_ICON_COMBO:
-        case IDC_HOVER_CIRCLES_COMBO:
         case IDC_ALTERNATE_ICONS_COMBO:
         case IDC_AUTOHIDE_CBUTTONS_COMBO:
         case IDC_GLASS_EFFECT_COMBO:
@@ -1123,12 +1132,13 @@ void nowbar_preferences::apply_settings() {
         int moodIconSel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_MOOD_ICON_COMBO), CB_GETCURSEL, 0, 0);
         cfg_nowbar_mood_icon_visible = (moodIconSel == 0) ? 1 : 0;
         
+        // Save stop icon visibility (0=Show, 1=Hidden in combobox -> config 1=Show, 0=Hidden)
+        int stopIconSel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_STOP_ICON_COMBO), CB_GETCURSEL, 0, 0);
+        cfg_nowbar_stop_icon_visible = (stopIconSel == 0) ? 1 : 0;
+        
         // Save miniplayer icon visibility (0=Show, 1=Hidden in combobox -> config 1=Show, 0=Hidden)
         int miniplayerIconSel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_MINIPLAYER_ICON_COMBO), CB_GETCURSEL, 0, 0);
         cfg_nowbar_miniplayer_icon_visible = (miniplayerIconSel == 0) ? 1 : 0;
-
-        int hoverCirclesSel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_HOVER_CIRCLES_COMBO), CB_GETCURSEL, 0, 0);
-        cfg_nowbar_hover_circles = (hoverCirclesSel == 0) ? 1 : 0;
 
         // Save alternate icons setting (0=Enabled, 1=Disabled in combobox -> config 1=Enabled, 0=Disabled)
         int alternateIconsSel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_ALTERNATE_ICONS_COMBO), CB_GETCURSEL, 0, 0);
@@ -1217,8 +1227,8 @@ void nowbar_preferences::reset_settings() {
             SendMessage(GetDlgItem(m_hwnd, IDC_COVER_MARGIN_COMBO), CB_SETCURSEL, 0, 0);
             SendMessage(GetDlgItem(m_hwnd, IDC_BAR_STYLE_COMBO), CB_SETCURSEL, 0, 0);
             SendMessage(GetDlgItem(m_hwnd, IDC_MOOD_ICON_COMBO), CB_SETCURSEL, 0, 0);
+            SendMessage(GetDlgItem(m_hwnd, IDC_STOP_ICON_COMBO), CB_SETCURSEL, 1, 0);  // Default: Hidden
             SendMessage(GetDlgItem(m_hwnd, IDC_MINIPLAYER_ICON_COMBO), CB_SETCURSEL, 0, 0);
-            SendMessage(GetDlgItem(m_hwnd, IDC_HOVER_CIRCLES_COMBO), CB_SETCURSEL, 0, 0);
             SendMessage(GetDlgItem(m_hwnd, IDC_ALTERNATE_ICONS_COMBO), CB_SETCURSEL, 1, 0);  // Default: Disabled
             SendMessage(GetDlgItem(m_hwnd, IDC_AUTOHIDE_CBUTTONS_COMBO), CB_SETCURSEL, 0, 0);  // Default: Yes
             SendMessage(GetDlgItem(m_hwnd, IDC_GLASS_EFFECT_COMBO), CB_SETCURSEL, 0, 0);  // Default: Disabled
