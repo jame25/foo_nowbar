@@ -45,6 +45,8 @@
 #define IDC_GLASS_EFFECT_COMBO     1129
 #define IDC_BACKGROUND_STYLE_LABEL 1130
 #define IDC_BACKGROUND_STYLE_COMBO 1131
+#define IDC_STOP_ICON_LABEL        1132
+#define IDC_STOP_ICON_COMBO        1133
 
 // Fonts tab controls
 #define IDC_FONTS_GROUP            1201
