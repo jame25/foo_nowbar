@@ -242,6 +242,32 @@ static cfg_string cfg_cbutton6_icon(
     ""  // Default: empty
 );
 
+// Custom Button Tooltip labels (user-friendly names for tooltips)
+static cfg_string cfg_cbutton1_label(
+    GUID{0xABCDEF60, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xF0}},
+    ""  // Default: empty (will show "Button #1")
+);
+static cfg_string cfg_cbutton2_label(
+    GUID{0xABCDEF61, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xF1}},
+    ""  // Default: empty (will show "Button #2")
+);
+static cfg_string cfg_cbutton3_label(
+    GUID{0xABCDEF62, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xF2}},
+    ""  // Default: empty (will show "Button #3")
+);
+static cfg_string cfg_cbutton4_label(
+    GUID{0xABCDEF63, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xF3}},
+    ""  // Default: empty (will show "Button #4")
+);
+static cfg_string cfg_cbutton5_label(
+    GUID{0xABCDEF64, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xF4}},
+    ""  // Default: empty (will show "Button #5")
+);
+static cfg_string cfg_cbutton6_label(
+    GUID{0xABCDEF65, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xF5}},
+    ""  // Default: empty (will show "Button #6")
+);
+
 // Configuration accessors
 int get_nowbar_theme_mode() {
     int mode = cfg_nowbar_theme_mode;
@@ -368,6 +394,23 @@ pfc::string8 get_nowbar_cbutton_icon_path(int button_index) {
         case 5: return cfg_cbutton6_icon.get();
         default: return pfc::string8();
     }
+}
+
+pfc::string8 get_nowbar_cbutton_label(int button_index) {
+    pfc::string8 label;
+    switch (button_index) {
+        case 0: label = cfg_cbutton1_label.get(); break;
+        case 1: label = cfg_cbutton2_label.get(); break;
+        case 2: label = cfg_cbutton3_label.get(); break;
+        case 3: label = cfg_cbutton4_label.get(); break;
+        case 4: label = cfg_cbutton5_label.get(); break;
+        case 5: label = cfg_cbutton6_label.get(); break;
+    }
+    // Return default "Button #N" if label is empty
+    if (label.is_empty()) {
+        label << "Button #" << (button_index + 1);
+    }
+    return label;
 }
 
 pfc::string8 get_nowbar_line1_format() {
@@ -726,6 +769,14 @@ void nowbar_preferences::switch_tab(int tab) {
     ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON4_ICON_LABEL), show_cbutton);
     ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON5_ICON_LABEL), show_cbutton);
     ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON6_ICON_LABEL), show_cbutton);
+    // Tooltip label controls
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON_LABEL_LABEL), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON1_LABEL), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON2_LABEL), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON3_LABEL), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON4_LABEL), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON5_LABEL), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON6_LABEL), show_cbutton);
     
     // Fonts tab controls
     BOOL show_fonts = (tab == 2) ? SW_SHOW : SW_HIDE;
@@ -902,6 +953,14 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         uSetDlgItemText(hwnd, IDC_CBUTTON5_ICON, cfg_cbutton5_icon);
         uSetDlgItemText(hwnd, IDC_CBUTTON6_ICON, cfg_cbutton6_icon);
         
+        // Initialize tooltip label edit boxes
+        uSetDlgItemText(hwnd, IDC_CBUTTON1_LABEL, cfg_cbutton1_label);
+        uSetDlgItemText(hwnd, IDC_CBUTTON2_LABEL, cfg_cbutton2_label);
+        uSetDlgItemText(hwnd, IDC_CBUTTON3_LABEL, cfg_cbutton3_label);
+        uSetDlgItemText(hwnd, IDC_CBUTTON4_LABEL, cfg_cbutton4_label);
+        uSetDlgItemText(hwnd, IDC_CBUTTON5_LABEL, cfg_cbutton5_label);
+        uSetDlgItemText(hwnd, IDC_CBUTTON6_LABEL, cfg_cbutton6_label);
+        
         // Update path control states based on action selection
         update_all_cbutton_path_states(hwnd);
         
@@ -1013,6 +1072,18 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         case IDC_CBUTTON4_ICON:
         case IDC_CBUTTON5_ICON:
         case IDC_CBUTTON6_ICON:
+            if (HIWORD(wp) == EN_CHANGE) {
+                p_this->on_changed();
+            }
+            break;
+
+        // Tooltip label edit changes
+        case IDC_CBUTTON1_LABEL:
+        case IDC_CBUTTON2_LABEL:
+        case IDC_CBUTTON3_LABEL:
+        case IDC_CBUTTON4_LABEL:
+        case IDC_CBUTTON5_LABEL:
+        case IDC_CBUTTON6_LABEL:
             if (HIWORD(wp) == EN_CHANGE) {
                 p_this->on_changed();
             }
@@ -1199,6 +1270,21 @@ void nowbar_preferences::apply_settings() {
         cfg_cbutton5_icon = icon_path;
         uGetDlgItemText(m_hwnd, IDC_CBUTTON6_ICON, icon_path);
         cfg_cbutton6_icon = icon_path;
+        
+        // Save Custom Button tooltip labels
+        pfc::string8 label;
+        uGetDlgItemText(m_hwnd, IDC_CBUTTON1_LABEL, label);
+        cfg_cbutton1_label = label;
+        uGetDlgItemText(m_hwnd, IDC_CBUTTON2_LABEL, label);
+        cfg_cbutton2_label = label;
+        uGetDlgItemText(m_hwnd, IDC_CBUTTON3_LABEL, label);
+        cfg_cbutton3_label = label;
+        uGetDlgItemText(m_hwnd, IDC_CBUTTON4_LABEL, label);
+        cfg_cbutton4_label = label;
+        uGetDlgItemText(m_hwnd, IDC_CBUTTON5_LABEL, label);
+        cfg_cbutton5_label = label;
+        uGetDlgItemText(m_hwnd, IDC_CBUTTON6_LABEL, label);
+        cfg_cbutton6_label = label;
 
         // Notify all registered instances to update
         nowbar::ControlPanelCore::notify_all_settings_changed();
