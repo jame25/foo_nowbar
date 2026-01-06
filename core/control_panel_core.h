@@ -215,6 +215,10 @@ private:
     bool m_miniplayer_active = false;  // MiniPlayer enabled state for icon color
     bool m_mood_active = false;  // MOOD tag state for heart icon color
     
+    // Native Windows tooltip control for custom buttons
+    HWND m_tooltip_hwnd = nullptr;
+    int m_tooltip_button_index = -1;  // Currently tracked button (-1 = none)
+    
     // Seekbar tooltip
     int m_seekbar_hover_x = 0;      // Current X position on seekbar (for tooltip)
     double m_preview_time = 0.0;    // Preview time at cursor position
