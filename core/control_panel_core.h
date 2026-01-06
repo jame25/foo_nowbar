@@ -272,6 +272,14 @@ private:
     std::unique_ptr<Gdiplus::Bitmap> m_blurred_artwork;
     SIZE m_blurred_artwork_size = {0, 0};  // Size the blur was created for
     
+    // Background transition animation
+    std::unique_ptr<Gdiplus::Bitmap> m_prev_background;  // Cached previous background for crossfade
+    SIZE m_prev_background_size = {0, 0};  // Size of cached background
+    int m_prev_bg_style = -1;  // Previous background style to detect changes
+    bool m_bg_transition_active = false;  // Animation in progress
+    std::chrono::steady_clock::time_point m_bg_transition_start_time;
+    static constexpr float BG_TRANSITION_DURATION_MS = 800.0f;  // Crossfade duration
+    
     // Fonts
     std::unique_ptr<Gdiplus::Font> m_font_title;
     std::unique_ptr<Gdiplus::Font> m_font_artist;
