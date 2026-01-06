@@ -546,6 +546,94 @@ bool execute_fb2k_action_by_path(const char* path) {
         }
     }
 
+    // Main menu command not found - try context menu commands
+    // Get selected tracks from the active playlist
+    auto pm = playlist_manager::get();
+    metadb_handle_list tracks;
+    
+    t_size active_playlist = pm->get_active_playlist();
+    if (active_playlist != pfc_infinite) {
+        // Get all selected items, or just the focused item if nothing selected
+        bit_array_bittable selection(pm->playlist_get_item_count(active_playlist));
+        pm->playlist_get_selection_mask(active_playlist, selection);
+        
+        bool has_selection = false;
+        for (t_size i = 0; i < pm->playlist_get_item_count(active_playlist); i++) {
+            if (selection.get(i)) {
+                has_selection = true;
+                break;
+            }
+        }
+        
+        if (has_selection) {
+            pm->playlist_get_selected_items(active_playlist, tracks);
+        } else {
+            // No selection - use focused item
+            t_size focus = pm->playlist_get_focus_item(active_playlist);
+            if (focus != pfc_infinite) {
+                metadb_handle_ptr track;
+                if (pm->playlist_get_item_handle(track, active_playlist, focus)) {
+                    tracks.add_item(track);
+                }
+            }
+        }
+    }
+    
+    if (tracks.get_count() == 0) {
+        return false;  // No tracks to operate on
+    }
+    
+    // Create context menu manager and search for the command
+    contextmenu_manager::ptr cm;
+    contextmenu_manager::g_create(cm);
+    cm->init_context(tracks, contextmenu_manager::flag_show_shortcuts);
+    
+    // Recursive function to search context menu nodes
+    std::function<bool(contextmenu_node*, pfc::string8)> search_context_node;
+    search_context_node = [&](contextmenu_node* node, pfc::string8 parent_path) -> bool {
+        if (!node) return false;
+        
+        t_size child_count = node->get_num_children();
+        for (t_size i = 0; i < child_count; i++) {
+            contextmenu_node* child = node->get_child(i);
+            if (!child) continue;
+            
+            // Get node name
+            const char* child_name = child->get_name();
+            if (!child_name) continue;
+            
+            // Skip separators
+            if (child->get_type() == contextmenu_item_node::type_separator) continue;
+            
+            // Build full path for this node
+            pfc::string8 full_path;
+            if (!parent_path.is_empty()) {
+                full_path << parent_path << "/";
+            }
+            full_path << child_name;
+            
+            if (child->get_type() == contextmenu_item_node::type_command) {
+                // Check if this matches our target path
+                if (stricmp_utf8(full_path.c_str(), target_path.c_str()) == 0) {
+                    child->execute();
+                    return true;
+                }
+            } else if (child->get_type() == contextmenu_item_node::type_group) {
+                // Recurse into submenu
+                if (search_context_node(child, full_path)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    };
+    
+    // Start search from root
+    contextmenu_node* root = cm->get_root();
+    if (root && search_context_node(root, "")) {
+        return true;
+    }
+    
     return false;
 }
 
