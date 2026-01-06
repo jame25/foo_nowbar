@@ -110,6 +110,12 @@ ControlPanelCore::ControlPanelCore() {
 }
 
 ControlPanelCore::~ControlPanelCore() {
+  // Destroy tooltip control
+  if (m_tooltip_hwnd) {
+    DestroyWindow(m_tooltip_hwnd);
+    m_tooltip_hwnd = nullptr;
+  }
+  
   unregister_instance(this);
   PlaybackStateManager::get().unregister_callback(this);
 }
@@ -126,6 +132,34 @@ void ControlPanelCore::initialize(HWND hwnd) {
   // Scale metrics
   m_metrics = LayoutMetrics();
   m_metrics.scale(m_dpi_scale);
+
+  // Create Windows tooltip control for custom buttons
+  // TTS_NOPREFIX - don't strip ampersands, TTS_ALWAYSTIP - show even when window is inactive
+  m_tooltip_hwnd = CreateWindowExW(
+      WS_EX_TOPMOST,
+      TOOLTIPS_CLASSW,
+      NULL,
+      WS_POPUP | TTS_NOPREFIX | TTS_ALWAYSTIP,
+      CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
+      hwnd,
+      NULL,
+      NULL,
+      NULL);
+  
+  if (m_tooltip_hwnd) {
+    // Set maximum tooltip width to enable multi-line tooltips if needed
+    SendMessage(m_tooltip_hwnd, TTM_SETMAXTIPWIDTH, 0, 300);
+    
+    // Add a single tool for the entire window - we'll update text dynamically
+    TOOLINFOW ti = {};
+    ti.cbSize = sizeof(TOOLINFOW);
+    ti.uFlags = TTF_SUBCLASS | TTF_IDISHWND;
+    ti.hwnd = hwnd;
+    ti.uId = (UINT_PTR)hwnd;
+    ti.lpszText = LPSTR_TEXTCALLBACKW;  // We'll provide text via notification
+    GetClientRect(hwnd, &ti.rect);
+    SendMessage(m_tooltip_hwnd, TTM_ADDTOOLW, 0, (LPARAM)&ti);
+  }
 
   // Apply theme mode and fonts from preferences
   on_settings_changed();
@@ -1361,62 +1395,6 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
   draw_cbutton(4, m_rect_cbutton5, HitRegion::CButton5);
   draw_cbutton(5, m_rect_cbutton6, HitRegion::CButton6);
   
-  // Draw tooltip for hovered custom button
-  int tooltip_button_index = -1;
-  RECT tooltip_button_rect = {};
-  switch (m_hover_region) {
-    case HitRegion::CButton1: tooltip_button_index = 0; tooltip_button_rect = m_rect_cbutton1; break;
-    case HitRegion::CButton2: tooltip_button_index = 1; tooltip_button_rect = m_rect_cbutton2; break;
-    case HitRegion::CButton3: tooltip_button_index = 2; tooltip_button_rect = m_rect_cbutton3; break;
-    case HitRegion::CButton4: tooltip_button_index = 3; tooltip_button_rect = m_rect_cbutton4; break;
-    case HitRegion::CButton5: tooltip_button_index = 4; tooltip_button_rect = m_rect_cbutton5; break;
-    case HitRegion::CButton6: tooltip_button_index = 5; tooltip_button_rect = m_rect_cbutton6; break;
-    default: break;
-  }
-  
-  if (tooltip_button_index >= 0 && get_nowbar_cbutton_enabled(tooltip_button_index)) {
-    // Get the tooltip label
-    pfc::string8 label = get_nowbar_cbutton_label(tooltip_button_index);
-    std::wstring labelW = pfc::stringcvt::string_wide_from_utf8(label.c_str()).get_ptr();
-    
-    // Measure text size
-    Gdiplus::Font tooltipFont(L"Segoe UI", 10.0f * m_dpi_scale, Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
-    Gdiplus::RectF textBounds;
-    g.MeasureString(labelW.c_str(), -1, &tooltipFont, Gdiplus::PointF(0, 0), &textBounds);
-    
-    // Tooltip dimensions with padding
-    int padding_h = static_cast<int>(6 * m_dpi_scale);
-    int padding_v = static_cast<int>(3 * m_dpi_scale);
-    int tooltip_w = static_cast<int>(textBounds.Width) + padding_h * 2;
-    int tooltip_h = static_cast<int>(textBounds.Height) + padding_v * 2;
-    
-    // Position: centered above the button
-    int button_center_x = (tooltip_button_rect.left + tooltip_button_rect.right) / 2;
-    int tooltip_x = button_center_x - tooltip_w / 2;
-    int tooltip_y = tooltip_button_rect.top - tooltip_h - static_cast<int>(6 * m_dpi_scale);
-    
-    // Draw tooltip background
-    Gdiplus::Color bgColor = m_dark_mode ? Gdiplus::Color(220, 60, 60, 60) : Gdiplus::Color(220, 40, 40, 40);
-    Gdiplus::SolidBrush bgBrush(bgColor);
-    int corner = static_cast<int>(4 * m_dpi_scale);
-    Gdiplus::GraphicsPath tooltipPath;
-    tooltipPath.AddArc(tooltip_x, tooltip_y, corner * 2, corner * 2, 180, 90);
-    tooltipPath.AddArc(tooltip_x + tooltip_w - corner * 2, tooltip_y, corner * 2, corner * 2, 270, 90);
-    tooltipPath.AddArc(tooltip_x + tooltip_w - corner * 2, tooltip_y + tooltip_h - corner * 2, corner * 2, corner * 2, 0, 90);
-    tooltipPath.AddArc(tooltip_x, tooltip_y + tooltip_h - corner * 2, corner * 2, corner * 2, 90, 90);
-    tooltipPath.CloseFigure();
-    g.FillPath(&bgBrush, &tooltipPath);
-    
-    // Draw tooltip text
-    Gdiplus::SolidBrush textBrush(Gdiplus::Color(255, 255, 255, 255));
-    Gdiplus::StringFormat sf;
-    sf.SetAlignment(Gdiplus::StringAlignmentCenter);
-    sf.SetLineAlignment(Gdiplus::StringAlignmentCenter);
-    Gdiplus::RectF textRect(static_cast<float>(tooltip_x), static_cast<float>(tooltip_y),
-                            static_cast<float>(tooltip_w), static_cast<float>(tooltip_h));
-    g.DrawString(labelW.c_str(), -1, &tooltipFont, textRect, &sf, &textBrush);
-  }
-  
   // Continue animation loop if fade is in progress
   if (m_cbutton_fade_active) {
     invalidate();
@@ -1867,6 +1845,48 @@ void ControlPanelCore::on_mouse_move(int x, int y) {
     m_preview_time = pos * m_state.track_length;
     invalidate();  // Update tooltip
   }
+  
+  // Update native tooltip for custom buttons
+  if (m_tooltip_hwnd) {
+    int new_tooltip_button = -1;
+    switch (new_region) {
+      case HitRegion::CButton1: new_tooltip_button = 0; break;
+      case HitRegion::CButton2: new_tooltip_button = 1; break;
+      case HitRegion::CButton3: new_tooltip_button = 2; break;
+      case HitRegion::CButton4: new_tooltip_button = 3; break;
+      case HitRegion::CButton5: new_tooltip_button = 4; break;
+      case HitRegion::CButton6: new_tooltip_button = 5; break;
+      default: break;
+    }
+    
+    // Only update if hovering over an enabled custom button
+    if (new_tooltip_button >= 0 && get_nowbar_cbutton_enabled(new_tooltip_button)) {
+      if (new_tooltip_button != m_tooltip_button_index) {
+        m_tooltip_button_index = new_tooltip_button;
+        
+        // Get the tooltip label
+        pfc::string8 label = get_nowbar_cbutton_label(new_tooltip_button);
+        std::wstring labelW = pfc::stringcvt::string_wide_from_utf8(label.c_str()).get_ptr();
+        
+        // Update tooltip text
+        TOOLINFOW ti = {};
+        ti.cbSize = sizeof(TOOLINFOW);
+        ti.hwnd = m_hwnd;
+        ti.uId = (UINT_PTR)m_hwnd;
+        ti.lpszText = const_cast<LPWSTR>(labelW.c_str());
+        SendMessage(m_tooltip_hwnd, TTM_UPDATETIPTEXTW, 0, (LPARAM)&ti);
+        
+        // Activate the tooltip
+        SendMessage(m_tooltip_hwnd, TTM_ACTIVATE, TRUE, 0);
+      }
+    } else {
+      // Not over a custom button - hide tooltip
+      if (m_tooltip_button_index != -1) {
+        m_tooltip_button_index = -1;
+        SendMessage(m_tooltip_hwnd, TTM_ACTIVATE, FALSE, 0);
+      }
+    }
+  }
 }
 
 void ControlPanelCore::on_mouse_leave() {
@@ -1874,6 +1894,12 @@ void ControlPanelCore::on_mouse_leave() {
   if (m_hover_region != HitRegion::None) {
     m_hover_region = HitRegion::None;
     invalidate();
+  }
+  
+  // Hide tooltip when mouse leaves the panel
+  if (m_tooltip_hwnd && m_tooltip_button_index != -1) {
+    m_tooltip_button_index = -1;
+    SendMessage(m_tooltip_hwnd, TTM_ACTIVATE, FALSE, 0);
   }
 }
 
@@ -1987,27 +2013,34 @@ void ControlPanelCore::on_lbutton_up(int x, int y) {
       pfc::string8 path = get_nowbar_cbutton_path(button_index);
       
       if (action == 1 && !path.is_empty()) {
-        // Open URL with title formatting support
+        // Open URL with title formatting support - use selected track from playlist
         pfc::string8 evaluated_url;
         
         // Check if path contains title formatting (has % character)
         if (path.find_first('%') != pfc::infinite_size) {
-          // Has title formatting - evaluate it
-          auto pc = playback_control::get();
+          // Has title formatting - evaluate it using selected track
           metadb_handle_ptr track;
+          bool has_track = false;
           
-          if (pc->get_now_playing(track) && track.is_valid()) {
-            service_ptr_t<titleformat_object> script;
-            titleformat_compiler::get()->compile_safe(script, path);
-            if (script.is_valid()) {
-              track->format_title(nullptr, evaluated_url, script, nullptr);
+          // Get the focused/selected track from the active playlist
+          auto pm = playlist_manager::get();
+          t_size active_playlist = pm->get_active_playlist();
+          if (active_playlist != pfc_infinite) {
+            t_size focus = pm->playlist_get_focus_item(active_playlist);
+            if (focus != pfc_infinite) {
+              has_track = pm->playlist_get_item_handle(track, active_playlist, focus);
             }
-          } else {
-            service_ptr_t<titleformat_object> script;
-            titleformat_compiler::get()->compile_safe(script, path);
-            if (script.is_valid()) {
-              pc->playback_format_title(nullptr, evaluated_url, script, nullptr, playback_control::display_level_all);
-            }
+          }
+          
+          service_ptr_t<titleformat_object> script;
+          titleformat_compiler::get()->compile_safe(script, path);
+          
+          if (has_track && track.is_valid() && script.is_valid()) {
+            track->format_title(nullptr, evaluated_url, script, nullptr);
+          } else if (script.is_valid()) {
+            // Fallback to playing track if no selection
+            auto pc = playback_control::get();
+            pc->playback_format_title(nullptr, evaluated_url, script, nullptr, playback_control::display_level_all);
           }
         } else {
           // No title formatting - use path directly as URL
@@ -2019,25 +2052,34 @@ void ControlPanelCore::on_lbutton_up(int x, int y) {
           ShellExecuteW(nullptr, L"open", wideUrl, nullptr, nullptr, SW_SHOWNORMAL);
         }
       } else if (action == 2 && !path.is_empty()) {
-        // Run Executable with file path argument
+        // Run Executable with file path argument - use selected track from playlist
         pfc::string8 exe_path;
+        
+        // Get the focused/selected track from the active playlist first
+        auto pm = playlist_manager::get();
+        metadb_handle_ptr track;
+        bool has_track = false;
+        
+        t_size active_playlist = pm->get_active_playlist();
+        if (active_playlist != pfc_infinite) {
+          t_size focus = pm->playlist_get_focus_item(active_playlist);
+          if (focus != pfc_infinite) {
+            has_track = pm->playlist_get_item_handle(track, active_playlist, focus);
+          }
+        }
         
         // Check if path contains title formatting (has % character)
         if (path.find_first('%') != pfc::infinite_size) {
-          // Has title formatting - evaluate it
-          auto pc = playback_control::get();
-          metadb_handle_ptr track;
+          // Has title formatting - evaluate it using selected track
           service_ptr_t<titleformat_object> script;
           titleformat_compiler::get()->compile_safe(script, path);
           
-          if (pc->get_now_playing(track) && track.is_valid()) {
-            if (script.is_valid()) {
-              track->format_title(nullptr, exe_path, script, nullptr);
-            }
-          } else {
-            if (script.is_valid()) {
-              pc->playback_format_title(nullptr, exe_path, script, nullptr, playback_control::display_level_all);
-            }
+          if (has_track && track.is_valid() && script.is_valid()) {
+            track->format_title(nullptr, exe_path, script, nullptr);
+          } else if (script.is_valid()) {
+            // Fallback to playing track if no selection
+            auto pc = playback_control::get();
+            pc->playback_format_title(nullptr, exe_path, script, nullptr, playback_control::display_level_all);
           }
         } else {
           // No title formatting - use path directly as executable
@@ -2045,18 +2087,6 @@ void ControlPanelCore::on_lbutton_up(int x, int y) {
         }
         
         if (!exe_path.is_empty()) {
-          // Get the focused/selected track from the active playlist (not the playing track)
-          auto pm = playlist_manager::get();
-          metadb_handle_ptr track;
-          bool has_track = false;
-          
-          t_size active_playlist = pm->get_active_playlist();
-          if (active_playlist != pfc_infinite) {
-            t_size focus = pm->playlist_get_focus_item(active_playlist);
-            if (focus != pfc_infinite) {
-              has_track = pm->playlist_get_item_handle(track, active_playlist, focus);
-            }
-          }
           
           if (has_track && track.is_valid()) {
             const char* file_path = track->get_path();
