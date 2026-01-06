@@ -928,57 +928,210 @@ void ControlPanelCore::draw_background(Gdiplus::Graphics &g, const RECT &rect) {
   int height = rect.bottom - rect.top;
   Gdiplus::Rect r(rect.left, rect.top, width, height);
   
-  // Check if we should use artwork-based gradient background
   int bg_style = get_nowbar_background_style();
-  if (bg_style == 1 && m_artwork_colors_valid) {
-    // Artwork Colors mode: draw horizontal gradient from primary to secondary
-    Gdiplus::LinearGradientBrush gradientBrush(
-        Gdiplus::Point(rect.left, 0),
-        Gdiplus::Point(rect.right, 0),
-        m_artwork_color_secondary,  // Start with darker color on left
-        m_artwork_color_primary     // Lighter color on right (near artwork)
-    );
-    g.FillRectangle(&gradientBrush, r);
+  
+  // Detect if background style or content has changed (needs transition)
+  bool style_changed = (m_prev_bg_style != -1 && m_prev_bg_style != bg_style);
+  bool size_changed = (m_prev_background && 
+                       (m_prev_background_size.cx != width || m_prev_background_size.cy != height));
+  
+  // Start transition if style changed and we have a cached previous background
+  if (style_changed && m_prev_background && !size_changed) {
+    m_bg_transition_active = true;
+    m_bg_transition_start_time = std::chrono::steady_clock::now();
+  }
+  
+  // If size changed, invalidate cache (can't crossfade different sizes)
+  if (size_changed) {
+    m_prev_background.reset();
+    m_bg_transition_active = false;
+  }
+  
+  // Calculate transition progress if active
+  float transition_alpha = 1.0f;  // 1.0 = fully new background
+  if (m_bg_transition_active) {
+    auto now = std::chrono::steady_clock::now();
+    float elapsed_ms = std::chrono::duration<float, std::milli>(now - m_bg_transition_start_time).count();
+    float progress = std::min(1.0f, elapsed_ms / BG_TRANSITION_DURATION_MS);
     
-    // Add semi-transparent dark overlay for text readability
-    // More overlay in dark mode, less in light mode
-    BYTE overlay_alpha = m_dark_mode ? 120 : 80;
-    Gdiplus::Color overlayColor(overlay_alpha, 0, 0, 0);
-    Gdiplus::SolidBrush overlayBrush(overlayColor);
-    g.FillRectangle(&overlayBrush, r);
-  } else if (bg_style == 2 && m_artwork_bitmap) {
-    // Blurred Artwork mode: lazily create blur at exact panel size (no stretching)
-    // Regenerate if size has changed
-    if (!m_blurred_artwork || 
-        m_blurred_artwork_size.cx != width || 
-        m_blurred_artwork_size.cy != height) {
-      create_blurred_artwork(width, height);
+    // Ease-out interpolation for smooth deceleration
+    float ease = 1.0f - (1.0f - progress) * (1.0f - progress);
+    transition_alpha = ease;
+    
+    if (progress >= 1.0f) {
+      m_bg_transition_active = false;
+    }
+  }
+  
+  // Lambda to draw current background content to a Graphics context
+  auto draw_current_bg = [&](Gdiplus::Graphics& target) {
+    if (bg_style == 1 && m_artwork_colors_valid) {
+      // Artwork Colors mode: horizontal gradient
+      Gdiplus::LinearGradientBrush gradientBrush(
+          Gdiplus::Point(rect.left, 0),
+          Gdiplus::Point(rect.right, 0),
+          m_artwork_color_secondary,
+          m_artwork_color_primary
+      );
+      target.FillRectangle(&gradientBrush, r);
+      
+      BYTE overlay_alpha = m_dark_mode ? 120 : 80;
+      Gdiplus::Color overlayColor(overlay_alpha, 0, 0, 0);
+      Gdiplus::SolidBrush overlayBrush(overlayColor);
+      target.FillRectangle(&overlayBrush, r);
+    } else if (bg_style == 2 && m_artwork_bitmap) {
+      // Blurred Artwork mode
+      if (!m_blurred_artwork || 
+          m_blurred_artwork_size.cx != width || 
+          m_blurred_artwork_size.cy != height) {
+        const_cast<ControlPanelCore*>(this)->create_blurred_artwork(width, height);
+      }
+      
+      if (m_blurred_artwork) {
+        target.DrawImage(m_blurred_artwork.get(), r.X, r.Y);
+      }
+      
+      BYTE overlay_alpha = m_dark_mode ? 140 : 180;
+      Gdiplus::Color overlayColor(overlay_alpha, 0, 0, 0);
+      Gdiplus::SolidBrush overlayBrush(overlayColor);
+      target.FillRectangle(&overlayBrush, r);
+    } else if (m_glass_effect_enabled) {
+      // Glass effect
+      BYTE glass_alpha = m_dark_mode ? 150 : 200;
+      Gdiplus::Color glassColor(glass_alpha, m_bg_color.GetR(), m_bg_color.GetG(), m_bg_color.GetB());
+      Gdiplus::SolidBrush brush(glassColor);
+      target.FillRectangle(&brush, r);
+    } else {
+      // Solid background
+      Gdiplus::SolidBrush brush(m_bg_color);
+      target.FillRectangle(&brush, r);
+    }
+  };
+  
+  // Draw with transition if active
+  if (m_bg_transition_active && m_prev_background && transition_alpha < 1.0f) {
+    // Draw cached previous background first
+    g.DrawImage(m_prev_background.get(), r.X, r.Y);
+    
+    // Draw new background to temporary bitmap with alpha
+    std::unique_ptr<Gdiplus::Bitmap> new_bg(new Gdiplus::Bitmap(width, height, PixelFormat32bppARGB));
+    {
+      Gdiplus::Graphics temp_g(new_bg.get());
+      temp_g.SetSmoothingMode(Gdiplus::SmoothingModeHighQuality);
+      
+      // Create rect at origin for temp bitmap
+      RECT temp_rect = {0, 0, width, height};
+      Gdiplus::Rect temp_r(0, 0, width, height);
+      
+      // Draw current background content to temp
+      if (bg_style == 1 && m_artwork_colors_valid) {
+        Gdiplus::LinearGradientBrush gradientBrush(
+            Gdiplus::Point(0, 0),
+            Gdiplus::Point(width, 0),
+            m_artwork_color_secondary,
+            m_artwork_color_primary
+        );
+        temp_g.FillRectangle(&gradientBrush, temp_r);
+        
+        BYTE overlay_alpha = m_dark_mode ? 120 : 80;
+        Gdiplus::Color overlayColor(overlay_alpha, 0, 0, 0);
+        Gdiplus::SolidBrush overlayBrush(overlayColor);
+        temp_g.FillRectangle(&overlayBrush, temp_r);
+      } else if (bg_style == 2 && m_artwork_bitmap) {
+        if (!m_blurred_artwork || 
+            m_blurred_artwork_size.cx != width || 
+            m_blurred_artwork_size.cy != height) {
+          create_blurred_artwork(width, height);
+        }
+        if (m_blurred_artwork) {
+          temp_g.DrawImage(m_blurred_artwork.get(), 0, 0);
+        }
+        BYTE overlay_alpha = m_dark_mode ? 140 : 180;
+        Gdiplus::Color overlayColor(overlay_alpha, 0, 0, 0);
+        Gdiplus::SolidBrush overlayBrush(overlayColor);
+        temp_g.FillRectangle(&overlayBrush, temp_r);
+      } else if (m_glass_effect_enabled) {
+        BYTE glass_alpha = m_dark_mode ? 150 : 200;
+        Gdiplus::Color glassColor(glass_alpha, m_bg_color.GetR(), m_bg_color.GetG(), m_bg_color.GetB());
+        Gdiplus::SolidBrush brush(glassColor);
+        temp_g.FillRectangle(&brush, temp_r);
+      } else {
+        Gdiplus::SolidBrush brush(m_bg_color);
+        temp_g.FillRectangle(&brush, temp_r);
+      }
     }
     
-    if (m_blurred_artwork) {
-      // Draw 1:1 at exact size - no stretching or scaling
-      g.DrawImage(m_blurred_artwork.get(), r.X, r.Y);
-    }
+    // Draw new background with alpha blending
+    Gdiplus::ColorMatrix cm = {
+      1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+      0.0f, 1.0f, 0.0f, 0.0f, 0.0f,
+      0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+      0.0f, 0.0f, 0.0f, transition_alpha, 0.0f,
+      0.0f, 0.0f, 0.0f, 0.0f, 1.0f
+    };
+    Gdiplus::ImageAttributes ia;
+    ia.SetColorMatrix(&cm);
     
-    // Add semi-transparent dark overlay for text readability
-    // Light mode needs more overlay since text is black
-    BYTE overlay_alpha = m_dark_mode ? 140 : 180;
-    Gdiplus::Color overlayColor(overlay_alpha, 0, 0, 0);
-    Gdiplus::SolidBrush overlayBrush(overlayColor);
-    g.FillRectangle(&overlayBrush, r);
-  } else if (m_glass_effect_enabled) {
-    // Glass effect: use semi-transparent background
-    // Use different alpha values for dark vs light mode:
-    // - Dark mode: lower alpha (150 ~59%) for more visible backdrop blur
-    // - Light mode: higher alpha (200 ~78%) for better readability
-    BYTE glass_alpha = m_dark_mode ? 150 : 200;
-    Gdiplus::Color glassColor(glass_alpha, m_bg_color.GetR(), m_bg_color.GetG(), m_bg_color.GetB());
-    Gdiplus::SolidBrush brush(glassColor);
-    g.FillRectangle(&brush, r);
+    g.DrawImage(new_bg.get(), r, 0, 0, width, height, Gdiplus::UnitPixel, &ia);
+    
+    // Continue animation
+    invalidate();
   } else {
-    // Normal: opaque solid background
-    Gdiplus::SolidBrush brush(m_bg_color);
-    g.FillRectangle(&brush, r);
+    // No transition - draw directly
+    draw_current_bg(g);
+  }
+  
+  // Cache current background for next transition (if not already transitioning)
+  // Only cache when stable (not during transition)
+  if (!m_bg_transition_active) {
+    // Create or resize cache bitmap
+    if (!m_prev_background || 
+        m_prev_background_size.cx != width || 
+        m_prev_background_size.cy != height) {
+      m_prev_background.reset(new Gdiplus::Bitmap(width, height, PixelFormat32bppARGB));
+      m_prev_background_size = {(LONG)width, (LONG)height};
+    }
+    
+    // Render current background to cache
+    {
+      Gdiplus::Graphics cache_g(m_prev_background.get());
+      cache_g.SetSmoothingMode(Gdiplus::SmoothingModeHighQuality);
+      
+      Gdiplus::Rect cache_r(0, 0, width, height);
+      
+      if (bg_style == 1 && m_artwork_colors_valid) {
+        Gdiplus::LinearGradientBrush gradientBrush(
+            Gdiplus::Point(0, 0),
+            Gdiplus::Point(width, 0),
+            m_artwork_color_secondary,
+            m_artwork_color_primary
+        );
+        cache_g.FillRectangle(&gradientBrush, cache_r);
+        
+        BYTE overlay_alpha = m_dark_mode ? 120 : 80;
+        Gdiplus::Color overlayColor(overlay_alpha, 0, 0, 0);
+        Gdiplus::SolidBrush overlayBrush(overlayColor);
+        cache_g.FillRectangle(&overlayBrush, cache_r);
+      } else if (bg_style == 2 && m_artwork_bitmap) {
+        if (m_blurred_artwork) {
+          cache_g.DrawImage(m_blurred_artwork.get(), 0, 0);
+        }
+        BYTE overlay_alpha = m_dark_mode ? 140 : 180;
+        Gdiplus::Color overlayColor(overlay_alpha, 0, 0, 0);
+        Gdiplus::SolidBrush overlayBrush(overlayColor);
+        cache_g.FillRectangle(&overlayBrush, cache_r);
+      } else if (m_glass_effect_enabled) {
+        BYTE glass_alpha = m_dark_mode ? 150 : 200;
+        Gdiplus::Color glassColor(glass_alpha, m_bg_color.GetR(), m_bg_color.GetG(), m_bg_color.GetB());
+        Gdiplus::SolidBrush brush(glassColor);
+        cache_g.FillRectangle(&brush, cache_r);
+      } else {
+        Gdiplus::SolidBrush brush(m_bg_color);
+        cache_g.FillRectangle(&brush, cache_r);
+      }
+    }
+    
+    m_prev_bg_style = bg_style;
   }
 }
 
@@ -2587,6 +2740,16 @@ void ControlPanelCore::set_artwork(album_art_data_ptr data) {
     }
   }
 
+  // Trigger background transition for artwork-based backgrounds
+  int bg_style = get_nowbar_background_style();
+  if (bg_style == 1 || bg_style == 2) {
+    // Artwork Colors or Blurred Artwork - start crossfade transition
+    if (m_prev_background) {
+      m_bg_transition_active = true;
+      m_bg_transition_start_time = std::chrono::steady_clock::now();
+    }
+  }
+
   invalidate();
 }
 
@@ -3564,9 +3727,26 @@ void ControlPanelCore::load_custom_icon(int button_index) {
       
       // Select the best frame
       bitmap->SelectActiveFrame(&Gdiplus::FrameDimensionResolution, bestFrame);
+      m_cbutton_icons[button_index].reset(bitmap);
+    } else {
+      // For PNG and other single-frame formats, FromFile() may leave the bitmap 
+      // in a lazy-loaded state. Force full loading by creating a copy.
+      // This ensures the bitmap is fully materialized and displays immediately.
+      UINT w = bitmap->GetWidth();
+      UINT h = bitmap->GetHeight();
+      
+      Gdiplus::Bitmap* copy = new Gdiplus::Bitmap(w, h, PixelFormat32bppARGB);
+      if (copy && copy->GetLastStatus() == Gdiplus::Ok) {
+        Gdiplus::Graphics gfx(copy);
+        gfx.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+        gfx.DrawImage(bitmap, 0, 0, w, h);
+        delete bitmap;
+        m_cbutton_icons[button_index].reset(copy);
+      } else {
+        delete copy;
+        m_cbutton_icons[button_index].reset(bitmap);
+      }
     }
-    
-    m_cbutton_icons[button_index].reset(bitmap);
   } else {
     // Load failed, cleanup and use default
     delete bitmap;
