@@ -26,27 +26,34 @@ static void execute_cbutton_action(int button_index) {
     pfc::string8 path = get_nowbar_cbutton_path(button_index);
     
     if (action == 1 && !path.is_empty()) {
-        // Open URL with title formatting support
+        // Open URL with title formatting support - use selected track from playlist
         pfc::string8 evaluated_url;
         
         // Check if path contains title formatting (has % character)
         if (path.find_first('%') != pfc::infinite_size) {
-            // Has title formatting - evaluate it
-            auto pc = playback_control::get();
+            // Has title formatting - evaluate it using selected track
             metadb_handle_ptr track;
+            bool has_track = false;
             
-            if (pc->get_now_playing(track) && track.is_valid()) {
-                service_ptr_t<titleformat_object> script;
-                titleformat_compiler::get()->compile_safe(script, path);
-                if (script.is_valid()) {
-                    track->format_title(nullptr, evaluated_url, script, nullptr);
+            // Get the focused/selected track from the active playlist
+            auto pm = playlist_manager::get();
+            t_size active_playlist = pm->get_active_playlist();
+            if (active_playlist != pfc_infinite) {
+                t_size focus = pm->playlist_get_focus_item(active_playlist);
+                if (focus != pfc_infinite) {
+                    has_track = pm->playlist_get_item_handle(track, active_playlist, focus);
                 }
-            } else {
-                service_ptr_t<titleformat_object> script;
-                titleformat_compiler::get()->compile_safe(script, path);
-                if (script.is_valid()) {
-                    pc->playback_format_title(nullptr, evaluated_url, script, nullptr, playback_control::display_level_all);
-                }
+            }
+            
+            service_ptr_t<titleformat_object> script;
+            titleformat_compiler::get()->compile_safe(script, path);
+            
+            if (has_track && track.is_valid() && script.is_valid()) {
+                track->format_title(nullptr, evaluated_url, script, nullptr);
+            } else if (script.is_valid()) {
+                // Fallback to playing track if no selection
+                auto pc = playback_control::get();
+                pc->playback_format_title(nullptr, evaluated_url, script, nullptr, playback_control::display_level_all);
             }
         } else {
             // No title formatting - use path directly as URL
@@ -58,25 +65,34 @@ static void execute_cbutton_action(int button_index) {
             ShellExecuteW(nullptr, L"open", wideUrl, nullptr, nullptr, SW_SHOWNORMAL);
         }
     } else if (action == 2 && !path.is_empty()) {
-        // Run Executable with file path argument
+        // Run Executable with file path argument - use selected track from playlist
         pfc::string8 exe_path;
+        
+        // Get the focused/selected track from the active playlist first
+        auto pm = playlist_manager::get();
+        metadb_handle_ptr track;
+        bool has_track = false;
+        
+        t_size active_playlist = pm->get_active_playlist();
+        if (active_playlist != pfc_infinite) {
+            t_size focus = pm->playlist_get_focus_item(active_playlist);
+            if (focus != pfc_infinite) {
+                has_track = pm->playlist_get_item_handle(track, active_playlist, focus);
+            }
+        }
         
         // Check if path contains title formatting (has % character)
         if (path.find_first('%') != pfc::infinite_size) {
-            // Has title formatting - evaluate it
-            auto pc = playback_control::get();
-            metadb_handle_ptr track;
+            // Has title formatting - evaluate it using selected track
             service_ptr_t<titleformat_object> script;
             titleformat_compiler::get()->compile_safe(script, path);
             
-            if (pc->get_now_playing(track) && track.is_valid()) {
-                if (script.is_valid()) {
-                    track->format_title(nullptr, exe_path, script, nullptr);
-                }
-            } else {
-                if (script.is_valid()) {
-                    pc->playback_format_title(nullptr, exe_path, script, nullptr, playback_control::display_level_all);
-                }
+            if (has_track && track.is_valid() && script.is_valid()) {
+                track->format_title(nullptr, exe_path, script, nullptr);
+            } else if (script.is_valid()) {
+                // Fallback to playing track if no selection
+                auto pc = playback_control::get();
+                pc->playback_format_title(nullptr, exe_path, script, nullptr, playback_control::display_level_all);
             }
         } else {
             // No title formatting - use path directly as executable
@@ -84,19 +100,6 @@ static void execute_cbutton_action(int button_index) {
         }
         
         if (!exe_path.is_empty()) {
-            // Get the focused/selected track from the active playlist (not the playing track)
-            auto pm = playlist_manager::get();
-            metadb_handle_ptr track;
-            bool has_track = false;
-            
-            t_size active_playlist = pm->get_active_playlist();
-            if (active_playlist != pfc_infinite) {
-                t_size focus = pm->playlist_get_focus_item(active_playlist);
-                if (focus != pfc_infinite) {
-                    has_track = pm->playlist_get_item_handle(track, active_playlist, focus);
-                }
-            }
-            
             if (has_track && track.is_valid()) {
                 const char* file_path = track->get_path();
                 if (file_path) {
