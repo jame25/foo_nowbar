@@ -7,23 +7,42 @@
 static const GUID guid_nowbar_menu_group = 
     { 0xD6A5E8F0, 0x1234, 0x5678, { 0xAB, 0xCD, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01 } };
 
-// Command GUIDs for Custom Buttons 1-6
+// Command GUIDs for Custom Buttons 1-12
 static const GUID guid_cbutton_commands[] = {
+    // Buttons 1-6 (visible on panel)
     { 0xD6A5E8F1, 0x1234, 0x5678, { 0xAB, 0xCD, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01 } },
     { 0xD6A5E8F1, 0x1234, 0x5678, { 0xAB, 0xCD, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02 } },
     { 0xD6A5E8F1, 0x1234, 0x5678, { 0xAB, 0xCD, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03 } },
     { 0xD6A5E8F1, 0x1234, 0x5678, { 0xAB, 0xCD, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04 } },
     { 0xD6A5E8F1, 0x1234, 0x5678, { 0xAB, 0xCD, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05 } },
-    { 0xD6A5E8F1, 0x1234, 0x5678, { 0xAB, 0xCD, 0x00, 0x00, 0x00, 0x00, 0x00, 0x06 } }
+    { 0xD6A5E8F1, 0x1234, 0x5678, { 0xAB, 0xCD, 0x00, 0x00, 0x00, 0x00, 0x00, 0x06 } },
+    // Buttons 7-12 (hidden, keyboard shortcuts only)
+    { 0xD6A5E8F1, 0x1234, 0x5678, { 0xAB, 0xCD, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07 } },
+    { 0xD6A5E8F1, 0x1234, 0x5678, { 0xAB, 0xCD, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08 } },
+    { 0xD6A5E8F1, 0x1234, 0x5678, { 0xAB, 0xCD, 0x00, 0x00, 0x00, 0x00, 0x00, 0x09 } },
+    { 0xD6A5E8F1, 0x1234, 0x5678, { 0xAB, 0xCD, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0A } },
+    { 0xD6A5E8F1, 0x1234, 0x5678, { 0xAB, 0xCD, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0B } },
+    { 0xD6A5E8F1, 0x1234, 0x5678, { 0xAB, 0xCD, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0C } }
 };
 
 // Execute custom button action (shared implementation)
+// Supports buttons 0-11 (1-12 in UI)
 static void execute_cbutton_action(int button_index) {
-    if (button_index < 0 || button_index >= 6) return;
-    if (!get_nowbar_cbutton_enabled(button_index)) return;
+    if (button_index < 0 || button_index >= 12) return;
     
-    int action = get_nowbar_cbutton_action(button_index);
-    pfc::string8 path = get_nowbar_cbutton_path(button_index);
+    int action;
+    pfc::string8 path;
+    
+    if (button_index < 6) {
+        // Buttons 1-6: Use preferences (visible buttons)
+        if (!get_nowbar_cbutton_enabled(button_index)) return;
+        action = get_nowbar_cbutton_action(button_index);
+        path = get_nowbar_cbutton_path(button_index);
+    } else {
+        // Buttons 7-12: Use config file (hidden buttons)
+        action = get_config_button_action(button_index);
+        path = get_config_button_path(button_index);
+    }
     
     if (action == 1 && !path.is_empty()) {
         // Open URL with title formatting support - use selected track from playlist
@@ -139,30 +158,42 @@ static mainmenu_group_popup_factory g_nowbar_menu_group(
 class nowbar_mainmenu_commands : public mainmenu_commands {
 public:
     t_uint32 get_command_count() override {
-        return 6;  // Custom buttons 1-6
+        return 12;  // Custom buttons 1-12
     }
     
     GUID get_command(t_uint32 p_index) override {
-        if (p_index < 6) {
+        if (p_index < 12) {
             return guid_cbutton_commands[p_index];
         }
         return pfc::guid_null;
     }
     
     void get_name(t_uint32 p_index, pfc::string_base& p_out) override {
-        if (p_index < 6) {
+        if (p_index < 12) {
             p_out.reset();
             p_out << "Custom Button " << (p_index + 1);
         }
     }
     
     bool get_description(t_uint32 p_index, pfc::string_base& p_out) override {
-        if (p_index < 6) {
+        if (p_index < 12) {
             p_out.reset();
-            if (get_nowbar_cbutton_enabled(p_index)) {
-                int action = get_nowbar_cbutton_action(p_index);
-                pfc::string8 path = get_nowbar_cbutton_path(p_index);
-                
+            int action;
+            pfc::string8 path;
+            bool is_enabled = true;
+            
+            if (p_index < 6) {
+                // Visible buttons - check enabled state
+                is_enabled = get_nowbar_cbutton_enabled(p_index);
+                action = get_nowbar_cbutton_action(p_index);
+                path = get_nowbar_cbutton_path(p_index);
+            } else {
+                // Hidden buttons - always enabled, read from config
+                action = get_config_button_action(p_index);
+                path = get_config_button_path(p_index);
+            }
+            
+            if (is_enabled) {
                 switch (action) {
                     case 1:
                         p_out << "Open URL: " << (path.is_empty() ? "(not configured)" : path.c_str());
@@ -194,16 +225,26 @@ public:
     }
     
     bool get_display(t_uint32 p_index, pfc::string_base& p_text, t_uint32& p_flags) override {
-        if (p_index >= 6) return false;
+        if (p_index >= 12) return false;
         
         get_name(p_index, p_text);
         
         // Gray out disabled or unconfigured buttons
         p_flags = 0;
-        if (!get_nowbar_cbutton_enabled(p_index)) {
-            p_flags |= flag_disabled;
+        
+        if (p_index < 6) {
+            // Visible buttons - check enabled state
+            if (!get_nowbar_cbutton_enabled(p_index)) {
+                p_flags |= flag_disabled;
+            } else {
+                int action = get_nowbar_cbutton_action(p_index);
+                if (action == 0) {
+                    p_flags |= flag_disabled;  // No action
+                }
+            }
         } else {
-            int action = get_nowbar_cbutton_action(p_index);
+            // Hidden buttons - check action from config
+            int action = get_config_button_action(p_index);
             if (action == 0) {
                 p_flags |= flag_disabled;  // No action
             }
@@ -214,7 +255,7 @@ public:
     
     void execute(t_uint32 p_index, service_ptr ctx) override {
         (void)ctx;
-        if (p_index < 6) {
+        if (p_index < 12) {
             execute_cbutton_action(p_index);
         }
     }
