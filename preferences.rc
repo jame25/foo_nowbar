@@ -54,6 +54,7 @@ BEGIN
     // Profile configuration row at top
     LTEXT           "Configuration name:", IDC_PROFILE_NAME_LABEL, 20, 32, 70, 12
     COMBOBOX        IDC_PROFILE_COMBO, 95, 30, 180, 100, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+
     PUSHBUTTON      "...", IDC_PROFILE_MENU_BTN, 279, 30, 20, 14
 
     // Headers for button config section (shifted down by 18)
