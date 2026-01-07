@@ -115,6 +115,7 @@ public:
 private:
     void update_layout(const RECT& rect);
     void invalidate();
+    void invalidate_rect(const RECT& rect);  // Partial invalidation for specific regions
     void update_fonts();
     void extract_artwork_colors();  // Extract dominant colors from artwork for dynamic background
     void create_blurred_artwork(int target_width, int target_height);  // Create blurred version at exact size
@@ -250,7 +251,9 @@ private:
     float m_hover_opacity[16] = {};  // Per-region hover opacity (0.0 - 1.0)
     HitRegion m_prev_hover_region = HitRegion::None;
     std::chrono::steady_clock::time_point m_hover_change_time;
+    std::chrono::steady_clock::time_point m_last_animation_frame;  // For frame rate limiting
     static constexpr float HOVER_FADE_DURATION_MS = 150.0f;  // Quick fade for responsiveness
+    static constexpr float MIN_ANIMATION_FRAME_MS = 16.0f;   // ~60 FPS cap for animations
     
     // Artwork
     std::unique_ptr<Gdiplus::Bitmap> m_artwork_bitmap;
@@ -277,6 +280,7 @@ private:
     SIZE m_prev_background_size = {0, 0};  // Size of cached background
     int m_prev_bg_style = -1;  // Previous background style to detect changes
     bool m_bg_transition_active = false;  // Animation in progress
+    bool m_bg_cache_valid = false;  // Whether the background cache is up-to-date
     std::chrono::steady_clock::time_point m_bg_transition_start_time;
     static constexpr float BG_TRANSITION_DURATION_MS = 800.0f;  // Crossfade duration
     
