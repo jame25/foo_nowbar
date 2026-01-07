@@ -28,6 +28,12 @@ pfc::string8 get_nowbar_cbutton_path(int button_index);  // 0-5, returns path st
 pfc::string8 get_nowbar_cbutton_icon_path(int button_index);  // 0-5, returns custom icon path (PNG/ICO)
 pfc::string8 get_nowbar_cbutton_label(int button_index);  // 0-5, returns tooltip label (or "Button #N" if empty)
 
+// Config file accessors for all 12 custom buttons (buttons 7-12 are hidden, keyboard-only)
+int get_config_button_action(int button_index);       // 0-11, returns action 0-3 from config file
+pfc::string8 get_config_button_path(int button_index);  // 0-11, returns path from config file
+pfc::string8 get_config_button_label(int button_index); // 0-11, returns label from config file
+void reload_custom_button_config();  // Reload config file from disk
+
 // Display format configuration functions
 pfc::string8 get_nowbar_line1_format();
 pfc::string8 get_nowbar_line2_format();
