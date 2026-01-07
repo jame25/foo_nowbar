@@ -2208,7 +2208,7 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
                 OPENFILENAMEW ofn = {};
                 ofn.lStructSize = sizeof(ofn);
                 ofn.hwndOwner = hwnd;
-                ofn.lpstrFilter = L"Image Files (*.png;*.ico)\0*.png;*.ico\0PNG Files (*.png)\0*.png\0ICO Files (*.ico)\0*.ico\0All Files (*.*)\0*.*\0";
+                ofn.lpstrFilter = L"Image Files (*.png;*.ico;*.svg)\0*.png;*.ico;*.svg\0PNG Files (*.png)\0*.png\0ICO Files (*.ico)\0*.ico\0SVG Files (*.svg)\0*.svg\0All Files (*.*)\0*.*\0";
                 ofn.lpstrFile = filename;
                 ofn.nMaxFile = MAX_PATH;
                 ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
