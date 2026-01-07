@@ -979,9 +979,21 @@ void ControlPanelCore::draw_background(Gdiplus::Graphics &g, const RECT &rect) {
   int bg_style = get_nowbar_background_style();
   
   // Detect if background style or content has changed (needs transition)
-  bool style_changed = (m_prev_bg_style != -1 && m_prev_bg_style != bg_style);
+  int prev_style = m_prev_bg_style;
+  bool style_changed = (prev_style != -1 && prev_style != bg_style);
   bool size_changed = (m_prev_background && 
                        (m_prev_background_size.cx != width || m_prev_background_size.cy != height));
+  
+  // Update the style tracker immediately when style changes
+  if (style_changed) {
+    m_prev_bg_style = bg_style;
+    m_bg_cache_valid = false;  // Invalidate cache so it gets re-rendered
+    // Clear blurred artwork cache when leaving blurred mode (mode 2)
+    if (prev_style == 2 && bg_style != 2) {
+      m_blurred_artwork.reset();
+      m_blurred_artwork_size = {0, 0};
+    }
+  }
   
   // Start transition if style changed and we have a cached previous background
   if (style_changed && m_prev_background && !size_changed) {
@@ -994,6 +1006,7 @@ void ControlPanelCore::draw_background(Gdiplus::Graphics &g, const RECT &rect) {
     m_prev_background.reset();
     m_bg_transition_active = false;
   }
+
   
   // Calculate transition progress if active
   float transition_alpha = 1.0f;  // 1.0 = fully new background
@@ -1122,64 +1135,86 @@ void ControlPanelCore::draw_background(Gdiplus::Graphics &g, const RECT &rect) {
     
     g.DrawImage(new_bg.get(), r, 0, 0, width, height, Gdiplus::UnitPixel, &ia);
     
-    // Continue animation
-    invalidate();
+    // Continue animation (with frame rate limiting)
+    {
+      auto anim_now = std::chrono::steady_clock::now();
+      float frame_elapsed = std::chrono::duration<float, std::milli>(anim_now - m_last_animation_frame).count();
+      if (frame_elapsed >= MIN_ANIMATION_FRAME_MS) {
+        m_last_animation_frame = anim_now;
+        invalidate();
+      }
+    }
   } else {
-    // No transition - draw directly
-    draw_current_bg(g);
+    // No transition - use cached background if available for performance
+    if (m_bg_cache_valid && m_prev_background && 
+        m_prev_background_size.cx == width && 
+        m_prev_background_size.cy == height) {
+      // Draw from cache - much faster than regenerating
+      g.DrawImage(m_prev_background.get(), r.X, r.Y);
+    } else {
+      // Cache miss - draw directly (will be cached below)
+      draw_current_bg(g);
+    }
   }
   
   // Cache current background for next transition (if not already transitioning)
-  // Only cache when stable (not during transition)
+  // Only cache when stable (not during transition) AND cache needs updating
   if (!m_bg_transition_active) {
-    // Create or resize cache bitmap
-    if (!m_prev_background || 
-        m_prev_background_size.cx != width || 
-        m_prev_background_size.cy != height) {
-      m_prev_background.reset(new Gdiplus::Bitmap(width, height, PixelFormat32bppARGB));
-      m_prev_background_size = {(LONG)width, (LONG)height};
-    }
+    // Check if cache needs to be created or resized
+    bool size_mismatch = (!m_prev_background || 
+                          m_prev_background_size.cx != width || 
+                          m_prev_background_size.cy != height);
     
-    // Render current background to cache
-    {
-      Gdiplus::Graphics cache_g(m_prev_background.get());
-      cache_g.SetSmoothingMode(Gdiplus::SmoothingModeHighQuality);
-      
-      Gdiplus::Rect cache_r(0, 0, width, height);
-      
-      if (bg_style == 1 && m_artwork_colors_valid) {
-        Gdiplus::LinearGradientBrush gradientBrush(
-            Gdiplus::Point(0, 0),
-            Gdiplus::Point(width, 0),
-            m_artwork_color_secondary,
-            m_artwork_color_primary
-        );
-        cache_g.FillRectangle(&gradientBrush, cache_r);
-        
-        BYTE overlay_alpha = m_dark_mode ? 120 : 80;
-        Gdiplus::Color overlayColor(overlay_alpha, 0, 0, 0);
-        Gdiplus::SolidBrush overlayBrush(overlayColor);
-        cache_g.FillRectangle(&overlayBrush, cache_r);
-      } else if (bg_style == 2 && m_artwork_bitmap) {
-        if (m_blurred_artwork) {
-          cache_g.DrawImage(m_blurred_artwork.get(), 0, 0);
-        }
-        BYTE overlay_alpha = m_dark_mode ? 140 : 180;
-        Gdiplus::Color overlayColor(overlay_alpha, 0, 0, 0);
-        Gdiplus::SolidBrush overlayBrush(overlayColor);
-        cache_g.FillRectangle(&overlayBrush, cache_r);
-      } else if (m_glass_effect_enabled) {
-        BYTE glass_alpha = m_dark_mode ? 150 : 200;
-        Gdiplus::Color glassColor(glass_alpha, m_bg_color.GetR(), m_bg_color.GetG(), m_bg_color.GetB());
-        Gdiplus::SolidBrush brush(glassColor);
-        cache_g.FillRectangle(&brush, cache_r);
-      } else {
-        Gdiplus::SolidBrush brush(m_bg_color);
-        cache_g.FillRectangle(&brush, cache_r);
+    // Only re-render cache if it's invalid or size changed
+    if (!m_bg_cache_valid || size_mismatch) {
+      // Create or resize cache bitmap if needed
+      if (size_mismatch) {
+        m_prev_background.reset(new Gdiplus::Bitmap(width, height, PixelFormat32bppARGB));
+        m_prev_background_size = {(LONG)width, (LONG)height};
       }
+      
+      // Render current background to cache
+      {
+        Gdiplus::Graphics cache_g(m_prev_background.get());
+        cache_g.SetSmoothingMode(Gdiplus::SmoothingModeHighQuality);
+        
+        Gdiplus::Rect cache_r(0, 0, width, height);
+        
+        if (bg_style == 1 && m_artwork_colors_valid) {
+          Gdiplus::LinearGradientBrush gradientBrush(
+              Gdiplus::Point(0, 0),
+              Gdiplus::Point(width, 0),
+              m_artwork_color_secondary,
+              m_artwork_color_primary
+          );
+          cache_g.FillRectangle(&gradientBrush, cache_r);
+          
+          BYTE overlay_alpha = m_dark_mode ? 120 : 80;
+          Gdiplus::Color overlayColor(overlay_alpha, 0, 0, 0);
+          Gdiplus::SolidBrush overlayBrush(overlayColor);
+          cache_g.FillRectangle(&overlayBrush, cache_r);
+        } else if (bg_style == 2 && m_artwork_bitmap) {
+          if (m_blurred_artwork) {
+            cache_g.DrawImage(m_blurred_artwork.get(), 0, 0);
+          }
+          BYTE overlay_alpha = m_dark_mode ? 140 : 180;
+          Gdiplus::Color overlayColor(overlay_alpha, 0, 0, 0);
+          Gdiplus::SolidBrush overlayBrush(overlayColor);
+          cache_g.FillRectangle(&overlayBrush, cache_r);
+        } else if (m_glass_effect_enabled) {
+          BYTE glass_alpha = m_dark_mode ? 150 : 200;
+          Gdiplus::Color glassColor(glass_alpha, m_bg_color.GetR(), m_bg_color.GetG(), m_bg_color.GetB());
+          Gdiplus::SolidBrush brush(glassColor);
+          cache_g.FillRectangle(&brush, cache_r);
+        } else {
+          Gdiplus::SolidBrush brush(m_bg_color);
+          cache_g.FillRectangle(&brush, cache_r);
+        }
+      }
+      
+      m_bg_cache_valid = true;  // Mark cache as valid
+      m_prev_bg_style = bg_style;
     }
-    
-    m_prev_bg_style = bg_style;
   }
 }
 
@@ -1477,9 +1512,14 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
       m_rect_super.right - super_inset, m_rect_super.bottom - super_inset};
   draw_super_icon(g, superIconRect, m_text_secondary_color);
   
-  // Continue animation loop if hover transition is in progress
+  // Continue animation loop if hover transition is in progress (with frame rate limiting)
   if (hover_animating) {
-    invalidate();
+    // Only request repaint if enough time has passed since last animation frame
+    float frame_elapsed = std::chrono::duration<float, std::milli>(now - m_last_animation_frame).count();
+    if (frame_elapsed >= MIN_ANIMATION_FRAME_MS) {
+      m_last_animation_frame = now;
+      invalidate();
+    }
   }
 
   // Custom buttons #1-6 (only render if enabled)
@@ -1596,9 +1636,14 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
   draw_cbutton(4, m_rect_cbutton5, HitRegion::CButton5);
   draw_cbutton(5, m_rect_cbutton6, HitRegion::CButton6);
   
-  // Continue animation loop if fade is in progress
+  // Continue animation loop if fade is in progress (with frame rate limiting)
   if (m_cbutton_fade_active) {
-    invalidate();
+    auto now = std::chrono::steady_clock::now();
+    float frame_elapsed = std::chrono::duration<float, std::milli>(now - m_last_animation_frame).count();
+    if (frame_elapsed >= MIN_ANIMATION_FRAME_MS) {
+      m_last_animation_frame = now;
+      invalidate();
+    }
   }
 }
 
@@ -1690,6 +1735,11 @@ void ControlPanelCore::draw_seekbar(Gdiplus::Graphics &g) {
   double lerp_factor = 1.0 - std::exp(-PROGRESS_LERP_SPEED * delta_seconds);
   m_animated_progress += (m_target_progress - m_animated_progress) * lerp_factor;
   
+  // Snap to target when very close to prevent infinite animation loop
+  if (std::abs(m_animated_progress - m_target_progress) < 0.001) {
+    m_animated_progress = m_target_progress;
+  }
+  
   // Use animated progress for drawing (unless seeking, then use direct position)
   double progress;
   if (m_seeking) {
@@ -1726,9 +1776,14 @@ void ControlPanelCore::draw_seekbar(Gdiplus::Graphics &g) {
     }
   }
   
-  // Continue animation if not at target
-  if (std::abs(m_animated_progress - m_target_progress) > 0.0001 && !m_seeking) {
-    invalidate();
+  // Continue animation if not at target (with frame rate limiting)
+  if (std::abs(m_animated_progress - m_target_progress) > 0.0005 && !m_seeking) {
+    auto anim_now = std::chrono::steady_clock::now();
+    float frame_elapsed = std::chrono::duration<float, std::milli>(anim_now - m_last_animation_frame).count();
+    if (frame_elapsed >= MIN_ANIMATION_FRAME_MS) {
+      m_last_animation_frame = anim_now;
+      invalidate();
+    }
   }
 
   // Seek handle (only on hover)
@@ -2038,13 +2093,37 @@ void ControlPanelCore::on_mouse_move(int x, int y) {
   
   // Track seekbar hover position for tooltip
   if (new_region == HitRegion::SeekBar && m_state.track_length > 0) {
+    int old_hover_x = m_seekbar_hover_x;
     m_seekbar_hover_x = x;
     // Calculate preview time at this position
     int bar_w = m_rect_seekbar.right - m_rect_seekbar.left;
     double pos = static_cast<double>(x - m_rect_seekbar.left) / bar_w;
     pos = std::max(0.0, std::min(1.0, pos));
     m_preview_time = pos * m_state.track_length;
-    invalidate();  // Update tooltip
+    
+    // Only invalidate if position changed, with frame rate limiting
+    if (old_hover_x != m_seekbar_hover_x) {
+      auto now = std::chrono::steady_clock::now();
+      float frame_elapsed = std::chrono::duration<float, std::milli>(now - m_last_animation_frame).count();
+      if (frame_elapsed >= MIN_ANIMATION_FRAME_MS) {
+        m_last_animation_frame = now;
+        // Use partial invalidation - only repaint the tooltip area above the seekbar
+        // Tooltip is roughly 60 pixels wide and 25 pixels tall, positioned above seekbar
+        int tooltip_h = static_cast<int>(25 * m_dpi_scale);
+        int tooltip_w = static_cast<int>(60 * m_dpi_scale);
+        int gap = static_cast<int>(6 * m_dpi_scale);
+        // Invalidate area covering old and new tooltip positions
+        int left_x = std::min(old_hover_x, x) - tooltip_w / 2 - 5;
+        int right_x = std::max(old_hover_x, x) + tooltip_w / 2 + 5;
+        RECT tooltip_rect = {
+          std::max(0L, (LONG)left_x),
+          m_rect_seekbar.top - tooltip_h - gap - 5,
+          (LONG)right_x,
+          m_rect_seekbar.top + 5
+        };
+        invalidate_rect(tooltip_rect);
+      }
+    }
   }
   
   // Update native tooltip for custom buttons
@@ -2784,6 +2863,7 @@ void ControlPanelCore::set_artwork(album_art_data_ptr data) {
         // Invalidate blurred artwork cache so it regenerates with new artwork
         m_blurred_artwork.reset();
         m_blurred_artwork_size = {0, 0};
+        m_bg_cache_valid = false;  // Invalidate cache for new artwork
       }
     }
   }
@@ -2806,12 +2886,19 @@ void ControlPanelCore::clear_artwork() {
   m_artwork_colors_valid = false;
   m_blurred_artwork.reset();
   m_blurred_artwork_size = {0, 0};
+  m_bg_cache_valid = false;  // Invalidate cache when artwork cleared
   invalidate();
 }
 
 void ControlPanelCore::invalidate() {
   if (m_hwnd) {
     InvalidateRect(m_hwnd, nullptr, FALSE);
+  }
+}
+
+void ControlPanelCore::invalidate_rect(const RECT& rect) {
+  if (m_hwnd) {
+    InvalidateRect(m_hwnd, &rect, FALSE);
   }
 }
 
@@ -3746,6 +3833,93 @@ void ControlPanelCore::load_custom_icon(int button_index) {
     return;
   }
   
+  // Check if the file is an SVG (case-insensitive)
+  pfc::string8 path_lower = path;
+  path_lower.toLower();
+  bool is_svg = path_lower.endsWith(".svg");
+  
+  if (is_svg) {
+    // Handle SVG files using foo_svg_services
+    try {
+      // Check if SVG services are available
+      svg_services::svg_services::ptr svg_api;
+      if (!fb2k::std_api_try_get(svg_api)) {
+        // SVG services not installed - fall back to default icon
+        return;
+      }
+      
+      // Read the SVG file contents
+      abort_callback_dummy aborter;
+      std::vector<uint8_t> svg_data;
+      try {
+        file::ptr file_ptr;
+        filesystem::g_open_read(file_ptr, path.c_str(), aborter);
+        
+        // Read file size
+        t_filesize file_size = file_ptr->get_size(aborter);
+        if (file_size == filesize_invalid || file_size > 52000000) {
+          // File too large or size unknown
+          return;
+        }
+        
+        svg_data.resize(static_cast<size_t>(file_size));
+        file_ptr->read(svg_data.data(), svg_data.size(), aborter);
+      } catch (...) {
+        // File read failed
+        return;
+      }
+      
+      // Get target icon size (use a reasonable size for high quality)
+      // The button size is typically around 38 pixels, but we render at a higher
+      // resolution for quality scaling. Using 128x128 provides good quality.
+      const int render_size = 128;
+      
+      // Allocate buffer for rendered bitmap (BGRA format, 4 bytes per pixel)
+      std::vector<uint8_t> bitmap_data(static_cast<size_t>(render_size) * static_cast<size_t>(render_size) * 4);
+      
+      // Parse and render the SVG
+      auto svg_document = svg_api->open(svg_data.data(), svg_data.size());
+      svg_document->render(
+        render_size, render_size,
+        svg_services::Position::Centred,
+        svg_services::ScalingMode::Fit,
+        svg_services::PixelFormat::BGRA,
+        bitmap_data.data(),
+        bitmap_data.size()
+      );
+      
+      // Create a GDI+ bitmap from the rendered data
+      Gdiplus::Bitmap* bitmap = new Gdiplus::Bitmap(
+        render_size, render_size, render_size * 4,
+        PixelFormat32bppARGB, bitmap_data.data()
+      );
+      
+      if (bitmap && bitmap->GetLastStatus() == Gdiplus::Ok) {
+        // GDI+ Bitmap from memory doesn't own the data, so we need to create a copy
+        Gdiplus::Bitmap* copy = new Gdiplus::Bitmap(render_size, render_size, PixelFormat32bppARGB);
+        if (copy && copy->GetLastStatus() == Gdiplus::Ok) {
+          Gdiplus::Graphics gfx(copy);
+          gfx.DrawImage(bitmap, 0, 0, render_size, render_size);
+          delete bitmap;
+          m_cbutton_icons[button_index].reset(copy);
+        } else {
+          delete copy;
+          delete bitmap;
+        }
+      } else {
+        delete bitmap;
+      }
+    } catch (const std::exception&) {
+      // SVG rendering failed - use default icon
+      m_cbutton_icons[button_index].reset();
+    } catch (...) {
+      // Unknown error - use default icon
+      m_cbutton_icons[button_index].reset();
+    }
+    return;
+  }
+  
+  // Handle PNG/ICO files using GDI+
   // Convert UTF-8 path to wide string for GDI+
   int wide_len = MultiByteToWideChar(CP_UTF8, 0, path.c_str(), -1, nullptr, 0);
   if (wide_len <= 0) return;
