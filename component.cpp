@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "version.h"
 #include "guids.h"
+#include "core/playback_state.h"
 
 // Module instance handle for dialog creation
 HINSTANCE g_hInstance = nullptr;
@@ -24,6 +25,10 @@ namespace {
         void on_init() override {
             Gdiplus::GdiplusStartupInput gdiplusStartupInput;
             Gdiplus::GdiplusStartup(&g_gdiplusToken, &gdiplusStartupInput, nullptr);
+            
+            // Force early instantiation of PlaybackStateManager to ensure it
+            // registers for playback callbacks before any playback starts
+            nowbar::PlaybackStateManager::get();
         }
         
         void on_quit() override {
