@@ -3,8 +3,13 @@
 #include "core/control_panel_core.h"
 #include <uxtheme.h>
 #include <commdlg.h>
+#include <fstream>
+#include <sstream>
+#include <vector>
+#include <map>
 #pragma comment(lib, "uxtheme.lib")
 #pragma comment(lib, "comdlg32.lib")
+
 
 // External declaration from component.cpp
 extern HINSTANCE g_hInstance;
@@ -268,7 +273,704 @@ static cfg_string cfg_cbutton6_label(
     ""  // Default: empty (will show "Button #6")
 );
 
+// Profile configuration storage
+static cfg_string cfg_cbutton_profiles(
+    GUID{0xABCDEF70, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xF6}},
+    ""  // Default: empty (will create "Default" profile on first use)
+);
+static cfg_string cfg_cbutton_current_profile(
+    GUID{0xABCDEF71, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xF7}},
+    "Default"  // Default profile name
+);
+
+//=============================================================================
+// Profile Management - Simple JSON-like serialization
+//=============================================================================
+
+// Escape a string for JSON-like storage
+static pfc::string8 escape_json_string(const char* str) {
+    pfc::string8 result;
+    while (*str) {
+        if (*str == '"') result << "\\\"";
+        else if (*str == '\\') result << "\\\\";
+        else if (*str == '\n') result << "\\n";
+        else if (*str == '\r') result << "\\r";
+        else if (*str == '\t') result << "\\t";
+        else result.add_byte(*str);
+        str++;
+    }
+    return result;
+}
+
+// Unescape a JSON-like string
+static pfc::string8 unescape_json_string(const char* str) {
+    pfc::string8 result;
+    while (*str) {
+        if (*str == '\\' && *(str + 1)) {
+            str++;
+            if (*str == '"') result.add_byte('"');
+            else if (*str == '\\') result.add_byte('\\');
+            else if (*str == 'n') result.add_byte('\n');
+            else if (*str == 'r') result.add_byte('\r');
+            else if (*str == 't') result.add_byte('\t');
+            else result.add_byte(*str);
+        } else {
+            result.add_byte(*str);
+        }
+        str++;
+    }
+    return result;
+}
+
+// Button configuration for a single button
+struct ButtonConfig {
+    bool enabled = false;
+    int action = 0;
+    pfc::string8 path;
+    pfc::string8 icon;
+    pfc::string8 label;
+};
+
+// Full profile with 6 buttons
+struct CButtonProfile {
+    pfc::string8 name;
+    ButtonConfig buttons[6];
+};
+
+// Serialize a single profile to JSON format
+static pfc::string8 serialize_profile(const CButtonProfile& profile) {
+    pfc::string8 json;
+    json << "{\"name\":\"" << escape_json_string(profile.name.c_str()) << "\",\"buttons\":[";
+    for (int i = 0; i < 6; i++) {
+        if (i > 0) json << ",";
+        json << "{\"enabled\":" << (profile.buttons[i].enabled ? "true" : "false");
+        json << ",\"action\":" << profile.buttons[i].action;
+        json << ",\"path\":\"" << escape_json_string(profile.buttons[i].path.c_str()) << "\"";
+        json << ",\"icon\":\"" << escape_json_string(profile.buttons[i].icon.c_str()) << "\"";
+        json << ",\"label\":\"" << escape_json_string(profile.buttons[i].label.c_str()) << "\"}";
+    }
+    json << "]}";
+    return json;
+}
+
+// Helper to skip whitespace
+static const char* skip_ws(const char* p) {
+    while (*p && (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r')) p++;
+    return p;
+}
+
+// Helper to parse a JSON string value (assumes p points to opening quote)
+static const char* parse_json_string(const char* p, pfc::string8& out) {
+    out.reset();
+    if (*p != '"') return p;
+    p++;
+    while (*p && *p != '"') {
+        if (*p == '\\' && *(p + 1)) {
+            p++;
+            if (*p == '"') out.add_byte('"');
+            else if (*p == '\\') out.add_byte('\\');
+            else if (*p == 'n') out.add_byte('\n');
+            else if (*p == 'r') out.add_byte('\r');
+            else if (*p == 't') out.add_byte('\t');
+            else out.add_byte(*p);
+        } else {
+            out.add_byte(*p);
+        }
+        p++;
+    }
+    if (*p == '"') p++;
+    return p;
+}
+
+// Skip any JSON value (string, number, boolean, null, object, array)
+static const char* skip_json_value(const char* p) {
+    p = skip_ws(p);
+    if (*p == '"') {
+        // String - skip to closing quote
+        p++;
+        while (*p && *p != '"') {
+            if (*p == '\\' && *(p + 1)) p++;  // Skip escaped char
+            p++;
+        }
+        if (*p == '"') p++;
+    } else if (*p == '{') {
+        // Object - skip to matching }
+        int depth = 1;
+        p++;
+        while (*p && depth > 0) {
+            if (*p == '{') depth++;
+            else if (*p == '}') depth--;
+            else if (*p == '"') {
+                p++;
+                while (*p && *p != '"') {
+                    if (*p == '\\' && *(p + 1)) p++;
+                    p++;
+                }
+            }
+            if (*p) p++;
+        }
+    } else if (*p == '[') {
+        // Array - skip to matching ]
+        int depth = 1;
+        p++;
+        while (*p && depth > 0) {
+            if (*p == '[') depth++;
+            else if (*p == ']') depth--;
+            else if (*p == '"') {
+                p++;
+                while (*p && *p != '"') {
+                    if (*p == '\\' && *(p + 1)) p++;
+                    p++;
+                }
+            }
+            if (*p) p++;
+        }
+    } else {
+        // Number, boolean, or null - skip until delimiter
+        while (*p && *p != ',' && *p != '}' && *p != ']' && *p != ' ' && *p != '\t' && *p != '\n' && *p != '\r') {
+            p++;
+        }
+    }
+    return p;
+}
+
+// Parse a single profile from JSON
+static const char* parse_profile(const char* p, CButtonProfile& profile) {
+    p = skip_ws(p);
+    if (*p != '{') return p;
+    p++;
+    
+    while (*p && *p != '}') {
+        p = skip_ws(p);
+        if (*p == '"') {
+            pfc::string8 key;
+            p = parse_json_string(p, key);
+            p = skip_ws(p);
+            if (*p == ':') p++;
+            p = skip_ws(p);
+            
+            if (key == "name") {
+                p = parse_json_string(p, profile.name);
+            } else if (key == "buttons") {
+                if (*p == '[') {
+                    p++;
+                    int btn_idx = 0;
+                    while (*p && *p != ']' && btn_idx < 6) {
+                        p = skip_ws(p);
+                        if (*p == '{') {
+                            p++;
+                            while (*p && *p != '}') {
+                                p = skip_ws(p);
+                                if (*p == '"') {
+                                    pfc::string8 btn_key;
+                                    p = parse_json_string(p, btn_key);
+                                    p = skip_ws(p);
+                                    if (*p == ':') p++;
+                                    p = skip_ws(p);
+                                    
+                                    if (btn_key == "enabled") {
+                                        if (strncmp(p, "true", 4) == 0) {
+                                            profile.buttons[btn_idx].enabled = true;
+                                            p += 4;
+                                        } else if (strncmp(p, "false", 5) == 0) {
+                                            profile.buttons[btn_idx].enabled = false;
+                                            p += 5;
+                                        } else {
+                                            p = skip_json_value(p);  // Skip unexpected value
+                                        }
+                                    } else if (btn_key == "action") {
+                                        profile.buttons[btn_idx].action = atoi(p);
+                                        while (*p && ((*p >= '0' && *p <= '9') || *p == '-')) p++;
+                                    } else if (btn_key == "path") {
+                                        p = parse_json_string(p, profile.buttons[btn_idx].path);
+                                    } else if (btn_key == "icon") {
+                                        p = parse_json_string(p, profile.buttons[btn_idx].icon);
+                                    } else if (btn_key == "label") {
+                                        p = parse_json_string(p, profile.buttons[btn_idx].label);
+                                    } else {
+                                        // Unknown key - skip its value
+                                        p = skip_json_value(p);
+                                    }
+                                } else if (*p && *p != '}') {
+                                    // Unexpected character, skip it
+                                    p++;
+                                }
+                                p = skip_ws(p);
+                                if (*p == ',') p++;
+                            }
+                            if (*p == '}') p++;
+                            btn_idx++;
+                        } else if (*p && *p != ']') {
+                            // Skip non-object elements in array
+                            p = skip_json_value(p);
+                        }
+                        p = skip_ws(p);
+                        if (*p == ',') p++;
+                    }
+                    // Skip any remaining buttons beyond 6
+                    while (*p && *p != ']') {
+                        p = skip_ws(p);
+                        if (*p == '{' || *p == '[' || *p == '"') {
+                            p = skip_json_value(p);
+                        } else if (*p && *p != ']') {
+                            p++;
+                        }
+                        p = skip_ws(p);
+                        if (*p == ',') p++;
+                    }
+                    if (*p == ']') p++;
+                } else {
+                    p = skip_json_value(p);  // Skip non-array buttons value
+                }
+            } else {
+                // Unknown key - skip its value
+                p = skip_json_value(p);
+            }
+        } else if (*p && *p != '}') {
+            // Unexpected character at top level, skip it
+            p++;
+        }
+        p = skip_ws(p);
+        if (*p == ',') p++;
+    }
+    if (*p == '}') p++;
+    return p;
+}
+
+
+// Get all profiles from storage
+static std::vector<CButtonProfile> get_all_profiles() {
+    std::vector<CButtonProfile> profiles;
+    pfc::string8 data = cfg_cbutton_profiles.get();
+    
+    if (data.is_empty()) {
+        // Create default profile with current settings
+        CButtonProfile def;
+        def.name = "Default";
+        for (int i = 0; i < 6; i++) {
+            def.buttons[i].enabled = get_nowbar_cbutton_enabled(i);
+            def.buttons[i].action = get_nowbar_cbutton_action(i);
+            def.buttons[i].path = get_nowbar_cbutton_path(i);
+            def.buttons[i].icon = get_nowbar_cbutton_icon_path(i);
+            def.buttons[i].label = cfg_cbutton1_label.get();  // Will fix below
+        }
+        // Fix labels
+        def.buttons[0].label = cfg_cbutton1_label.get();
+        def.buttons[1].label = cfg_cbutton2_label.get();
+        def.buttons[2].label = cfg_cbutton3_label.get();
+        def.buttons[3].label = cfg_cbutton4_label.get();
+        def.buttons[4].label = cfg_cbutton5_label.get();
+        def.buttons[5].label = cfg_cbutton6_label.get();
+        profiles.push_back(def);
+        return profiles;
+    }
+    
+    // Parse profiles array
+    const char* p = data.c_str();
+    p = skip_ws(p);
+    if (*p == '[') {
+        p++;
+        while (*p && *p != ']') {
+            p = skip_ws(p);
+            if (*p == '{') {
+                CButtonProfile profile;
+                p = parse_profile(p, profile);
+                if (!profile.name.is_empty()) {
+                    profiles.push_back(profile);
+                }
+            }
+            p = skip_ws(p);
+            if (*p == ',') p++;
+        }
+    }
+    
+    if (profiles.empty()) {
+        CButtonProfile def;
+        def.name = "Default";
+        profiles.push_back(def);
+    }
+    
+    return profiles;
+}
+
+// Save all profiles to storage
+static void save_all_profiles(const std::vector<CButtonProfile>& profiles) {
+    pfc::string8 data;
+    data << "[";
+    for (size_t i = 0; i < profiles.size(); i++) {
+        if (i > 0) data << ",";
+        data << serialize_profile(profiles[i]);
+    }
+    data << "]";
+    cfg_cbutton_profiles = data;
+}
+
+// Find a profile by name
+static CButtonProfile* find_profile(std::vector<CButtonProfile>& profiles, const char* name) {
+    for (auto& p : profiles) {
+        if (stricmp_utf8(p.name.c_str(), name) == 0) {
+            return &p;
+        }
+    }
+    return nullptr;
+}
+
+// Get current profile name
+static pfc::string8 get_current_profile_name() {
+    return cfg_cbutton_current_profile.get();
+}
+
+// Set current profile name
+static void set_current_profile_name(const char* name) {
+    cfg_cbutton_current_profile = name;
+}
+
+// Static buffer for input dialog (shared across invocations)
+static wchar_t s_input_dialog_buffer[256];
+
+// Dialog proc for input dialog
+static INT_PTR CALLBACK InputDialogProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam) {
+    switch (msg) {
+    case WM_INITDIALOG:
+        SetDlgItemTextW(hDlg, 101, s_input_dialog_buffer);
+        SendDlgItemMessage(hDlg, 101, EM_SETSEL, 0, -1);  // Select all
+        SetFocus(GetDlgItem(hDlg, 101));
+        return FALSE;  // Don't set default focus
+    case WM_COMMAND:
+        if (LOWORD(wParam) == IDOK) {
+            GetDlgItemTextW(hDlg, 101, s_input_dialog_buffer, 256);
+            EndDialog(hDlg, IDOK);
+            return TRUE;
+        } else if (LOWORD(wParam) == IDCANCEL) {
+            EndDialog(hDlg, IDCANCEL);
+            return TRUE;
+        }
+        break;
+    case WM_CLOSE:
+        EndDialog(hDlg, IDCANCEL);
+        return TRUE;
+    }
+    return FALSE;
+}
+
+// Show input dialog at cursor position
+// Returns true if OK was pressed, false if cancelled
+// Result is stored in out_result
+static bool show_input_dialog(HWND hwndParent, const wchar_t* title, const wchar_t* prompt, 
+                              const wchar_t* initial_value, pfc::string8& out_result) {
+    // Copy initial value to buffer
+    wcsncpy_s(s_input_dialog_buffer, initial_value, 255);
+    
+    // Build dialog template in memory
+    BYTE dlg_buffer[512] = {};
+    DLGTEMPLATE* pTemplate = (DLGTEMPLATE*)dlg_buffer;
+    pTemplate->style = DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU | DS_SETFONT;
+    pTemplate->dwExtendedStyle = 0;
+    pTemplate->cdit = 4;  // 4 controls: static, edit, OK, Cancel
+    pTemplate->x = 0;
+    pTemplate->y = 0;
+    pTemplate->cx = 200;
+    pTemplate->cy = 70;
+    
+    WORD* pWord = (WORD*)(pTemplate + 1);
+    *pWord++ = 0;  // No menu
+    *pWord++ = 0;  // Default window class
+    
+    // Title
+    size_t title_len = wcslen(title) + 1;
+    memcpy(pWord, title, title_len * sizeof(wchar_t));
+    pWord += title_len;
+    
+    // Font (required with DS_SETFONT)
+    *pWord++ = 8;  // Font size
+    const wchar_t* font = L"MS Shell Dlg";
+    size_t font_len = wcslen(font) + 1;
+    memcpy(pWord, font, font_len * sizeof(wchar_t));
+    pWord += font_len;
+    
+    // Align to DWORD
+    pWord = (WORD*)(((ULONG_PTR)pWord + 3) & ~3);
+    
+    // Static text control
+    DLGITEMTEMPLATE* pItem = (DLGITEMTEMPLATE*)pWord;
+    pItem->style = WS_VISIBLE | WS_CHILD | SS_LEFT;
+    pItem->dwExtendedStyle = 0;
+    pItem->x = 10; pItem->y = 10; pItem->cx = 180; pItem->cy = 10;
+    pItem->id = 100;
+    pWord = (WORD*)(pItem + 1);
+    *pWord++ = 0xFFFF; *pWord++ = 0x0082;  // Static class
+    size_t prompt_len = wcslen(prompt) + 1;
+    memcpy(pWord, prompt, prompt_len * sizeof(wchar_t));
+    pWord += prompt_len;
+    *pWord++ = 0;  // No creation data
+    pWord = (WORD*)(((ULONG_PTR)pWord + 3) & ~3);
+    
+    // Edit control
+    pItem = (DLGITEMTEMPLATE*)pWord;
+    pItem->style = WS_VISIBLE | WS_CHILD | WS_BORDER | WS_TABSTOP | ES_AUTOHSCROLL;
+    pItem->dwExtendedStyle = 0;
+    pItem->x = 10; pItem->y = 22; pItem->cx = 180; pItem->cy = 14;
+    pItem->id = 101;
+    pWord = (WORD*)(pItem + 1);
+    *pWord++ = 0xFFFF; *pWord++ = 0x0081;  // Edit class
+    *pWord++ = 0;  // No text
+    *pWord++ = 0;  // No creation data
+    pWord = (WORD*)(((ULONG_PTR)pWord + 3) & ~3);
+    
+    // OK button
+    pItem = (DLGITEMTEMPLATE*)pWord;
+    pItem->style = WS_VISIBLE | WS_CHILD | WS_TABSTOP | BS_DEFPUSHBUTTON;
+    pItem->dwExtendedStyle = 0;
+    pItem->x = 55; pItem->y = 45; pItem->cx = 40; pItem->cy = 14;
+    pItem->id = IDOK;
+    pWord = (WORD*)(pItem + 1);
+    *pWord++ = 0xFFFF; *pWord++ = 0x0080;  // Button class
+    const wchar_t* ok_text = L"OK";
+    memcpy(pWord, ok_text, 3 * sizeof(wchar_t));
+    pWord += 3;
+    *pWord++ = 0;  // No creation data
+    pWord = (WORD*)(((ULONG_PTR)pWord + 3) & ~3);
+    
+    // Cancel button
+    pItem = (DLGITEMTEMPLATE*)pWord;
+    pItem->style = WS_VISIBLE | WS_CHILD | WS_TABSTOP | BS_PUSHBUTTON;
+    pItem->dwExtendedStyle = 0;
+    pItem->x = 105; pItem->y = 45; pItem->cx = 40; pItem->cy = 14;
+    pItem->id = IDCANCEL;
+    pWord = (WORD*)(pItem + 1);
+    *pWord++ = 0xFFFF; *pWord++ = 0x0080;  // Button class
+    const wchar_t* cancel_text = L"Cancel";
+    memcpy(pWord, cancel_text, 7 * sizeof(wchar_t));
+    pWord += 7;
+    *pWord++ = 0;  // No creation data
+    
+    // Create the dialog
+    HWND hDlg = CreateDialogIndirectW(g_hInstance, pTemplate, hwndParent, InputDialogProc);
+    if (!hDlg) return false;
+    
+    // Position dialog at cursor
+    POINT cursorPos;
+    GetCursorPos(&cursorPos);
+    
+    // Get dialog size
+    RECT dlgRect;
+    GetWindowRect(hDlg, &dlgRect);
+    int dlgWidth = dlgRect.right - dlgRect.left;
+    int dlgHeight = dlgRect.bottom - dlgRect.top;
+    
+    // Get screen dimensions to ensure dialog stays on screen
+    int screenWidth = GetSystemMetrics(SM_CXSCREEN);
+    int screenHeight = GetSystemMetrics(SM_CYSCREEN);
+    
+    // Position at cursor, but keep on screen
+    int x = cursorPos.x;
+    int y = cursorPos.y;
+    if (x + dlgWidth > screenWidth) x = screenWidth - dlgWidth;
+    if (y + dlgHeight > screenHeight) y = screenHeight - dlgHeight;
+    if (x < 0) x = 0;
+    if (y < 0) y = 0;
+    
+    SetWindowPos(hDlg, HWND_TOP, x, y, 0, 0, SWP_NOSIZE);
+    ShowWindow(hDlg, SW_SHOW);
+    
+    // Run modal message loop
+    MSG message;
+    INT_PTR result = 0;
+    while (IsWindow(hDlg)) {
+        if (GetMessage(&message, NULL, 0, 0)) {
+            if (!IsDialogMessage(hDlg, &message)) {
+                TranslateMessage(&message);
+                DispatchMessage(&message);
+            }
+        }
+        // Check if dialog was closed
+        if (!IsWindow(hDlg)) break;
+        // Check if we have a result by peeking at window existence
+        LONG_PTR userData = GetWindowLongPtr(hDlg, GWLP_USERDATA);
+        if (userData != 0) {
+            result = userData;
+            break;
+        }
+    }
+    
+    // Actually we should use DialogBoxIndirect but position it after creation
+    // Let's use a simpler approach - use DialogBoxIndirect and hook WM_INITDIALOG to reposition
+    // For now, let's destroy this and use the modal version with repositioning
+    if (IsWindow(hDlg)) DestroyWindow(hDlg);
+    
+    // Use modal version with positioning in WM_INITDIALOG via a static variable
+    static POINT s_dialog_pos;
+    GetCursorPos(&s_dialog_pos);
+    
+    auto positionedProc = [](HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam) -> INT_PTR {
+        switch (msg) {
+        case WM_INITDIALOG: {
+            SetDlgItemTextW(hDlg, 101, s_input_dialog_buffer);
+            SendDlgItemMessage(hDlg, 101, EM_SETSEL, 0, -1);
+            SetFocus(GetDlgItem(hDlg, 101));
+            
+            // Position at cursor
+            RECT dlgRect;
+            GetWindowRect(hDlg, &dlgRect);
+            int dlgWidth = dlgRect.right - dlgRect.left;
+            int dlgHeight = dlgRect.bottom - dlgRect.top;
+            int screenWidth = GetSystemMetrics(SM_CXSCREEN);
+            int screenHeight = GetSystemMetrics(SM_CYSCREEN);
+            int x = s_dialog_pos.x;
+            int y = s_dialog_pos.y;
+            if (x + dlgWidth > screenWidth) x = screenWidth - dlgWidth;
+            if (y + dlgHeight > screenHeight) y = screenHeight - dlgHeight;
+            if (x < 0) x = 0;
+            if (y < 0) y = 0;
+            SetWindowPos(hDlg, NULL, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+            return FALSE;
+        }
+        case WM_COMMAND:
+            if (LOWORD(wParam) == IDOK) {
+                GetDlgItemTextW(hDlg, 101, s_input_dialog_buffer, 256);
+                EndDialog(hDlg, IDOK);
+                return TRUE;
+            } else if (LOWORD(wParam) == IDCANCEL) {
+                EndDialog(hDlg, IDCANCEL);
+                return TRUE;
+            }
+            break;
+        case WM_CLOSE:
+            EndDialog(hDlg, IDCANCEL);
+            return TRUE;
+        }
+        return FALSE;
+    };
+    
+    INT_PTR dlgResult = DialogBoxIndirectW(g_hInstance, pTemplate, hwndParent, positionedProc);
+    
+    if (dlgResult == IDOK && wcslen(s_input_dialog_buffer) > 0) {
+        pfc::stringcvt::string_utf8_from_wide utf8_result(s_input_dialog_buffer);
+        out_result = utf8_result.get_ptr();
+        return true;
+    }
+    return false;
+}
+
+// Load profile settings into the cfg_ variables
+
+static void load_profile_to_config(const CButtonProfile& profile) {
+    cfg_cbutton1_enabled = profile.buttons[0].enabled ? 1 : 0;
+    cfg_cbutton2_enabled = profile.buttons[1].enabled ? 1 : 0;
+    cfg_cbutton3_enabled = profile.buttons[2].enabled ? 1 : 0;
+    cfg_cbutton4_enabled = profile.buttons[3].enabled ? 1 : 0;
+    cfg_cbutton5_enabled = profile.buttons[4].enabled ? 1 : 0;
+    cfg_cbutton6_enabled = profile.buttons[5].enabled ? 1 : 0;
+    
+    cfg_cbutton1_action = profile.buttons[0].action;
+    cfg_cbutton2_action = profile.buttons[1].action;
+    cfg_cbutton3_action = profile.buttons[2].action;
+    cfg_cbutton4_action = profile.buttons[3].action;
+    cfg_cbutton5_action = profile.buttons[4].action;
+    cfg_cbutton6_action = profile.buttons[5].action;
+    
+    cfg_cbutton1_path = profile.buttons[0].path;
+    cfg_cbutton2_path = profile.buttons[1].path;
+    cfg_cbutton3_path = profile.buttons[2].path;
+    cfg_cbutton4_path = profile.buttons[3].path;
+    cfg_cbutton5_path = profile.buttons[4].path;
+    cfg_cbutton6_path = profile.buttons[5].path;
+    
+    cfg_cbutton1_icon = profile.buttons[0].icon;
+    cfg_cbutton2_icon = profile.buttons[1].icon;
+    cfg_cbutton3_icon = profile.buttons[2].icon;
+    cfg_cbutton4_icon = profile.buttons[3].icon;
+    cfg_cbutton5_icon = profile.buttons[4].icon;
+    cfg_cbutton6_icon = profile.buttons[5].icon;
+    
+    cfg_cbutton1_label = profile.buttons[0].label;
+    cfg_cbutton2_label = profile.buttons[1].label;
+    cfg_cbutton3_label = profile.buttons[2].label;
+    cfg_cbutton4_label = profile.buttons[3].label;
+    cfg_cbutton5_label = profile.buttons[4].label;
+    cfg_cbutton6_label = profile.buttons[5].label;
+}
+
+// Save current config to a profile
+static void save_config_to_profile(CButtonProfile& profile) {
+    profile.buttons[0].enabled = cfg_cbutton1_enabled != 0;
+    profile.buttons[1].enabled = cfg_cbutton2_enabled != 0;
+    profile.buttons[2].enabled = cfg_cbutton3_enabled != 0;
+    profile.buttons[3].enabled = cfg_cbutton4_enabled != 0;
+    profile.buttons[4].enabled = cfg_cbutton5_enabled != 0;
+    profile.buttons[5].enabled = cfg_cbutton6_enabled != 0;
+    
+    profile.buttons[0].action = cfg_cbutton1_action;
+    profile.buttons[1].action = cfg_cbutton2_action;
+    profile.buttons[2].action = cfg_cbutton3_action;
+    profile.buttons[3].action = cfg_cbutton4_action;
+    profile.buttons[4].action = cfg_cbutton5_action;
+    profile.buttons[5].action = cfg_cbutton6_action;
+    
+    profile.buttons[0].path = cfg_cbutton1_path.get();
+    profile.buttons[1].path = cfg_cbutton2_path.get();
+    profile.buttons[2].path = cfg_cbutton3_path.get();
+    profile.buttons[3].path = cfg_cbutton4_path.get();
+    profile.buttons[4].path = cfg_cbutton5_path.get();
+    profile.buttons[5].path = cfg_cbutton6_path.get();
+    
+    profile.buttons[0].icon = cfg_cbutton1_icon.get();
+    profile.buttons[1].icon = cfg_cbutton2_icon.get();
+    profile.buttons[2].icon = cfg_cbutton3_icon.get();
+    profile.buttons[3].icon = cfg_cbutton4_icon.get();
+    profile.buttons[4].icon = cfg_cbutton5_icon.get();
+    profile.buttons[5].icon = cfg_cbutton6_icon.get();
+    
+    profile.buttons[0].label = cfg_cbutton1_label.get();
+    profile.buttons[1].label = cfg_cbutton2_label.get();
+    profile.buttons[2].label = cfg_cbutton3_label.get();
+    profile.buttons[3].label = cfg_cbutton4_label.get();
+    profile.buttons[4].label = cfg_cbutton5_label.get();
+    profile.buttons[5].label = cfg_cbutton6_label.get();
+}
+
+// Export a profile to a file
+static bool export_profile_to_file(const CButtonProfile& profile, const wchar_t* filepath) {
+    std::ofstream file(filepath, std::ios::out | std::ios::binary);
+    if (!file.is_open()) return false;
+    
+    pfc::string8 json;
+    json << "{\n  \"name\": \"" << escape_json_string(profile.name.c_str()) << "\",\n";
+    json << "  \"version\": 1,\n";
+    json << "  \"buttons\": [\n";
+    for (int i = 0; i < 6; i++) {
+        json << "    {\n";
+        json << "      \"enabled\": " << (profile.buttons[i].enabled ? "true" : "false") << ",\n";
+        json << "      \"action\": " << profile.buttons[i].action << ",\n";
+        json << "      \"path\": \"" << escape_json_string(profile.buttons[i].path.c_str()) << "\",\n";
+        json << "      \"icon\": \"" << escape_json_string(profile.buttons[i].icon.c_str()) << "\",\n";
+        json << "      \"label\": \"" << escape_json_string(profile.buttons[i].label.c_str()) << "\"\n";
+        json << "    }" << (i < 5 ? "," : "") << "\n";
+    }
+    json << "  ]\n}\n";
+    
+    file.write(json.c_str(), json.length());
+    file.close();
+    return true;
+}
+
+// Import a profile from a file
+static bool import_profile_from_file(const wchar_t* filepath, CButtonProfile& profile) {
+    std::ifstream file(filepath, std::ios::in | std::ios::binary);
+    if (!file.is_open()) return false;
+    
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+    file.close();
+    
+    std::string content = buffer.str();
+    parse_profile(content.c_str(), profile);
+    
+    return !profile.name.is_empty();
+}
+
 // Configuration accessors
+
 int get_nowbar_theme_mode() {
     int mode = cfg_nowbar_theme_mode;
     if (mode < 0) mode = 0;
@@ -802,9 +1504,15 @@ void nowbar_preferences::switch_tab(int tab) {
 
     // Custom Button tab controls
     BOOL show_cbutton = (tab == 1) ? SW_SHOW : SW_HIDE;
+    // Profile configuration controls
+    ShowWindow(GetDlgItem(m_hwnd, IDC_PROFILE_NAME_LABEL), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_PROFILE_COMBO), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_PROFILE_MENU_BTN), show_cbutton);
+    // Button config headers
     ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON_ENABLE_LABEL), show_cbutton);
     ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON_ACTION_LABEL), show_cbutton);
     ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON_PATH_LABEL), show_cbutton);
+
     ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON1_ENABLE), show_cbutton);
     ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON1_ACTION), show_cbutton);
     ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON1_PATH), show_cbutton);
@@ -1000,9 +1708,26 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         // Initialize font displays
         p_this->update_font_displays();
 
+        // Initialize Profile combobox for Custom Button tab
+        {
+            HWND hProfileCombo = GetDlgItem(hwnd, IDC_PROFILE_COMBO);
+            auto profiles = get_all_profiles();
+            pfc::string8 current_name = get_current_profile_name();
+            int sel_index = 0;
+            for (size_t i = 0; i < profiles.size(); i++) {
+                pfc::stringcvt::string_wide_from_utf8 wide_name(profiles[i].name.c_str());
+                SendMessage(hProfileCombo, CB_ADDSTRING, 0, (LPARAM)wide_name.get_ptr());
+                if (stricmp_utf8(profiles[i].name.c_str(), current_name.c_str()) == 0) {
+                    sel_index = (int)i;
+                }
+            }
+            SendMessage(hProfileCombo, CB_SETCURSEL, sel_index, 0);
+        }
+
         // Initialize Custom Button tab controls
         // Populate action comboboxes with choices
         int cbutton_action_combos[] = {IDC_CBUTTON1_ACTION, IDC_CBUTTON2_ACTION, IDC_CBUTTON3_ACTION, IDC_CBUTTON4_ACTION, IDC_CBUTTON5_ACTION, IDC_CBUTTON6_ACTION};
+
         for (int id : cbutton_action_combos) {
             HWND hCombo = GetDlgItem(hwnd, id);
             SendMessage(hCombo, CB_ADDSTRING, 0, (LPARAM)L"None");
@@ -1084,6 +1809,356 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         case IDC_LINE2_FORMAT_EDIT:
             if (HIWORD(wp) == EN_CHANGE) {
                 p_this->on_changed();
+            }
+            break;
+
+        case IDC_PROFILE_COMBO:
+            if (HIWORD(wp) == CBN_SELCHANGE) {
+                // Save current profile before switching
+                auto profiles = get_all_profiles();
+                pfc::string8 current_name = get_current_profile_name();
+                CButtonProfile* current_profile = find_profile(profiles, current_name.c_str());
+                if (current_profile) {
+                    save_config_to_profile(*current_profile);
+                    save_all_profiles(profiles);
+                }
+                
+                // Load newly selected profile
+                int sel = (int)SendMessage(GetDlgItem(hwnd, IDC_PROFILE_COMBO), CB_GETCURSEL, 0, 0);
+                if (sel >= 0 && sel < (int)profiles.size()) {
+                    load_profile_to_config(profiles[sel]);
+                    set_current_profile_name(profiles[sel].name.c_str());
+                    
+                    // Update UI controls with new profile settings
+                    CheckDlgButton(hwnd, IDC_CBUTTON1_ENABLE, cfg_cbutton1_enabled ? BST_CHECKED : BST_UNCHECKED);
+                    CheckDlgButton(hwnd, IDC_CBUTTON2_ENABLE, cfg_cbutton2_enabled ? BST_CHECKED : BST_UNCHECKED);
+                    CheckDlgButton(hwnd, IDC_CBUTTON3_ENABLE, cfg_cbutton3_enabled ? BST_CHECKED : BST_UNCHECKED);
+                    CheckDlgButton(hwnd, IDC_CBUTTON4_ENABLE, cfg_cbutton4_enabled ? BST_CHECKED : BST_UNCHECKED);
+                    CheckDlgButton(hwnd, IDC_CBUTTON5_ENABLE, cfg_cbutton5_enabled ? BST_CHECKED : BST_UNCHECKED);
+                    CheckDlgButton(hwnd, IDC_CBUTTON6_ENABLE, cfg_cbutton6_enabled ? BST_CHECKED : BST_UNCHECKED);
+                    SendMessage(GetDlgItem(hwnd, IDC_CBUTTON1_ACTION), CB_SETCURSEL, cfg_cbutton1_action, 0);
+                    SendMessage(GetDlgItem(hwnd, IDC_CBUTTON2_ACTION), CB_SETCURSEL, cfg_cbutton2_action, 0);
+                    SendMessage(GetDlgItem(hwnd, IDC_CBUTTON3_ACTION), CB_SETCURSEL, cfg_cbutton3_action, 0);
+                    SendMessage(GetDlgItem(hwnd, IDC_CBUTTON4_ACTION), CB_SETCURSEL, cfg_cbutton4_action, 0);
+                    SendMessage(GetDlgItem(hwnd, IDC_CBUTTON5_ACTION), CB_SETCURSEL, cfg_cbutton5_action, 0);
+                    SendMessage(GetDlgItem(hwnd, IDC_CBUTTON6_ACTION), CB_SETCURSEL, cfg_cbutton6_action, 0);
+                    uSetDlgItemText(hwnd, IDC_CBUTTON1_PATH, cfg_cbutton1_path);
+                    uSetDlgItemText(hwnd, IDC_CBUTTON2_PATH, cfg_cbutton2_path);
+                    uSetDlgItemText(hwnd, IDC_CBUTTON3_PATH, cfg_cbutton3_path);
+                    uSetDlgItemText(hwnd, IDC_CBUTTON4_PATH, cfg_cbutton4_path);
+                    uSetDlgItemText(hwnd, IDC_CBUTTON5_PATH, cfg_cbutton5_path);
+                    uSetDlgItemText(hwnd, IDC_CBUTTON6_PATH, cfg_cbutton6_path);
+                    uSetDlgItemText(hwnd, IDC_CBUTTON1_ICON, cfg_cbutton1_icon);
+                    uSetDlgItemText(hwnd, IDC_CBUTTON2_ICON, cfg_cbutton2_icon);
+                    uSetDlgItemText(hwnd, IDC_CBUTTON3_ICON, cfg_cbutton3_icon);
+                    uSetDlgItemText(hwnd, IDC_CBUTTON4_ICON, cfg_cbutton4_icon);
+                    uSetDlgItemText(hwnd, IDC_CBUTTON5_ICON, cfg_cbutton5_icon);
+                    uSetDlgItemText(hwnd, IDC_CBUTTON6_ICON, cfg_cbutton6_icon);
+                    uSetDlgItemText(hwnd, IDC_CBUTTON1_LABEL, cfg_cbutton1_label);
+                    uSetDlgItemText(hwnd, IDC_CBUTTON2_LABEL, cfg_cbutton2_label);
+                    uSetDlgItemText(hwnd, IDC_CBUTTON3_LABEL, cfg_cbutton3_label);
+                    uSetDlgItemText(hwnd, IDC_CBUTTON4_LABEL, cfg_cbutton4_label);
+                    uSetDlgItemText(hwnd, IDC_CBUTTON5_LABEL, cfg_cbutton5_label);
+                    uSetDlgItemText(hwnd, IDC_CBUTTON6_LABEL, cfg_cbutton6_label);
+                    update_all_cbutton_path_states(hwnd);
+                    p_this->on_changed();
+                }
+            }
+            break;
+
+        case IDC_PROFILE_MENU_BTN:
+            if (HIWORD(wp) == BN_CLICKED) {
+                // Get profiles first to check count for menu state
+                auto profiles = get_all_profiles();
+                pfc::string8 current_name = get_current_profile_name();
+                
+                // Create and show popup menu
+                HMENU hMenu = CreatePopupMenu();
+                AppendMenu(hMenu, MF_STRING, 1, L"New");
+                AppendMenu(hMenu, MF_STRING, 2, L"Rename");
+                // Gray out Delete if only one profile exists
+                AppendMenu(hMenu, (profiles.size() <= 1) ? (MF_STRING | MF_GRAYED) : MF_STRING, 3, L"Delete");
+                AppendMenu(hMenu, MF_SEPARATOR, 0, nullptr);
+                AppendMenu(hMenu, MF_STRING, 4, L"Export...");
+                AppendMenu(hMenu, MF_STRING, 5, L"Import...");
+                
+                // Get button position for menu placement
+                RECT rc;
+                GetWindowRect(GetDlgItem(hwnd, IDC_PROFILE_MENU_BTN), &rc);
+                
+                int cmd = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_LEFTBUTTON, rc.left, rc.bottom, 0, hwnd, nullptr);
+                DestroyMenu(hMenu);
+                
+                switch (cmd) {
+                case 1: { // New - show input dialog for profile name
+                    // Generate a suggested unique name
+                    pfc::string8 base_name = "Profile ";
+                    int num = (int)profiles.size() + 1;
+                    pfc::string8 suggested_name;
+                    suggested_name << base_name << num;
+                    while (find_profile(profiles, suggested_name.c_str())) {
+                        num++;
+                        suggested_name.reset();
+                        suggested_name << base_name << num;
+                    }
+                    
+                    // Show input dialog
+                    pfc::stringcvt::string_wide_from_utf8 suggested_wide(suggested_name.c_str());
+                    pfc::string8 new_name;
+                    if (show_input_dialog(hwnd, L"New Profile", L"Enter profile name:", suggested_wide.get_ptr(), new_name)) {
+                        // Check if name already exists
+                        if (find_profile(profiles, new_name.c_str())) {
+                            MessageBoxW(hwnd, L"A profile with this name already exists.", L"Error", MB_OK | MB_ICONWARNING);
+                            break;
+                        }
+                        
+                        // Save current settings to current profile first
+                        CButtonProfile* current_profile = find_profile(profiles, current_name.c_str());
+                        if (current_profile) {
+                            save_config_to_profile(*current_profile);
+                        }
+                        
+                        // Create new profile with current settings
+                        CButtonProfile new_profile;
+                        new_profile.name = new_name;
+                        save_config_to_profile(new_profile);
+                        profiles.push_back(new_profile);
+                        save_all_profiles(profiles);
+                        set_current_profile_name(new_name.c_str());
+                        
+                        // Update combobox
+                        HWND hCombo = GetDlgItem(hwnd, IDC_PROFILE_COMBO);
+                        pfc::stringcvt::string_wide_from_utf8 wide_name(new_name.c_str());
+                        int new_idx = (int)SendMessage(hCombo, CB_ADDSTRING, 0, (LPARAM)wide_name.get_ptr());
+                        SendMessage(hCombo, CB_SETCURSEL, new_idx, 0);
+                        p_this->on_changed();
+                    }
+                    break;
+                }
+
+                case 2: { // Rename - show input dialog at cursor position
+                    CButtonProfile* prof = find_profile(profiles, current_name.c_str());
+                    if (prof) {
+                        pfc::stringcvt::string_wide_from_utf8 current_wide(current_name.c_str());
+                        pfc::string8 new_name;
+                        if (show_input_dialog(hwnd, L"Rename Profile", L"Enter new profile name:", current_wide.get_ptr(), new_name)) {
+                            // Check if name already exists (and is different from current)
+                            if (stricmp_utf8(new_name.c_str(), current_name.c_str()) != 0 &&
+                                find_profile(profiles, new_name.c_str())) {
+                                MessageBoxW(hwnd, L"A profile with this name already exists.", L"Error", MB_OK | MB_ICONWARNING);
+                            } else if (!new_name.is_empty()) {
+                                prof->name = new_name;
+                                save_all_profiles(profiles);
+                                set_current_profile_name(new_name.c_str());
+                                
+                                // Rebuild combobox
+                                HWND hCombo = GetDlgItem(hwnd, IDC_PROFILE_COMBO);
+                                SendMessage(hCombo, CB_RESETCONTENT, 0, 0);
+                                for (size_t i = 0; i < profiles.size(); i++) {
+                                    pfc::stringcvt::string_wide_from_utf8 wide_name(profiles[i].name.c_str());
+                                    SendMessage(hCombo, CB_ADDSTRING, 0, (LPARAM)wide_name.get_ptr());
+                                    if (stricmp_utf8(profiles[i].name.c_str(), new_name.c_str()) == 0) {
+                                        SendMessage(hCombo, CB_SETCURSEL, i, 0);
+                                    }
+                                }
+                                p_this->on_changed();
+                            }
+                        }
+                    }
+                    break;
+                }
+
+                case 3: { // Delete
+                    // Show confirmation dialog
+                    pfc::stringcvt::string_wide_from_utf8 current_wide(current_name.c_str());
+                    std::wstring confirm_msg = L"Are you sure you want to delete the profile \"";
+                    confirm_msg += current_wide.get_ptr();
+                    confirm_msg += L"\"?";
+                    
+                    if (MessageBoxW(hwnd, confirm_msg.c_str(), L"Delete Profile", MB_YESNO | MB_ICONQUESTION) != IDYES) {
+                        break;  // User cancelled
+                    }
+                    
+                    // Find and remove current profile
+
+                    for (auto it = profiles.begin(); it != profiles.end(); ++it) {
+                        if (stricmp_utf8(it->name.c_str(), current_name.c_str()) == 0) {
+                            profiles.erase(it);
+                            break;
+                        }
+                    }
+                    save_all_profiles(profiles);
+                    
+                    // Switch to first remaining profile
+                    if (!profiles.empty()) {
+                        load_profile_to_config(profiles[0]);
+                        set_current_profile_name(profiles[0].name.c_str());
+                    }
+                    
+                    // Rebuild combobox
+                    HWND hCombo = GetDlgItem(hwnd, IDC_PROFILE_COMBO);
+                    SendMessage(hCombo, CB_RESETCONTENT, 0, 0);
+                    for (size_t i = 0; i < profiles.size(); i++) {
+                        pfc::stringcvt::string_wide_from_utf8 wide_name(profiles[i].name.c_str());
+                        SendMessage(hCombo, CB_ADDSTRING, 0, (LPARAM)wide_name.get_ptr());
+                    }
+                    SendMessage(hCombo, CB_SETCURSEL, 0, 0);
+                    
+                    // Update UI with new profile settings
+                    CheckDlgButton(hwnd, IDC_CBUTTON1_ENABLE, cfg_cbutton1_enabled ? BST_CHECKED : BST_UNCHECKED);
+                    CheckDlgButton(hwnd, IDC_CBUTTON2_ENABLE, cfg_cbutton2_enabled ? BST_CHECKED : BST_UNCHECKED);
+                    CheckDlgButton(hwnd, IDC_CBUTTON3_ENABLE, cfg_cbutton3_enabled ? BST_CHECKED : BST_UNCHECKED);
+                    CheckDlgButton(hwnd, IDC_CBUTTON4_ENABLE, cfg_cbutton4_enabled ? BST_CHECKED : BST_UNCHECKED);
+                    CheckDlgButton(hwnd, IDC_CBUTTON5_ENABLE, cfg_cbutton5_enabled ? BST_CHECKED : BST_UNCHECKED);
+                    CheckDlgButton(hwnd, IDC_CBUTTON6_ENABLE, cfg_cbutton6_enabled ? BST_CHECKED : BST_UNCHECKED);
+                    SendMessage(GetDlgItem(hwnd, IDC_CBUTTON1_ACTION), CB_SETCURSEL, cfg_cbutton1_action, 0);
+                    SendMessage(GetDlgItem(hwnd, IDC_CBUTTON2_ACTION), CB_SETCURSEL, cfg_cbutton2_action, 0);
+                    SendMessage(GetDlgItem(hwnd, IDC_CBUTTON3_ACTION), CB_SETCURSEL, cfg_cbutton3_action, 0);
+                    SendMessage(GetDlgItem(hwnd, IDC_CBUTTON4_ACTION), CB_SETCURSEL, cfg_cbutton4_action, 0);
+                    SendMessage(GetDlgItem(hwnd, IDC_CBUTTON5_ACTION), CB_SETCURSEL, cfg_cbutton5_action, 0);
+                    SendMessage(GetDlgItem(hwnd, IDC_CBUTTON6_ACTION), CB_SETCURSEL, cfg_cbutton6_action, 0);
+                    uSetDlgItemText(hwnd, IDC_CBUTTON1_PATH, cfg_cbutton1_path);
+                    uSetDlgItemText(hwnd, IDC_CBUTTON2_PATH, cfg_cbutton2_path);
+                    uSetDlgItemText(hwnd, IDC_CBUTTON3_PATH, cfg_cbutton3_path);
+                    uSetDlgItemText(hwnd, IDC_CBUTTON4_PATH, cfg_cbutton4_path);
+                    uSetDlgItemText(hwnd, IDC_CBUTTON5_PATH, cfg_cbutton5_path);
+                    uSetDlgItemText(hwnd, IDC_CBUTTON6_PATH, cfg_cbutton6_path);
+                    uSetDlgItemText(hwnd, IDC_CBUTTON1_ICON, cfg_cbutton1_icon);
+                    uSetDlgItemText(hwnd, IDC_CBUTTON2_ICON, cfg_cbutton2_icon);
+                    uSetDlgItemText(hwnd, IDC_CBUTTON3_ICON, cfg_cbutton3_icon);
+                    uSetDlgItemText(hwnd, IDC_CBUTTON4_ICON, cfg_cbutton4_icon);
+                    uSetDlgItemText(hwnd, IDC_CBUTTON5_ICON, cfg_cbutton5_icon);
+                    uSetDlgItemText(hwnd, IDC_CBUTTON6_ICON, cfg_cbutton6_icon);
+                    uSetDlgItemText(hwnd, IDC_CBUTTON1_LABEL, cfg_cbutton1_label);
+                    uSetDlgItemText(hwnd, IDC_CBUTTON2_LABEL, cfg_cbutton2_label);
+                    uSetDlgItemText(hwnd, IDC_CBUTTON3_LABEL, cfg_cbutton3_label);
+                    uSetDlgItemText(hwnd, IDC_CBUTTON4_LABEL, cfg_cbutton4_label);
+                    uSetDlgItemText(hwnd, IDC_CBUTTON5_LABEL, cfg_cbutton5_label);
+                    uSetDlgItemText(hwnd, IDC_CBUTTON6_LABEL, cfg_cbutton6_label);
+                    update_all_cbutton_path_states(hwnd);
+                    p_this->on_changed();
+                    break;
+                }
+
+                case 4: { // Export
+                    CButtonProfile* prof = find_profile(profiles, current_name.c_str());
+                    if (prof) {
+                        wchar_t filename[MAX_PATH] = L"";
+                        pfc::stringcvt::string_wide_from_utf8 default_name(current_name.c_str());
+                        wcsncpy_s(filename, default_name.get_ptr(), MAX_PATH - 1);
+                        wcscat_s(filename, L".json");
+                        
+                        OPENFILENAMEW ofn = {};
+                        ofn.lStructSize = sizeof(ofn);
+                        ofn.hwndOwner = hwnd;
+                        ofn.lpstrFilter = L"JSON Files (*.json)\0*.json\0All Files (*.*)\0*.*\0";
+                        ofn.lpstrFile = filename;
+                        ofn.nMaxFile = MAX_PATH;
+                        ofn.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST;
+                        ofn.lpstrDefExt = L"json";
+                        
+                        if (GetSaveFileNameW(&ofn)) {
+                            if (export_profile_to_file(*prof, filename)) {
+                                MessageBoxW(hwnd, L"Profile exported successfully.", L"Export", MB_OK | MB_ICONINFORMATION);
+                            } else {
+                                MessageBoxW(hwnd, L"Failed to export profile.", L"Error", MB_OK | MB_ICONERROR);
+                            }
+                        }
+                    }
+                    break;
+                }
+                case 5: { // Import
+                    wchar_t filename[MAX_PATH] = L"";
+                    OPENFILENAMEW ofn = {};
+                    ofn.lStructSize = sizeof(ofn);
+                    ofn.hwndOwner = hwnd;
+                    ofn.lpstrFilter = L"JSON Files (*.json)\0*.json\0All Files (*.*)\0*.*\0";
+                    ofn.lpstrFile = filename;
+                    ofn.nMaxFile = MAX_PATH;
+                    ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
+                    
+                    if (GetOpenFileNameW(&ofn)) {
+                        CButtonProfile imported;
+                        if (import_profile_from_file(filename, imported)) {
+                            // Check for name collision
+                            pfc::string8 import_name = imported.name;
+                            int suffix = 1;
+                            while (find_profile(profiles, import_name.c_str())) {
+                                import_name.reset();
+                                import_name << imported.name << " (" << suffix << ")";
+                                suffix++;
+                            }
+                            imported.name = import_name;
+                            
+                            // Save current profile first
+                            CButtonProfile* current_profile = find_profile(profiles, current_name.c_str());
+                            if (current_profile) {
+                                save_config_to_profile(*current_profile);
+                            }
+                            
+                            // Add imported profile
+                            profiles.push_back(imported);
+                            save_all_profiles(profiles);
+                            
+                            // Load imported profile
+                            load_profile_to_config(imported);
+                            set_current_profile_name(imported.name.c_str());
+                            
+                            // Rebuild combobox
+                            HWND hCombo = GetDlgItem(hwnd, IDC_PROFILE_COMBO);
+                            SendMessage(hCombo, CB_RESETCONTENT, 0, 0);
+                            int new_sel = 0;
+                            for (size_t i = 0; i < profiles.size(); i++) {
+                                pfc::stringcvt::string_wide_from_utf8 wide_name(profiles[i].name.c_str());
+                                SendMessage(hCombo, CB_ADDSTRING, 0, (LPARAM)wide_name.get_ptr());
+                                if (stricmp_utf8(profiles[i].name.c_str(), imported.name.c_str()) == 0) {
+                                    new_sel = (int)i;
+                                }
+                            }
+                            SendMessage(hCombo, CB_SETCURSEL, new_sel, 0);
+                            
+                            // Update UI
+                            CheckDlgButton(hwnd, IDC_CBUTTON1_ENABLE, cfg_cbutton1_enabled ? BST_CHECKED : BST_UNCHECKED);
+                            CheckDlgButton(hwnd, IDC_CBUTTON2_ENABLE, cfg_cbutton2_enabled ? BST_CHECKED : BST_UNCHECKED);
+                            CheckDlgButton(hwnd, IDC_CBUTTON3_ENABLE, cfg_cbutton3_enabled ? BST_CHECKED : BST_UNCHECKED);
+                            CheckDlgButton(hwnd, IDC_CBUTTON4_ENABLE, cfg_cbutton4_enabled ? BST_CHECKED : BST_UNCHECKED);
+                            CheckDlgButton(hwnd, IDC_CBUTTON5_ENABLE, cfg_cbutton5_enabled ? BST_CHECKED : BST_UNCHECKED);
+                            CheckDlgButton(hwnd, IDC_CBUTTON6_ENABLE, cfg_cbutton6_enabled ? BST_CHECKED : BST_UNCHECKED);
+                            SendMessage(GetDlgItem(hwnd, IDC_CBUTTON1_ACTION), CB_SETCURSEL, cfg_cbutton1_action, 0);
+                            SendMessage(GetDlgItem(hwnd, IDC_CBUTTON2_ACTION), CB_SETCURSEL, cfg_cbutton2_action, 0);
+                            SendMessage(GetDlgItem(hwnd, IDC_CBUTTON3_ACTION), CB_SETCURSEL, cfg_cbutton3_action, 0);
+                            SendMessage(GetDlgItem(hwnd, IDC_CBUTTON4_ACTION), CB_SETCURSEL, cfg_cbutton4_action, 0);
+                            SendMessage(GetDlgItem(hwnd, IDC_CBUTTON5_ACTION), CB_SETCURSEL, cfg_cbutton5_action, 0);
+                            SendMessage(GetDlgItem(hwnd, IDC_CBUTTON6_ACTION), CB_SETCURSEL, cfg_cbutton6_action, 0);
+                            uSetDlgItemText(hwnd, IDC_CBUTTON1_PATH, cfg_cbutton1_path);
+                            uSetDlgItemText(hwnd, IDC_CBUTTON2_PATH, cfg_cbutton2_path);
+                            uSetDlgItemText(hwnd, IDC_CBUTTON3_PATH, cfg_cbutton3_path);
+                            uSetDlgItemText(hwnd, IDC_CBUTTON4_PATH, cfg_cbutton4_path);
+                            uSetDlgItemText(hwnd, IDC_CBUTTON5_PATH, cfg_cbutton5_path);
+                            uSetDlgItemText(hwnd, IDC_CBUTTON6_PATH, cfg_cbutton6_path);
+                            uSetDlgItemText(hwnd, IDC_CBUTTON1_ICON, cfg_cbutton1_icon);
+                            uSetDlgItemText(hwnd, IDC_CBUTTON2_ICON, cfg_cbutton2_icon);
+                            uSetDlgItemText(hwnd, IDC_CBUTTON3_ICON, cfg_cbutton3_icon);
+                            uSetDlgItemText(hwnd, IDC_CBUTTON4_ICON, cfg_cbutton4_icon);
+                            uSetDlgItemText(hwnd, IDC_CBUTTON5_ICON, cfg_cbutton5_icon);
+                            uSetDlgItemText(hwnd, IDC_CBUTTON6_ICON, cfg_cbutton6_icon);
+                            uSetDlgItemText(hwnd, IDC_CBUTTON1_LABEL, cfg_cbutton1_label);
+                            uSetDlgItemText(hwnd, IDC_CBUTTON2_LABEL, cfg_cbutton2_label);
+                            uSetDlgItemText(hwnd, IDC_CBUTTON3_LABEL, cfg_cbutton3_label);
+                            uSetDlgItemText(hwnd, IDC_CBUTTON4_LABEL, cfg_cbutton4_label);
+                            uSetDlgItemText(hwnd, IDC_CBUTTON5_LABEL, cfg_cbutton5_label);
+                            uSetDlgItemText(hwnd, IDC_CBUTTON6_LABEL, cfg_cbutton6_label);
+                            update_all_cbutton_path_states(hwnd);
+                            p_this->on_changed();
+                            
+                            MessageBoxW(hwnd, L"Profile imported successfully.", L"Import", MB_OK | MB_ICONINFORMATION);
+                        } else {
+                            MessageBoxW(hwnd, L"Failed to import profile. Invalid file format.", L"Error", MB_OK | MB_ICONERROR);
+                        }
+                    }
+                    break;
+                }
+                }
             }
             break;
 
@@ -1373,6 +2448,17 @@ void nowbar_preferences::apply_settings() {
         cfg_cbutton5_label = label;
         uGetDlgItemText(m_hwnd, IDC_CBUTTON6_LABEL, label);
         cfg_cbutton6_label = label;
+
+        // Save current settings to the current profile
+        {
+            auto profiles = get_all_profiles();
+            pfc::string8 current_name = get_current_profile_name();
+            CButtonProfile* current_profile = find_profile(profiles, current_name.c_str());
+            if (current_profile) {
+                save_config_to_profile(*current_profile);
+                save_all_profiles(profiles);
+            }
+        }
 
         // Notify all registered instances to update
         nowbar::ControlPanelCore::notify_all_settings_changed();
