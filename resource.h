@@ -123,3 +123,8 @@
 #define IDC_CBUTTON4_LABEL         1364
 #define IDC_CBUTTON5_LABEL         1365
 #define IDC_CBUTTON6_LABEL         1366
+
+// Profile configuration controls (Custom Button tab)
+#define IDC_PROFILE_NAME_LABEL     1370
+#define IDC_PROFILE_COMBO          1371
+#define IDC_PROFILE_MENU_BTN       1372
