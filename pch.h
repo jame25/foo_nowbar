@@ -41,6 +41,9 @@
 // Columns UI SDK
 #include "../columns_ui/columns_ui-sdk/ui_extension.h"
 
+// SVG Services API (for SVG icon support)
+#include "../columns_ui/svg-services/api/api.h"
+
 // Project headers
 #include "guids.h"
 #include "version.h"
