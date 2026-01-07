@@ -407,7 +407,7 @@ void ControlPanelCore::create_blurred_artwork(int target_width, int target_heigh
     return;
   }
   
-  // First, scale source artwork to intermediate size for blur
+  // First, scale source artwork to intermediate size for blur using GDI+ (fast)
   const int blur_size = 64;
   std::unique_ptr<Gdiplus::Bitmap> scaled(new Gdiplus::Bitmap(blur_size, blur_size, PixelFormat32bppARGB));
   
@@ -417,49 +417,95 @@ void ControlPanelCore::create_blurred_artwork(int target_width, int target_heigh
     gfx.DrawImage(m_artwork_bitmap.get(), 0, 0, blur_size, blur_size);
   }
   
-  // Apply box blur
-  std::unique_ptr<Gdiplus::Bitmap> blurred_square(new Gdiplus::Bitmap(blur_size, blur_size, PixelFormat32bppARGB));
-  const int radius = 4;
+  // Lock the scaled bitmap for direct memory access
+  Gdiplus::Rect lockRect(0, 0, blur_size, blur_size);
+  Gdiplus::BitmapData scaledData;
+  if (scaled->LockBits(&lockRect, Gdiplus::ImageLockModeRead, PixelFormat32bppARGB, &scaledData) != Gdiplus::Ok) {
+    return;  // Failed to lock, fall back gracefully
+  }
   
+  // Create temp buffer for blur (we need two passes: horizontal then vertical)
+  std::vector<BYTE> tempBuffer(blur_size * blur_size * 4);
+  std::vector<BYTE> blurBuffer(blur_size * blur_size * 4);
+  
+  BYTE* srcPixels = static_cast<BYTE*>(scaledData.Scan0);
+  int srcStride = scaledData.Stride;
+  
+  const int radius = 4;
+  const int diameter = radius * 2 + 1;
+  
+  // Pass 1: Horizontal blur into tempBuffer
+  for (int y = 0; y < blur_size; y++) {
+    for (int x = 0; x < blur_size; x++) {
+      int total_r = 0, total_g = 0, total_b = 0, total_a = 0;
+      int count = 0;
+      
+      for (int dx = -radius; dx <= radius; dx++) {
+        int sx = x + dx;
+        if (sx >= 0 && sx < blur_size) {
+          BYTE* pixel = srcPixels + y * srcStride + sx * 4;
+          total_b += pixel[0];
+          total_g += pixel[1];
+          total_r += pixel[2];
+          total_a += pixel[3];
+          count++;
+        }
+      }
+      
+      int dstIdx = (y * blur_size + x) * 4;
+      tempBuffer[dstIdx + 0] = static_cast<BYTE>(total_b / count);
+      tempBuffer[dstIdx + 1] = static_cast<BYTE>(total_g / count);
+      tempBuffer[dstIdx + 2] = static_cast<BYTE>(total_r / count);
+      tempBuffer[dstIdx + 3] = static_cast<BYTE>(total_a / count);
+    }
+  }
+  
+  // Pass 2: Vertical blur from tempBuffer into blurBuffer
   for (int y = 0; y < blur_size; y++) {
     for (int x = 0; x < blur_size; x++) {
       int total_r = 0, total_g = 0, total_b = 0, total_a = 0;
       int count = 0;
       
       for (int dy = -radius; dy <= radius; dy++) {
-        for (int dx = -radius; dx <= radius; dx++) {
-          int sx = x + dx;
-          int sy = y + dy;
-          if (sx >= 0 && sx < blur_size && sy >= 0 && sy < blur_size) {
-            Gdiplus::Color c;
-            scaled->GetPixel(sx, sy, &c);
-            total_r += c.GetR();
-            total_g += c.GetG();
-            total_b += c.GetB();
-            total_a += c.GetA();
-            count++;
-          }
+        int sy = y + dy;
+        if (sy >= 0 && sy < blur_size) {
+          int srcIdx = (sy * blur_size + x) * 4;
+          total_b += tempBuffer[srcIdx + 0];
+          total_g += tempBuffer[srcIdx + 1];
+          total_r += tempBuffer[srcIdx + 2];
+          total_a += tempBuffer[srcIdx + 3];
+          count++;
         }
       }
       
-      Gdiplus::Color avgColor(
-          total_a / count,
-          total_r / count,
-          total_g / count,
-          total_b / count
-      );
-      blurred_square->SetPixel(x, y, avgColor);
+      int dstIdx = (y * blur_size + x) * 4;
+      blurBuffer[dstIdx + 0] = static_cast<BYTE>(total_b / count);
+      blurBuffer[dstIdx + 1] = static_cast<BYTE>(total_g / count);
+      blurBuffer[dstIdx + 2] = static_cast<BYTE>(total_r / count);
+      blurBuffer[dstIdx + 3] = static_cast<BYTE>(total_a / count);
     }
   }
   
-  // Create output bitmap at exact target size using direct pixel sampling
-  // This bypasses DrawImage source rect issues that cause gaps
+  scaled->UnlockBits(&scaledData);
+  
+  // Create output bitmap at exact target size
   m_blurred_artwork.reset(new Gdiplus::Bitmap(target_width, target_height, PixelFormat32bppARGB));
   m_blurred_artwork_size = {(LONG)target_width, (LONG)target_height};
   
-  // Calculate source crop from the blurred square (center-crop to match target aspect)
-  float targetAspect = (float)target_width / (float)target_height;
-  float srcX = 0, srcY = 0, srcW = (float)blur_size, srcH = (float)blur_size;
+  // Lock output bitmap for direct write
+  Gdiplus::Rect outRect(0, 0, target_width, target_height);
+  Gdiplus::BitmapData outData;
+  if (m_blurred_artwork->LockBits(&outRect, Gdiplus::ImageLockModeWrite, PixelFormat32bppARGB, &outData) != Gdiplus::Ok) {
+    m_blurred_artwork.reset();
+    return;
+  }
+  
+  BYTE* outPixels = static_cast<BYTE*>(outData.Scan0);
+  int outStride = outData.Stride;
+  
+  // Calculate source crop from the blurred buffer (center-crop to match target aspect)
+  float targetAspect = static_cast<float>(target_width) / static_cast<float>(target_height);
+  float srcX = 0, srcY = 0, srcW = static_cast<float>(blur_size), srcH = static_cast<float>(blur_size);
   
   if (targetAspect > 1.0f) {
     // Target is wider than source - crop vertically from center
@@ -471,43 +517,45 @@ void ControlPanelCore::create_blurred_artwork(int target_width, int target_heigh
     srcX = (blur_size - srcW) / 2.0f;
   }
   
-  // Direct pixel sampling with bilinear interpolation for smooth result
+  // Direct pixel sampling with bilinear interpolation using memory access
   for (int y = 0; y < target_height; y++) {
+    BYTE* outRow = outPixels + y * outStride;
+    float sy_base = srcY + (y / static_cast<float>(target_height)) * srcH;
+    
     for (int x = 0; x < target_width; x++) {
       // Map target coordinates to source coordinates
-      float sx = srcX + (x / (float)target_width) * srcW;
-      float sy = srcY + (y / (float)target_height) * srcH;
+      float sx = srcX + (x / static_cast<float>(target_width)) * srcW;
+      float sy = sy_base;
       
-      // Bilinear interpolation
-      int x0 = (int)sx;
-      int y0 = (int)sy;
+      // Bilinear interpolation coordinates
+      int x0 = static_cast<int>(sx);
+      int y0 = static_cast<int>(sy);
       int x1 = (std::min)(x0 + 1, blur_size - 1);
       int y1 = (std::min)(y0 + 1, blur_size - 1);
       x0 = (std::max)(0, (std::min)(x0, blur_size - 1));
       y0 = (std::max)(0, (std::min)(y0, blur_size - 1));
       
-      float fx = sx - (int)sx;
-      float fy = sy - (int)sy;
+      float fx = sx - static_cast<int>(sx);
+      float fy = sy - static_cast<int>(sy);
+      float fx_inv = 1.0f - fx;
+      float fy_inv = 1.0f - fy;
       
-      Gdiplus::Color c00, c10, c01, c11;
-      blurred_square->GetPixel(x0, y0, &c00);
-      blurred_square->GetPixel(x1, y0, &c10);
-      blurred_square->GetPixel(x0, y1, &c01);
-      blurred_square->GetPixel(x1, y1, &c11);
+      // Get pointers to the 4 source pixels
+      int idx00 = (y0 * blur_size + x0) * 4;
+      int idx10 = (y0 * blur_size + x1) * 4;
+      int idx01 = (y1 * blur_size + x0) * 4;
+      int idx11 = (y1 * blur_size + x1) * 4;
       
-      // Interpolate
-      BYTE r = (BYTE)((c00.GetR() * (1-fx) + c10.GetR() * fx) * (1-fy) + 
-                      (c01.GetR() * (1-fx) + c11.GetR() * fx) * fy);
-      BYTE g = (BYTE)((c00.GetG() * (1-fx) + c10.GetG() * fx) * (1-fy) + 
-                      (c01.GetG() * (1-fx) + c11.GetG() * fx) * fy);
-      BYTE b = (BYTE)((c00.GetB() * (1-fx) + c10.GetB() * fx) * (1-fy) + 
-                      (c01.GetB() * (1-fx) + c11.GetB() * fx) * fy);
-      BYTE a = (BYTE)((c00.GetA() * (1-fx) + c10.GetA() * fx) * (1-fy) + 
-                      (c01.GetA() * (1-fx) + c11.GetA() * fx) * fy);
-      
-      m_blurred_artwork->SetPixel(x, y, Gdiplus::Color(a, r, g, b));
+      // Bilinear interpolation for each channel (BGRA format)
+      for (int c = 0; c < 4; c++) {
+        float top = blurBuffer[idx00 + c] * fx_inv + blurBuffer[idx10 + c] * fx;
+        float bottom = blurBuffer[idx01 + c] * fx_inv + blurBuffer[idx11 + c] * fx;
+        outRow[x * 4 + c] = static_cast<BYTE>(top * fy_inv + bottom * fy);
+      }
     }
   }
+  
+  m_blurred_artwork->UnlockBits(&outData);
 }
 
 void ControlPanelCore::update_layout(const RECT &rect) {
