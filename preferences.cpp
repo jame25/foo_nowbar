@@ -626,16 +626,35 @@ static void set_current_profile_name(const char* name) {
 }
 
 // Static buffer for input dialog (shared across invocations)
-static wchar_t s_input_dialog_buffer[256];
 
-// Dialog proc for input dialog
+static wchar_t s_input_dialog_buffer[256];
+static POINT s_input_dialog_pos;
+
+// Dialog proc for input dialog with positioning
 static INT_PTR CALLBACK InputDialogProc(HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
-    case WM_INITDIALOG:
+    case WM_INITDIALOG: {
         SetDlgItemTextW(hDlg, 101, s_input_dialog_buffer);
         SendDlgItemMessage(hDlg, 101, EM_SETSEL, 0, -1);  // Select all
+        
+        // Position at cursor
+        RECT dlgRect;
+        GetWindowRect(hDlg, &dlgRect);
+        int dlgWidth = dlgRect.right - dlgRect.left;
+        int dlgHeight = dlgRect.bottom - dlgRect.top;
+        int screenWidth = GetSystemMetrics(SM_CXSCREEN);
+        int screenHeight = GetSystemMetrics(SM_CYSCREEN);
+        int x = s_input_dialog_pos.x;
+        int y = s_input_dialog_pos.y;
+        if (x + dlgWidth > screenWidth) x = screenWidth - dlgWidth;
+        if (y + dlgHeight > screenHeight) y = screenHeight - dlgHeight;
+        if (x < 0) x = 0;
+        if (y < 0) y = 0;
+        SetWindowPos(hDlg, NULL, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+        
         SetFocus(GetDlgItem(hDlg, 101));
         return FALSE;  // Don't set default focus
+    }
     case WM_COMMAND:
         if (LOWORD(wParam) == IDOK) {
             GetDlgItemTextW(hDlg, 101, s_input_dialog_buffer, 256);
@@ -658,11 +677,12 @@ static INT_PTR CALLBACK InputDialogProc(HWND hDlg, UINT msg, WPARAM wParam, LPAR
 // Result is stored in out_result
 static bool show_input_dialog(HWND hwndParent, const wchar_t* title, const wchar_t* prompt, 
                               const wchar_t* initial_value, pfc::string8& out_result) {
-    // Copy initial value to buffer
+    // Copy initial value to buffer and get cursor position
     wcsncpy_s(s_input_dialog_buffer, initial_value, 255);
+    GetCursorPos(&s_input_dialog_pos);
     
     // Build dialog template in memory
-    BYTE dlg_buffer[512] = {};
+    BYTE dlg_buffer[1024] = {};
     DLGTEMPLATE* pTemplate = (DLGTEMPLATE*)dlg_buffer;
     pTemplate->style = DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU | DS_SETFONT;
     pTemplate->dwExtendedStyle = 0;
@@ -744,105 +764,7 @@ static bool show_input_dialog(HWND hwndParent, const wchar_t* title, const wchar
     pWord += 7;
     *pWord++ = 0;  // No creation data
     
-    // Create the dialog
-    HWND hDlg = CreateDialogIndirectW(g_hInstance, pTemplate, hwndParent, InputDialogProc);
-    if (!hDlg) return false;
-    
-    // Position dialog at cursor
-    POINT cursorPos;
-    GetCursorPos(&cursorPos);
-    
-    // Get dialog size
-    RECT dlgRect;
-    GetWindowRect(hDlg, &dlgRect);
-    int dlgWidth = dlgRect.right - dlgRect.left;
-    int dlgHeight = dlgRect.bottom - dlgRect.top;
-    
-    // Get screen dimensions to ensure dialog stays on screen
-    int screenWidth = GetSystemMetrics(SM_CXSCREEN);
-    int screenHeight = GetSystemMetrics(SM_CYSCREEN);
-    
-    // Position at cursor, but keep on screen
-    int x = cursorPos.x;
-    int y = cursorPos.y;
-    if (x + dlgWidth > screenWidth) x = screenWidth - dlgWidth;
-    if (y + dlgHeight > screenHeight) y = screenHeight - dlgHeight;
-    if (x < 0) x = 0;
-    if (y < 0) y = 0;
-    
-    SetWindowPos(hDlg, HWND_TOP, x, y, 0, 0, SWP_NOSIZE);
-    ShowWindow(hDlg, SW_SHOW);
-    
-    // Run modal message loop
-    MSG message;
-    INT_PTR result = 0;
-    while (IsWindow(hDlg)) {
-        if (GetMessage(&message, NULL, 0, 0)) {
-            if (!IsDialogMessage(hDlg, &message)) {
-                TranslateMessage(&message);
-                DispatchMessage(&message);
-            }
-        }
-        // Check if dialog was closed
-        if (!IsWindow(hDlg)) break;
-        // Check if we have a result by peeking at window existence
-        LONG_PTR userData = GetWindowLongPtr(hDlg, GWLP_USERDATA);
-        if (userData != 0) {
-            result = userData;
-            break;
-        }
-    }
-    
-    // Actually we should use DialogBoxIndirect but position it after creation
-    // Let's use a simpler approach - use DialogBoxIndirect and hook WM_INITDIALOG to reposition
-    // For now, let's destroy this and use the modal version with repositioning
-    if (IsWindow(hDlg)) DestroyWindow(hDlg);
-    
-    // Use modal version with positioning in WM_INITDIALOG via a static variable
-    static POINT s_dialog_pos;
-    GetCursorPos(&s_dialog_pos);
-    
-    auto positionedProc = [](HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam) -> INT_PTR {
-        switch (msg) {
-        case WM_INITDIALOG: {
-            SetDlgItemTextW(hDlg, 101, s_input_dialog_buffer);
-            SendDlgItemMessage(hDlg, 101, EM_SETSEL, 0, -1);
-            SetFocus(GetDlgItem(hDlg, 101));
-            
-            // Position at cursor
-            RECT dlgRect;
-            GetWindowRect(hDlg, &dlgRect);
-            int dlgWidth = dlgRect.right - dlgRect.left;
-            int dlgHeight = dlgRect.bottom - dlgRect.top;
-            int screenWidth = GetSystemMetrics(SM_CXSCREEN);
-            int screenHeight = GetSystemMetrics(SM_CYSCREEN);
-            int x = s_dialog_pos.x;
-            int y = s_dialog_pos.y;
-            if (x + dlgWidth > screenWidth) x = screenWidth - dlgWidth;
-            if (y + dlgHeight > screenHeight) y = screenHeight - dlgHeight;
-            if (x < 0) x = 0;
-            if (y < 0) y = 0;
-            SetWindowPos(hDlg, NULL, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
-            return FALSE;
-        }
-        case WM_COMMAND:
-            if (LOWORD(wParam) == IDOK) {
-                GetDlgItemTextW(hDlg, 101, s_input_dialog_buffer, 256);
-                EndDialog(hDlg, IDOK);
-                return TRUE;
-            } else if (LOWORD(wParam) == IDCANCEL) {
-                EndDialog(hDlg, IDCANCEL);
-                return TRUE;
-            }
-            break;
-        case WM_CLOSE:
-            EndDialog(hDlg, IDCANCEL);
-            return TRUE;
-        }
-        return FALSE;
-    };
-    
-    INT_PTR dlgResult = DialogBoxIndirectW(g_hInstance, pTemplate, hwndParent, positionedProc);
+    INT_PTR dlgResult = DialogBoxIndirectW(g_hInstance, pTemplate, hwndParent, InputDialogProc);
     
     if (dlgResult == IDOK && wcslen(s_input_dialog_buffer) > 0) {
         pfc::stringcvt::string_utf8_from_wide utf8_result(s_input_dialog_buffer);
@@ -851,6 +773,7 @@ static bool show_input_dialog(HWND hwndParent, const wchar_t* title, const wchar
     }
     return false;
 }
+
 
 // Load profile settings into the cfg_ variables
 
@@ -1447,6 +1370,8 @@ void nowbar_preferences::apply() {
     m_callback->on_state_changed();
 }
 
+
+
 void nowbar_preferences::reset() {
     reset_settings();
     m_has_changes = false;
@@ -1814,6 +1739,7 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
 
         case IDC_PROFILE_COMBO:
             if (HIWORD(wp) == CBN_SELCHANGE) {
+
                 // Save current profile before switching
                 auto profiles = get_all_profiles();
                 pfc::string8 current_name = get_current_profile_name();
@@ -1865,6 +1791,9 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
                 }
             }
             break;
+
+
+
 
         case IDC_PROFILE_MENU_BTN:
             if (HIWORD(wp) == BN_CLICKED) {
@@ -1961,12 +1890,18 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
                                         SendMessage(hCombo, CB_SETCURSEL, i, 0);
                                     }
                                 }
+                                // Update edit text for CBS_DROPDOWN
+                                pfc::stringcvt::string_wide_from_utf8 new_wide(new_name.c_str());
+                                SetWindowTextW(hCombo, new_wide.get_ptr());
                                 p_this->on_changed();
                             }
                         }
                     }
                     break;
                 }
+
+
+
 
                 case 3: { // Delete
                     // Show confirmation dialog
