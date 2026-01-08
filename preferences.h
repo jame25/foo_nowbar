@@ -15,6 +15,7 @@ bool get_nowbar_alternate_icons_enabled();  // true=Enabled, false=Disabled
 bool get_nowbar_cbutton_autohide();  // true=Yes (auto-hide), false=No
 bool get_nowbar_glass_effect_enabled();  // true=Enabled, false=Disabled (Windows 11 only)
 int get_nowbar_background_style();  // 0=Solid, 1=Artwork Colors, 2=Blurred Artwork
+bool get_nowbar_smooth_animations_enabled();  // true=Enabled, false=Disabled
 bool get_nowbar_custom_button_visible();  // true=Show, false=Hidden
 int get_nowbar_custom_button_action();  // 0=None, 1=Open URL, 2=Run Executable, 3=Foobar2k Action
 pfc::string8 get_nowbar_custom_button_url();
