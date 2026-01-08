@@ -227,6 +227,12 @@ public:
     bool get_display(t_uint32 p_index, pfc::string_base& p_text, t_uint32& p_flags) override {
         if (p_index >= 12) return false;
         
+        // Hide Custom Buttons 7-12 unless Shift is held
+        if (p_index >= 6) {
+            const bool shift_down = (GetKeyState(VK_SHIFT) < 0);
+            if (!shift_down) return false;
+        }
+        
         get_name(p_index, p_text);
         
         // Gray out disabled or unconfigured buttons
