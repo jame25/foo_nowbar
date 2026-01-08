@@ -99,7 +99,7 @@ BEGIN
     PUSHBUTTON      "...", IDC_CBUTTON6_BROWSE, 289, 144, 20, 14
 
     // Icon + Label section headers (shifted down by 18)
-    LTEXT           "Icon (PNG/ICO)", IDC_CBUTTON_ICON_LABEL, 65, 163, 55, 12
+    LTEXT           "Icon (PNG/ICO/SVG)", IDC_CBUTTON_ICON_LABEL, 65, 163, 65, 12
     LTEXT           "Label", IDC_CBUTTON_LABEL_LABEL, 260, 163, 25, 12
 
     // Icon #1 + Label (shifted down by 18)
