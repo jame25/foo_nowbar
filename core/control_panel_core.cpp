@@ -185,6 +185,11 @@ void ControlPanelCore::set_dark_mode(bool dark) {
     // Dark hover circle for light mode
     m_button_hover_color = Gdiplus::Color(40, 0, 0, 0);
   }
+  
+  // Invalidate background cache to force redraw with new colors
+  m_bg_cache_valid = false;
+  m_prev_background.reset();
+  
   invalidate();
 }
 
@@ -240,22 +245,30 @@ void ControlPanelCore::notify_all_settings_changed() {
 void ControlPanelCore::on_settings_changed() {
   // Reload theme mode from preferences
   int theme_mode = get_nowbar_theme_mode();
+  int bg_style = get_nowbar_background_style();
 
-  if (theme_mode == 3) {
+  // Force dark mode for artwork-based backgrounds (they have dark overlays)
+  bool force_dark = (bg_style == 1 || bg_style == 2);
+
+  if (theme_mode == 3 && !force_dark) {
     // Custom - use DUI color scheme via callback
     apply_custom_colors();
   } else {
     bool dark;
-    switch (theme_mode) {
-    case 1: // Dark
+    if (force_dark) {
       dark = true;
-      break;
-    case 2: // Light
-      dark = false;
-      break;
-    default: // Auto (0) - follow system/foobar setting
-      dark = ui_config_manager::g_is_dark_mode();
-      break;
+    } else {
+      switch (theme_mode) {
+      case 1: // Dark
+        dark = true;
+        break;
+      case 2: // Light
+        dark = false;
+        break;
+      default: // Auto (0) - follow system/foobar setting
+        dark = ui_config_manager::g_is_dark_mode();
+        break;
+      }
     }
     set_dark_mode(dark);
   }
@@ -913,6 +926,13 @@ void ControlPanelCore::update_layout(const RECT &rect) {
 }
 
 void ControlPanelCore::paint(HDC hdc, const RECT &rect) {
+  // On first paint, re-query theme settings to fix startup timing issue
+  // where g_is_dark_mode() may return incorrect value before DUI is ready
+  if (m_pending_theme_refresh) {
+    m_pending_theme_refresh = false;
+    on_settings_changed();
+  }
+  
   update_layout(rect);
 
   Gdiplus::Graphics g(hdc);
@@ -933,13 +953,25 @@ void ControlPanelCore::paint(HDC hdc, const RECT &rect) {
     bool mp_hovered = (m_hover_region == HitRegion::MiniPlayerButton);
     int mp_w = m_rect_miniplayer.right - m_rect_miniplayer.left;
     int mp_h = m_rect_miniplayer.bottom - m_rect_miniplayer.top;
+    
+    // Determine if we're using artwork-based background that needs light icons
+    int bg_style = get_nowbar_background_style();
+    bool use_light_foreground = (bg_style == 1 && m_artwork_colors_valid) || 
+                                (bg_style == 2 && m_blurred_artwork);
+    Gdiplus::Color mp_hover_color = use_light_foreground 
+        ? Gdiplus::Color(40, 255, 255, 255) : m_button_hover_color;
+    Gdiplus::Color mp_secondary_color = use_light_foreground 
+        ? Gdiplus::Color(255, 200, 200, 200) : m_text_secondary_color;
+    Gdiplus::Color mp_accent_override = use_light_foreground
+        ? Gdiplus::Color(255, 120, 200, 255) : m_accent_color;
+    
     if (mp_hovered && get_nowbar_hover_circles_enabled()) {
-      Gdiplus::SolidBrush hoverBrush(m_button_hover_color);
+      Gdiplus::SolidBrush hoverBrush(mp_hover_color);
       g.FillEllipse(&hoverBrush, m_rect_miniplayer.left, m_rect_miniplayer.top,
                     mp_w, mp_h);
     }
     Gdiplus::Color mpColor =
-        m_miniplayer_active ? m_accent_color : m_text_secondary_color;
+        m_miniplayer_active ? mp_accent_override : mp_secondary_color;
     // Enlarge icon when hovered
     float mp_scale = mp_hovered ? HOVER_SCALE_FACTOR : 1.0f;
     int mp_inset = static_cast<int>(mp_w * (1.0f - 0.70f * mp_scale) / 2.0f);
@@ -1255,13 +1287,14 @@ void ControlPanelCore::draw_track_info(Gdiplus::Graphics &g) {
   );
   g.SetClip(clipRect);
   
-  // When blurred artwork background is active, always use white text for readability
-  // (the dark overlay makes the background dark regardless of theme)
+  // When artwork-based backgrounds are active, always use white text for readability
+  // (both Artwork Colors and Blurred Artwork apply dark overlays)
   int bg_style = get_nowbar_background_style();
-  bool use_white_text = (bg_style == 2 && m_blurred_artwork);
+  bool use_light_foreground = (bg_style == 1 && m_artwork_colors_valid) || 
+                              (bg_style == 2 && m_blurred_artwork);
   
-  Gdiplus::Color textColor = use_white_text ? Gdiplus::Color(255, 255, 255, 255) : m_text_color;
-  Gdiplus::Color textSecondary = use_white_text ? Gdiplus::Color(255, 200, 200, 200) : m_text_secondary_color;
+  Gdiplus::Color textColor = use_light_foreground ? Gdiplus::Color(255, 255, 255, 255) : m_text_color;
+  Gdiplus::Color textSecondary = use_light_foreground ? Gdiplus::Color(255, 200, 200, 200) : m_text_secondary_color;
   
   Gdiplus::SolidBrush titleBrush(textColor);
   Gdiplus::SolidBrush artistBrush(textSecondary);
@@ -1308,6 +1341,22 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
   float elapsed_ms = std::chrono::duration<float, std::milli>(now - m_hover_change_time).count();
   bool hover_animating = (elapsed_ms < HOVER_FADE_DURATION_MS);
   
+  // Determine if we're using artwork-based background that needs light icons
+  int bg_style = get_nowbar_background_style();
+  bool use_light_foreground = (bg_style == 1 && m_artwork_colors_valid) || 
+                              (bg_style == 2 && m_blurred_artwork);
+  
+  // Override icon colors for artwork-based backgrounds (they have dark overlays)
+  Gdiplus::Color icon_secondary_color = use_light_foreground 
+      ? Gdiplus::Color(255, 200, 200, 200)  // Light gray for visibility
+      : m_text_secondary_color;
+  Gdiplus::Color icon_accent_color = use_light_foreground
+      ? Gdiplus::Color(255, 120, 200, 255)  // Bright accent for visibility
+      : m_accent_color;
+  Gdiplus::Color icon_hover_color = use_light_foreground
+      ? Gdiplus::Color(40, 255, 255, 255)   // White hover for dark backgrounds
+      : m_button_hover_color;
+  
   // Heart button (mood toggle) - only if visible
   if (get_nowbar_mood_icon_visible()) {
     bool heart_hovered = (m_hover_region == HitRegion::HeartButton);
@@ -1315,14 +1364,14 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
     int hw = m_rect_heart.right - m_rect_heart.left;
     int hh = m_rect_heart.bottom - m_rect_heart.top;
     if (heart_opacity > 0.01f && show_hover) {
-      BYTE alpha = static_cast<BYTE>(heart_opacity * m_button_hover_color.GetA());
-      Gdiplus::Color hoverColor(alpha, m_button_hover_color.GetR(), m_button_hover_color.GetG(), m_button_hover_color.GetB());
+      BYTE alpha = static_cast<BYTE>(heart_opacity * icon_hover_color.GetA());
+      Gdiplus::Color hoverColor(alpha, icon_hover_color.GetR(), icon_hover_color.GetG(), icon_hover_color.GetB());
       Gdiplus::SolidBrush hoverBrush(hoverColor);
       g.FillEllipse(&hoverBrush, m_rect_heart.left, m_rect_heart.top, hw, hh);
     }
     // Red when mood is set, gray when empty
     Gdiplus::Color heartColor = m_mood_active ? Gdiplus::Color(255, 239, 83, 80)
-                                              : m_text_secondary_color;
+                                              : icon_secondary_color;
     // Calculate icon inset - smaller when hovered (for enlarge effect) like other buttons
     float heart_scale = heart_hovered ? HOVER_SCALE_FACTOR : 1.0f;
     int heart_inset = static_cast<int>(hw * (1.0f - 0.70f * heart_scale) / 2.0f);
@@ -1340,13 +1389,13 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
   int sw = m_rect_shuffle.right - m_rect_shuffle.left;
   int sh = m_rect_shuffle.bottom - m_rect_shuffle.top;
   if (shuffle_opacity > 0.01f && show_hover) {
-    BYTE alpha = static_cast<BYTE>(shuffle_opacity * m_button_hover_color.GetA());
-    Gdiplus::Color hoverColor(alpha, m_button_hover_color.GetR(), m_button_hover_color.GetG(), m_button_hover_color.GetB());
+    BYTE alpha = static_cast<BYTE>(shuffle_opacity * icon_hover_color.GetA());
+    Gdiplus::Color hoverColor(alpha, icon_hover_color.GetR(), icon_hover_color.GetG(), icon_hover_color.GetB());
     Gdiplus::SolidBrush hoverBrush(hoverColor);
     g.FillEllipse(&hoverBrush, m_rect_shuffle.left, m_rect_shuffle.top, sw, sh);
   }
   Gdiplus::Color shuffleColor =
-      shuffle_active ? m_accent_color : m_text_secondary_color;
+      shuffle_active ? icon_accent_color : icon_secondary_color;
   // Calculate icon inset - smaller when hovered (for enlarge effect)
   float shuffle_scale = shuffle_hovered ? HOVER_SCALE_FACTOR : 1.0f;
   int shuffle_icon_inset = static_cast<int>(sw * (1.0f - 0.70f * shuffle_scale) / 2.0f);
@@ -1361,8 +1410,8 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
   int pw = m_rect_prev.right - m_rect_prev.left;
   int ph = m_rect_prev.bottom - m_rect_prev.top;
   if (prev_opacity > 0.01f && show_hover) {
-    BYTE alpha = static_cast<BYTE>(prev_opacity * m_button_hover_color.GetA());
-    Gdiplus::Color hoverColor(alpha, m_button_hover_color.GetR(), m_button_hover_color.GetG(), m_button_hover_color.GetB());
+    BYTE alpha = static_cast<BYTE>(prev_opacity * icon_hover_color.GetA());
+    Gdiplus::Color hoverColor(alpha, icon_hover_color.GetR(), icon_hover_color.GetG(), icon_hover_color.GetB());
     Gdiplus::SolidBrush hoverBrush(hoverColor);
     g.FillEllipse(&hoverBrush, m_rect_prev.left, m_rect_prev.top, pw, ph);
   }
@@ -1372,7 +1421,7 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
   RECT prevIconRect = {
       m_rect_prev.left + prev_icon_inset, m_rect_prev.top + prev_icon_inset,
       m_rect_prev.right - prev_icon_inset, m_rect_prev.bottom - prev_icon_inset};
-  draw_prev_icon(g, prevIconRect, m_text_secondary_color);
+  draw_prev_icon(g, prevIconRect, icon_secondary_color);
 
   // Play/Pause button (circular with background)
   bool play_hovered = (m_hover_region == HitRegion::PlayButton);
@@ -1394,16 +1443,16 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
     // Alternate icons: no background circle, just draw hover effect if enabled
     float play_opacity = get_hover_opacity(HitRegion::PlayButton);
     if (play_opacity > 0.01f && show_hover) {
-      BYTE alpha = static_cast<BYTE>(play_opacity * m_button_hover_color.GetA());
-      Gdiplus::Color hoverColor(alpha, m_button_hover_color.GetR(), m_button_hover_color.GetG(), m_button_hover_color.GetB());
+      BYTE alpha = static_cast<BYTE>(play_opacity * icon_hover_color.GetA());
+      Gdiplus::Color hoverColor(alpha, icon_hover_color.GetR(), icon_hover_color.GetG(), icon_hover_color.GetB());
       Gdiplus::SolidBrush hoverBrush(hoverColor);
       g.FillEllipse(&hoverBrush, playRect.left, playRect.top, play_rect_w, play_rect_h);
     }
     // Draw play or pause icon
     if (m_state.is_playing && !m_state.is_paused) {
-      draw_alternate_pause_icon(g, playRect, m_text_secondary_color);
+      draw_alternate_pause_icon(g, playRect, icon_secondary_color);
     } else {
-      draw_alternate_play_icon(g, playRect, m_text_secondary_color);
+      draw_alternate_play_icon(g, playRect, icon_secondary_color);
     }
   } else {
     // Default icons: white/light background circle
@@ -1427,8 +1476,8 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
   int nw = m_rect_next.right - m_rect_next.left;
   int nh = m_rect_next.bottom - m_rect_next.top;
   if (next_opacity > 0.01f && show_hover) {
-    BYTE alpha = static_cast<BYTE>(next_opacity * m_button_hover_color.GetA());
-    Gdiplus::Color hoverColor(alpha, m_button_hover_color.GetR(), m_button_hover_color.GetG(), m_button_hover_color.GetB());
+    BYTE alpha = static_cast<BYTE>(next_opacity * icon_hover_color.GetA());
+    Gdiplus::Color hoverColor(alpha, icon_hover_color.GetR(), icon_hover_color.GetG(), icon_hover_color.GetB());
     Gdiplus::SolidBrush hoverBrush(hoverColor);
     g.FillEllipse(&hoverBrush, m_rect_next.left, m_rect_next.top, nw, nh);
   }
@@ -1438,7 +1487,7 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
   RECT nextIconRect = {
       m_rect_next.left + next_icon_inset, m_rect_next.top + next_icon_inset,
       m_rect_next.right - next_icon_inset, m_rect_next.bottom - next_icon_inset};
-  draw_next_icon(g, nextIconRect, m_text_secondary_color);
+  draw_next_icon(g, nextIconRect, icon_secondary_color);
 
   // Stop button (optional - positioned after Next, always outline style, no background circle)
   if (get_nowbar_stop_icon_visible()) {
@@ -1458,14 +1507,14 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
     // Draw hover circle effect if hovered
     float stop_opacity = get_hover_opacity(HitRegion::StopButton);
     if (stop_opacity > 0.01f && show_hover) {
-      BYTE alpha = static_cast<BYTE>(stop_opacity * m_button_hover_color.GetA());
-      Gdiplus::Color hoverColor(alpha, m_button_hover_color.GetR(), m_button_hover_color.GetG(), m_button_hover_color.GetB());
+      BYTE alpha = static_cast<BYTE>(stop_opacity * icon_hover_color.GetA());
+      Gdiplus::Color hoverColor(alpha, icon_hover_color.GetR(), icon_hover_color.GetG(), icon_hover_color.GetB());
       Gdiplus::SolidBrush hoverBrush(hoverColor);
       g.FillEllipse(&hoverBrush, stopRect.left, stopRect.top, stop_rect_w, stop_rect_h);
     }
     
     // Always draw outline (not filled) stop icon
-    draw_stop_icon(g, stopRect, m_text_secondary_color, false);
+    draw_stop_icon(g, stopRect, icon_secondary_color, false);
   }
 
   // Repeat button
@@ -1478,13 +1527,13 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
   int rw = m_rect_repeat.right - m_rect_repeat.left;
   int rh = m_rect_repeat.bottom - m_rect_repeat.top;
   if (repeat_opacity > 0.01f && show_hover) {
-    BYTE alpha = static_cast<BYTE>(repeat_opacity * m_button_hover_color.GetA());
-    Gdiplus::Color hoverColor(alpha, m_button_hover_color.GetR(), m_button_hover_color.GetG(), m_button_hover_color.GetB());
+    BYTE alpha = static_cast<BYTE>(repeat_opacity * icon_hover_color.GetA());
+    Gdiplus::Color hoverColor(alpha, icon_hover_color.GetR(), icon_hover_color.GetG(), icon_hover_color.GetB());
     Gdiplus::SolidBrush hoverBrush(hoverColor);
     g.FillEllipse(&hoverBrush, m_rect_repeat.left, m_rect_repeat.top, rw, rh);
   }
   Gdiplus::Color repeatColor =
-      repeat_active ? m_accent_color : m_text_secondary_color;
+      repeat_active ? icon_accent_color : icon_secondary_color;
   // Enlarge icon when hovered
   float repeat_scale = repeat_hovered ? HOVER_SCALE_FACTOR : 1.0f;
   int repeat_icon_inset = static_cast<int>(rw * (1.0f - 0.70f * repeat_scale) / 2.0f);
@@ -1499,8 +1548,8 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
   int supw = m_rect_super.right - m_rect_super.left;
   int suph = m_rect_super.bottom - m_rect_super.top;
   if (super_opacity > 0.01f && show_hover) {
-    BYTE alpha = static_cast<BYTE>(super_opacity * m_button_hover_color.GetA());
-    Gdiplus::Color hoverColor(alpha, m_button_hover_color.GetR(), m_button_hover_color.GetG(), m_button_hover_color.GetB());
+    BYTE alpha = static_cast<BYTE>(super_opacity * icon_hover_color.GetA());
+    Gdiplus::Color hoverColor(alpha, icon_hover_color.GetR(), icon_hover_color.GetG(), icon_hover_color.GetB());
     Gdiplus::SolidBrush hoverBrush(hoverColor);
     g.FillEllipse(&hoverBrush, m_rect_super.left, m_rect_super.top, supw, suph);
   }
@@ -1510,7 +1559,7 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
   RECT superIconRect = {
       m_rect_super.left + super_inset, m_rect_super.top + super_inset,
       m_rect_super.right - super_inset, m_rect_super.bottom - super_inset};
-  draw_super_icon(g, superIconRect, m_text_secondary_color);
+  draw_super_icon(g, superIconRect, icon_secondary_color);
   
   // Continue animation loop if hover transition is in progress (with frame rate limiting)
   if (hover_animating) {
@@ -1584,8 +1633,8 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
       if (hover_opacity > 0.01f) {
         // Slightly larger hover circle (5% expansion) to match perceived size of curved icons
         int expand = cw * 5 / 100;
-        BYTE hover_alpha = static_cast<BYTE>(hover_opacity * m_button_hover_color.GetA());
-        Gdiplus::Color hoverWithAlpha(hover_alpha, m_button_hover_color.GetR(), m_button_hover_color.GetG(), m_button_hover_color.GetB());
+        BYTE hover_alpha = static_cast<BYTE>(hover_opacity * icon_hover_color.GetA());
+        Gdiplus::Color hoverWithAlpha(hover_alpha, icon_hover_color.GetR(), icon_hover_color.GetG(), icon_hover_color.GetB());
         Gdiplus::SolidBrush hoverBrush(hoverWithAlpha);
         g.FillEllipse(&hoverBrush, rect.left - expand, rect.top - expand, cw + expand * 2, ch + expand * 2);
       }
@@ -1624,7 +1673,7 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
       g.SetInterpolationMode(oldMode);  // Restore original mode
     } else {
       // Fallback to default numbered square icon with opacity
-      Gdiplus::Color iconColor(alpha, m_text_secondary_color.GetR(), m_text_secondary_color.GetG(), m_text_secondary_color.GetB());
+      Gdiplus::Color iconColor(alpha, icon_secondary_color.GetR(), icon_secondary_color.GetG(), icon_secondary_color.GetB());
       draw_numbered_square_icon(g, iconRect, iconColor, index + 1);  // 1-based number
     }
   };
@@ -1845,7 +1894,13 @@ void ControlPanelCore::draw_seekbar(Gdiplus::Graphics &g) {
 }
 
 void ControlPanelCore::draw_time_display(Gdiplus::Graphics &g) {
-  Gdiplus::SolidBrush timeBrush(m_text_secondary_color);
+  // Determine if we're using artwork-based background that needs light text
+  int bg_style = get_nowbar_background_style();
+  bool use_light_foreground = (bg_style == 1 && m_artwork_colors_valid) || 
+                              (bg_style == 2 && m_blurred_artwork);
+  Gdiplus::Color time_color = use_light_foreground 
+      ? Gdiplus::Color(255, 200, 200, 200) : m_text_secondary_color;
+  Gdiplus::SolidBrush timeBrush(time_color);
 
   std::wstring elapsed = format_time(m_state.playback_time);
   // Show time remaining with minus sign
@@ -1918,6 +1973,13 @@ void ControlPanelCore::draw_volume(Gdiplus::Graphics &g) {
   int w = m_rect_volume.right - m_rect_volume.left;
   int h = m_rect_volume.bottom - m_rect_volume.top;
 
+  // Determine if we're using artwork-based background that needs light icons
+  int bg_style = get_nowbar_background_style();
+  bool use_light_foreground = (bg_style == 1 && m_artwork_colors_valid) || 
+                              (bg_style == 2 && m_blurred_artwork);
+  Gdiplus::Color volume_icon_color = use_light_foreground 
+      ? Gdiplus::Color(255, 200, 200, 200) : m_text_secondary_color;
+
   // Determine volume level based on bar position: 0=mute, 1=low, 2=full
   // Volume bar: -100dB=0%, 0dB=100%
   float level = (m_state.volume_db + 100.0f) / 100.0f; // 0.0 to 1.0
@@ -1939,7 +2001,7 @@ void ControlPanelCore::draw_volume(Gdiplus::Graphics &g) {
   int icon_gap = static_cast<int>(6 * m_dpi_scale *
                                   m_size_scale); // Extra gap to move icon left
   draw_volume_icon(g, m_rect_volume.left - icon_gap, icon_y, icon_size,
-                   m_text_secondary_color, vol_level);
+                   volume_icon_color, vol_level);
 
   // Volume bar - use same thickness as seekbar
   int bar_offset =
@@ -2421,11 +2483,19 @@ void ControlPanelCore::on_lbutton_dblclk(int x, int y) {
   if (region == HitRegion::Artwork) {
     show_picture_viewer();
   } else if (region == HitRegion::TrackInfo) {
-    // Highlight the currently playing track in the playlist (like status bar
-    // double-click)
-    playlist_manager::get()->highlight_playing_item();
+    // Highlight the currently playing track in the playlist
+    // First, clear focus to ensure on_item_focus_change fires even if already focused
+    auto pm = playlist_manager::get();
+    t_size playing_playlist = pm->get_playing_playlist();
+    if (playing_playlist != pfc_infinite) {
+      // Set focus to no item first (forces focus change event on subsequent call)
+      pm->playlist_set_focus_item(playing_playlist, pfc_infinite);
+    }
+    // Now highlight - this will set focus and trigger the callback
+    pm->highlight_playing_item();
   }
 }
+
 
 void ControlPanelCore::show_picture_viewer() {
   // Use foobar2000's built-in Picture Viewer (available since 1.6.2)
