@@ -176,6 +176,7 @@ private:
     // Member variables
     HWND m_hwnd = nullptr;
     bool m_dark_mode = true;
+    bool m_pending_theme_refresh = true;  // Re-check theme on first paint to fix startup timing
     bool m_glass_effect_enabled = false;  // Windows 11 acrylic backdrop
     float m_dpi_scale = 1.0f;
     float m_size_scale = 1.0f;  // Scale factor for controls based on panel height
