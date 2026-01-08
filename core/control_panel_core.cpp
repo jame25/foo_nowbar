@@ -985,6 +985,11 @@ void ControlPanelCore::paint(HDC hdc, const RECT &rect) {
 float ControlPanelCore::get_hover_opacity(HitRegion region) {
   if (region == HitRegion::None) return 0.0f;
   
+  // When smooth animations are disabled, return instant on/off values
+  if (!get_nowbar_smooth_animations_enabled()) {
+    return (region == m_hover_region) ? 1.0f : 0.0f;
+  }
+  
   auto now = std::chrono::steady_clock::now();
   float elapsed_ms = std::chrono::duration<float, std::milli>(now - m_hover_change_time).count();
   float progress = std::min(1.0f, elapsed_ms / HOVER_FADE_DURATION_MS);
@@ -1028,9 +1033,14 @@ void ControlPanelCore::draw_background(Gdiplus::Graphics &g, const RECT &rect) {
   }
   
   // Start transition if style changed and we have a cached previous background
-  if (style_changed && m_prev_background && !size_changed) {
+  // Only start if smooth animations are enabled
+  if (style_changed && m_prev_background && !size_changed && get_nowbar_smooth_animations_enabled()) {
     m_bg_transition_active = true;
     m_bg_transition_start_time = std::chrono::steady_clock::now();
+  } else if (style_changed && !get_nowbar_smooth_animations_enabled()) {
+    // Smooth animations disabled - skip transition, apply immediately
+    m_prev_background.reset();
+    m_bg_transition_active = false;
   }
   
   // If size changed, invalidate cache (can't crossfade different sizes)
@@ -1562,7 +1572,8 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
   draw_super_icon(g, superIconRect, icon_secondary_color);
   
   // Continue animation loop if hover transition is in progress (with frame rate limiting)
-  if (hover_animating) {
+  // Only needed when smooth animations are enabled
+  if (hover_animating && get_nowbar_smooth_animations_enabled()) {
     // Only request repaint if enough time has passed since last animation frame
     float frame_elapsed = std::chrono::duration<float, std::milli>(now - m_last_animation_frame).count();
     if (frame_elapsed >= MIN_ANIMATION_FRAME_MS) {
@@ -1585,7 +1596,11 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
       m_cbutton_fade_active = true;
     }
     
-    if (m_cbutton_fade_active) {
+    // When smooth animations disabled, use instant opacity change
+    if (!get_nowbar_smooth_animations_enabled()) {
+      m_cbutton_opacity = m_cbutton_target_opacity;
+      m_cbutton_fade_active = false;
+    } else if (m_cbutton_fade_active) {
       auto now = std::chrono::steady_clock::now();
       float elapsed_ms = std::chrono::duration<float, std::milli>(now - m_cbutton_fade_start_time).count();
       float progress = std::min(1.0f, elapsed_ms / CBUTTON_FADE_DURATION_MS);
@@ -1686,7 +1701,8 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
   draw_cbutton(5, m_rect_cbutton6, HitRegion::CButton6);
   
   // Continue animation loop if fade is in progress (with frame rate limiting)
-  if (m_cbutton_fade_active) {
+  // Only needed when smooth animations are enabled
+  if (m_cbutton_fade_active && get_nowbar_smooth_animations_enabled()) {
     auto now = std::chrono::steady_clock::now();
     float frame_elapsed = std::chrono::duration<float, std::milli>(now - m_last_animation_frame).count();
     if (frame_elapsed >= MIN_ANIMATION_FRAME_MS) {
@@ -1772,30 +1788,35 @@ void ControlPanelCore::draw_seekbar(Gdiplus::Graphics &g) {
     g.FillRectangle(&trackBrush, m_rect_seekbar.left, track_y, w, track_h);
   }
 
-  // Smooth progress interpolation
-  auto now = std::chrono::steady_clock::now();
-  double delta_seconds = std::chrono::duration<double>(now - m_last_frame_time).count();
-  m_last_frame_time = now;
-  
-  // Clamp delta to reasonable range (prevent large jumps after window focus loss)
-  delta_seconds = std::min(delta_seconds, 0.1);
-  
-  // Lerp animated progress toward target
-  double lerp_factor = 1.0 - std::exp(-PROGRESS_LERP_SPEED * delta_seconds);
-  m_animated_progress += (m_target_progress - m_animated_progress) * lerp_factor;
-  
-  // Snap to target when very close to prevent infinite animation loop
-  if (std::abs(m_animated_progress - m_target_progress) < 0.001) {
-    m_animated_progress = m_target_progress;
-  }
-  
-  // Use animated progress for drawing (unless seeking, then use direct position)
+  // Smooth progress interpolation (only when enabled)
   double progress;
   if (m_seeking) {
+    // During seeking, always use direct position
     progress = (m_state.track_length > 0)
                    ? (m_state.playback_time / m_state.track_length)
                    : 0.0;
+  } else if (!get_nowbar_smooth_animations_enabled()) {
+    // Smooth animations disabled - use direct target with no interpolation
+    progress = m_target_progress;
+    m_animated_progress = m_target_progress;  // Keep in sync
   } else {
+    // Smooth animations enabled - use lerp interpolation
+    auto now = std::chrono::steady_clock::now();
+    double delta_seconds = std::chrono::duration<double>(now - m_last_frame_time).count();
+    m_last_frame_time = now;
+    
+    // Clamp delta to reasonable range (prevent large jumps after window focus loss)
+    delta_seconds = std::min(delta_seconds, 0.1);
+    
+    // Lerp animated progress toward target
+    double lerp_factor = 1.0 - std::exp(-PROGRESS_LERP_SPEED * delta_seconds);
+    m_animated_progress += (m_target_progress - m_animated_progress) * lerp_factor;
+    
+    // Snap to target when very close to prevent infinite animation loop
+    if (std::abs(m_animated_progress - m_target_progress) < 0.001) {
+      m_animated_progress = m_target_progress;
+    }
+    
     progress = m_animated_progress;
   }
   
@@ -1826,7 +1847,9 @@ void ControlPanelCore::draw_seekbar(Gdiplus::Graphics &g) {
   }
   
   // Continue animation if not at target (with frame rate limiting)
-  if (std::abs(m_animated_progress - m_target_progress) > 0.0005 && !m_seeking) {
+  // Only needed when smooth animations are enabled
+  if (get_nowbar_smooth_animations_enabled() && 
+      std::abs(m_animated_progress - m_target_progress) > 0.0005 && !m_seeking) {
     auto anim_now = std::chrono::steady_clock::now();
     float frame_elapsed = std::chrono::duration<float, std::milli>(anim_now - m_last_animation_frame).count();
     if (frame_elapsed >= MIN_ANIMATION_FRAME_MS) {
