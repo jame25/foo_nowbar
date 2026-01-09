@@ -1,0 +1,623 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{743CBAAD-BE8E-430A-918B-2BB68008A616}</ProjectGuid>
+    <RootNamespace>foo_ui_columns</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseOfMfc>false</UseOfMfc>
+    <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+    <UseDebugLibraries>true</UseDebugLibraries>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseOfMfc>false</UseOfMfc>
+    <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+    <UseDebugLibraries>true</UseDebugLibraries>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseOfMfc>false</UseOfMfc>
+    <CharacterSet>Unicode</CharacterSet>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseOfMfc>false</UseOfMfc>
+    <CharacterSet>Unicode</CharacterSet>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <_ProjectFileVersion>10.0.40219.1</_ProjectFileVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(ProjectDir);</IncludePath>
+    <ExtensionsToDeleteOnClean>$(ProjectDir)version.h;$(SolutionDir)$(Configuration)\$(TargetName).fb2k-component;$(ExtensionsToDeleteOnClean)</ExtensionsToDeleteOnClean>
+    <OutDir>$(SolutionDir)$(Configuration.ToLower())-$(Platform.ToLower())-$(PlatformToolset.ToLower())\</OutDir>
+    <IntDir>$(SolutionDir)$(Configuration.ToLower())-$(Platform.ToLower())-$(PlatformToolset.ToLower())\$(ProjectName)\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(ProjectDir);</IncludePath>
+    <ExtensionsToDeleteOnClean>$(ProjectDir)version.h;$(SolutionDir)$(Configuration)\$(TargetName).fb2k-component;$(ExtensionsToDeleteOnClean)</ExtensionsToDeleteOnClean>
+    <OutDir>$(SolutionDir)$(Configuration.ToLower())-$(Platform.ToLower())-$(PlatformToolset.ToLower())\</OutDir>
+    <IntDir>$(SolutionDir)$(Configuration.ToLower())-$(Platform.ToLower())-$(PlatformToolset.ToLower())\$(ProjectName)\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(ProjectDir);</IncludePath>
+    <ExtensionsToDeleteOnClean>$(ProjectDir)version.h;$(SolutionDir)$(Configuration)\$(TargetName).fb2k-component;$(ExtensionsToDeleteOnClean)</ExtensionsToDeleteOnClean>
+    <OutDir>$(SolutionDir)$(Configuration.ToLower())-$(Platform.ToLower())-$(PlatformToolset.ToLower())\</OutDir>
+    <IntDir>$(SolutionDir)$(Configuration.ToLower())-$(Platform.ToLower())-$(PlatformToolset.ToLower())\$(ProjectName)\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(ProjectDir);</IncludePath>
+    <ExtensionsToDeleteOnClean>$(ProjectDir)version.h;$(SolutionDir)$(Configuration)\$(TargetName).fb2k-component;$(ExtensionsToDeleteOnClean)</ExtensionsToDeleteOnClean>
+    <OutDir>$(SolutionDir)$(Configuration.ToLower())-$(Platform.ToLower())-$(PlatformToolset.ToLower())\</OutDir>
+    <IntDir>$(SolutionDir)$(Configuration.ToLower())-$(Platform.ToLower())-$(PlatformToolset.ToLower())\$(ProjectName)\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Label="Vcpkg">
+    <VcpkgEnableManifest>true</VcpkgEnableManifest>
+  </PropertyGroup>
+  <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <VcpkgUseStatic>true</VcpkgUseStatic>
+  </PropertyGroup>
+  <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <VcpkgUseStatic>true</VcpkgUseStatic>
+  </PropertyGroup>
+  <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <VcpkgUseStatic>true</VcpkgUseStatic>
+  </PropertyGroup>
+  <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <VcpkgUseStatic>true</VcpkgUseStatic>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeTypeInfo>false</RuntimeTypeInfo>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <WarningLevel>Level3</WarningLevel>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <ConformanceMode>true</ConformanceMode>
+      <DiagnosticsFormat>Caret</DiagnosticsFormat>
+      <AdditionalIncludeDirectories>..;../foobar2000</AdditionalIncludeDirectories>
+      <TreatWarningAsError>true</TreatWarningAsError>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <Culture>0x0809</Culture>
+    </ResourceCompile>
+    <Link>
+      <AdditionalDependencies>Urlmon.lib;comctl32.lib;shell32.lib;shlwapi.lib;Winmm.lib;gdiplus.lib;../foobar2000/shared/shared-$(Platform).lib;uxtheme.lib;Dwmapi.lib;usp10.lib;Windowscodecs.lib;D2d1.lib;Dwrite.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <GenerateDebugInformation>DebugFastLink</GenerateDebugInformation>
+      <OptimizeReferences>true</OptimizeReferences>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <DataExecutionPrevention>
+      </DataExecutionPrevention>
+      <SubSystem>Windows</SubSystem>
+      <FullProgramDatabaseFile>true</FullProgramDatabaseFile>
+    </Link>
+    <PreBuildEvent>
+      <Command>py ..\scripts\pre-build.py</Command>
+      <Message>Setting version number...</Message>
+    </PreBuildEvent>
+    <PostBuildEvent>
+      <Command>py ..\scripts\post-build.py $(TargetPath) $(TargetDir) $(Platform)</Command>
+      <Message>Creating archive...</Message>
+    </PostBuildEvent>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeTypeInfo>false</RuntimeTypeInfo>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <WarningLevel>Level3</WarningLevel>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <ConformanceMode>true</ConformanceMode>
+      <DiagnosticsFormat>Caret</DiagnosticsFormat>
+      <AdditionalIncludeDirectories>..;../foobar2000</AdditionalIncludeDirectories>
+      <TreatWarningAsError>true</TreatWarningAsError>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <Culture>0x0809</Culture>
+    </ResourceCompile>
+    <Link>
+      <AdditionalDependencies>Urlmon.lib;comctl32.lib;shell32.lib;shlwapi.lib;Winmm.lib;gdiplus.lib;../foobar2000/shared/shared-$(Platform).lib;uxtheme.lib;Dwmapi.lib;usp10.lib;Windowscodecs.lib;D2d1.lib;Dwrite.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <GenerateDebugInformation>DebugFastLink</GenerateDebugInformation>
+      <OptimizeReferences>true</OptimizeReferences>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <DataExecutionPrevention>
+      </DataExecutionPrevention>
+      <SubSystem>Windows</SubSystem>
+      <FullProgramDatabaseFile>true</FullProgramDatabaseFile>
+    </Link>
+    <PreBuildEvent>
+      <Command>py ..\scripts\pre-build.py</Command>
+      <Message>Setting version number...</Message>
+    </PreBuildEvent>
+    <PostBuildEvent>
+      <Command>py ..\scripts\post-build.py $(TargetPath) $(TargetDir) $(Platform)</Command>
+      <Message>Creating archive...</Message>
+    </PostBuildEvent>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <AdditionalOptions>/Zm125 /utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <WarningLevel>Level3</WarningLevel>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <ConformanceMode>true</ConformanceMode>
+      <DiagnosticsFormat>Caret</DiagnosticsFormat>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <AdditionalIncludeDirectories>..;../foobar2000</AdditionalIncludeDirectories>
+      <TreatWarningAsError>true</TreatWarningAsError>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <Culture>0x0809</Culture>
+    </ResourceCompile>
+    <Link>
+      <AdditionalDependencies>Urlmon.lib;comctl32.lib;shell32.lib;shlwapi.lib;Winmm.lib;gdiplus.lib;../foobar2000/shared/shared-$(Platform).lib;uxtheme.lib;Dwmapi.lib;usp10.lib;Windowscodecs.lib;D2d1.lib;Dwrite.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <GenerateDebugInformation>Debug</GenerateDebugInformation>
+      <DataExecutionPrevention>
+      </DataExecutionPrevention>
+      <SubSystem>Windows</SubSystem>
+    </Link>
+    <PreBuildEvent>
+      <Command>py ..\scripts\pre-build.py</Command>
+      <Message>Setting version number...</Message>
+    </PreBuildEvent>
+    <PostBuildEvent>
+      <Command>py ..\scripts\post-build.py $(TargetPath) $(TargetDir) $(Platform)</Command>
+      <Message>Creating archive...</Message>
+    </PostBuildEvent>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <AdditionalOptions>/Zm125 /utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <WarningLevel>Level3</WarningLevel>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <ConformanceMode>true</ConformanceMode>
+      <DiagnosticsFormat>Caret</DiagnosticsFormat>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <AdditionalIncludeDirectories>..;../foobar2000</AdditionalIncludeDirectories>
+      <TreatWarningAsError>true</TreatWarningAsError>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <Culture>0x0809</Culture>
+    </ResourceCompile>
+    <Link>
+      <AdditionalDependencies>Urlmon.lib;comctl32.lib;shell32.lib;shlwapi.lib;Winmm.lib;gdiplus.lib;../foobar2000/shared/shared-$(Platform).lib;uxtheme.lib;Dwmapi.lib;usp10.lib;Windowscodecs.lib;D2d1.lib;Dwrite.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <GenerateDebugInformation>Debug</GenerateDebugInformation>
+      <DataExecutionPrevention>
+      </DataExecutionPrevention>
+      <SubSystem>Windows</SubSystem>
+    </Link>
+    <PreBuildEvent>
+      <Command>py ..\scripts\pre-build.py</Command>
+      <Message>Setting version number...</Message>
+    </PreBuildEvent>
+    <PostBuildEvent>
+      <Command>py ..\scripts\post-build.py $(TargetPath) $(TargetDir) $(Platform)</Command>
+      <Message>Creating archive...</Message>
+    </PostBuildEvent>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="artwork_decoder.cpp" />
+    <ClCompile Include="artwork_reader.cpp" />
+    <ClCompile Include="audio_track_toolbar.cpp" />
+    <ClCompile Include="buttons_button.cpp" />
+    <ClCompile Include="buttons_button_image.cpp" />
+    <ClCompile Include="buttons_command_picker.cpp" />
+    <ClCompile Include="buttons_config_param.cpp" />
+    <ClCompile Include="buttons_config_droptarget.cpp" />
+    <ClCompile Include="buttons_config_listview.cpp" />
+    <ClCompile Include="buttons_custom_image.cpp" />
+    <ClCompile Include="colour_manager_data.cpp" />
+    <ClCompile Include="colour_utils.cpp" />
+    <ClCompile Include="columns_v2.cpp" />
+    <ClCompile Include="colour_manager.cpp" />
+    <ClCompile Include="core_dark_list_view.cpp" />
+    <ClCompile Include="dark_mode_active_ui.cpp" />
+    <ClCompile Include="dark_mode_dialog.cpp" />
+    <ClCompile Include="dark_mode_spin.cpp" />
+    <ClCompile Include="file_info_utils.cpp" />
+    <ClCompile Include="font_manager.cpp" />
+    <ClCompile Include="font_manager_v3.cpp" />
+    <ClCompile Include="font_picker.cpp" />
+    <ClCompile Include="gdi.cpp" />
+    <ClCompile Include="icons.cpp" />
+    <ClCompile Include="item_details_format_parser.cpp" />
+    <ClCompile Include="ng_playlist\ng_playlist_config.cpp" />
+    <ClCompile Include="playlist_selector.cpp" />
+    <ClCompile Include="resource_utils.cpp" />
+    <ClCompile Include="string.cpp" />
+    <ClCompile Include="svg.cpp" />
+    <ClCompile Include="system_appearance_manager.cpp" />
+    <ClCompile Include="dark_mode.cpp" />
+    <ClCompile Include="dark_mode_tabs.cpp" />
+    <ClCompile Include="dark_mode_trackbar.cpp" />
+    <ClCompile Include="fcl_colours.cpp" />
+    <ClCompile Include="fcl_fonts.cpp" />
+    <ClCompile Include="fcl_playlist_switcher.cpp" />
+    <ClCompile Include="fcl_playlist_view.cpp" />
+    <ClCompile Include="filter_fcl.cpp" />
+    <ClCompile Include="legacy_artwork_config.cpp" />
+    <ClCompile Include="ng_playlist\config_object_callbacks.cpp" />
+    <ClCompile Include="system_tray_callbacks.cpp" />
+    <ClCompile Include="output_format.cpp" />
+    <ClCompile Include="playlist_switcher_title_formatting.cpp" />
+    <ClCompile Include="rename_dialog.cpp" />
+    <ClCompile Include="seekbar_callbacks.cpp" />
+    <ClCompile Include="status_bar_callbacks.cpp" />
+    <ClCompile Include="tab_dark_mode.cpp" />
+    <ClCompile Include="tab_playlist_swticher.cpp" />
+    <ClCompile Include="tab_status_pane.cpp" />
+    <ClCompile Include="tab_text_rendering.cpp" />
+    <ClCompile Include="title_formatting.cpp" />
+    <ClCompile Include="version.cpp" />
+    <ClCompile Include="config_defaults.cpp" />
+    <ClCompile Include="config_items.cpp" />
+    <ClCompile Include="filter_inline_edit.cpp" />
+    <ClCompile Include="filter_items.cpp" />
+    <ClCompile Include="filter_menu.cpp" />
+    <ClCompile Include="filter_search_bar.cpp" />
+    <ClCompile Include="filter_config_var.cpp" />
+    <ClCompile Include="font_manager_data.cpp" />
+    <ClCompile Include="gdiplus.cpp" />
+    <ClCompile Include="get_msg_hook.cpp" />
+    <ClCompile Include="item_details_config.cpp" />
+    <ClCompile Include="item_details_font.cpp" />
+    <ClCompile Include="item_details_text.cpp" />
+    <ClCompile Include="item_properties_config.cpp" />
+    <ClCompile Include="item_properties_config_list_view.cpp" />
+    <ClCompile Include="layout_config.cpp" />
+    <ClCompile Include="menu_helpers.cpp" />
+    <ClCompile Include="mw_drop_target.cpp" />
+    <ClCompile Include="mw_wnd_proc.cpp" />
+    <ClCompile Include="playlist_tabs_drop_target.cpp" />
+    <ClCompile Include="playlist_tabs_wndproc.cpp" />
+    <ClCompile Include="playlist_view_tfhook.cpp" />
+    <ClCompile Include="prefs_utils.cpp" />
+    <ClCompile Include="setup_dialog.cpp" />
+    <ClCompile Include="button_items.cpp" />
+    <ClCompile Include="dsp_preset.cpp" />
+    <ClCompile Include="file_info_reader.cpp" />
+    <ClCompile Include="font_utils.cpp" />
+    <ClCompile Include="help.cpp" />
+    <ClCompile Include="legacy_config.cpp" />
+    <ClCompile Include="migrate.cpp" />
+    <ClCompile Include="ng_playlist\ng_playlist.cpp" />
+    <ClCompile Include="ng_playlist\ng_playlist_artwork.cpp" />
+    <ClCompile Include="ng_playlist\ng_playlist_callbacks.cpp" />
+    <ClCompile Include="ng_playlist\ng_playlist_clipboard.cpp" />
+    <ClCompile Include="ng_playlist\ng_playlist_prefs_groups.cpp" />
+    <ClCompile Include="ng_playlist\ng_playlist_dropsource.cpp" />
+    <ClCompile Include="ng_playlist\ng_playlist_droptarget.cpp" />
+    <ClCompile Include="ng_playlist\ng_playlist_inline_edit.cpp" />
+    <ClCompile Include="ng_playlist\ng_playlist_renderer.cpp" />
+    <ClCompile Include="ng_playlist\ng_playlist_style.cpp" />
+    <ClCompile Include="playlist_search.cpp" />
+    <ClCompile Include="playlist_manager_utils.cpp" />
+    <ClCompile Include="playlist_switcher.cpp" />
+    <ClCompile Include="playlist_switcher_callbacks.cpp" />
+    <ClCompile Include="playlist_switcher_drop_source.cpp" />
+    <ClCompile Include="playlist_switcher_drop_target.cpp" />
+    <ClCompile Include="playlist_switcher_inline_edit.cpp" />
+    <ClCompile Include="playlist_switcher_shortcut_menu.cpp" />
+    <ClCompile Include="playlist_switcher_v2.cpp" />
+    <ClCompile Include="playlist_tabs.cpp" />
+    <ClCompile Include="artwork.cpp" />
+    <ClCompile Include="filter.cpp" />
+    <ClCompile Include="item_details.cpp" />
+    <ClCompile Include="item_properties.cpp" />
+    <ClCompile Include="splitter.cpp" />
+    <ClCompile Include="splitter_panel.cpp" />
+    <ClCompile Include="splitter_panel_container.cpp" />
+    <ClCompile Include="splitter_tabs.cpp" />
+    <ClCompile Include="main_window.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Use</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Use</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="layout.cpp" />
+    <ClCompile Include="rebar.cpp" />
+    <ClCompile Include="main_window_callbacks.cpp" />
+    <ClCompile Include="callbacks_config.cpp" />
+    <ClCompile Include="command_line.cpp" />
+    <ClCompile Include="common.cpp" />
+    <ClCompile Include="menu_items.cpp" />
+    <ClCompile Include="splitter_window.cpp" />
+    <ClCompile Include="splitter_window_wndproc.cpp" />
+    <ClCompile Include="status_bar.cpp" />
+    <ClCompile Include="pch.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
+      <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">pch.h</PrecompiledHeaderFile>
+      <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">pch.h</PrecompiledHeaderFile>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
+      <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">pch.h</PrecompiledHeaderFile>
+      <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='Release|x64'">pch.h</PrecompiledHeaderFile>
+    </ClCompile>
+    <ClCompile Include="tab_colours.cpp" />
+    <ClCompile Include="tab_display2.cpp" />
+    <ClCompile Include="tab_fonts.cpp" />
+    <ClCompile Include="tab_global.cpp" />
+    <ClCompile Include="tab_main.cpp" />
+    <ClCompile Include="tab_system_tray.cpp" />
+    <ClCompile Include="tab_playlist_tabs.cpp" />
+    <ClCompile Include="tab_playlist_dd.cpp" />
+    <ClCompile Include="tab_status_bar.cpp" />
+    <ClCompile Include="user_interface_impl.cpp" />
+    <ClCompile Include="volume.cpp" />
+    <ClCompile Include="buttons.cpp" />
+    <ClCompile Include="buttons_stock.cpp" />
+    <ClCompile Include="menubar.cpp" />
+    <ClCompile Include="order_dropdown.cpp" />
+    <ClCompile Include="seekbar.cpp" />
+    <ClCompile Include="vis_gen_host.cpp" />
+    <ClCompile Include="vis_spectrum.cpp" />
+    <ClCompile Include="config.cpp" />
+    <ClCompile Include="config_appearance.cpp" />
+    <ClCompile Include="config_artwork.cpp" />
+    <ClCompile Include="config_columns.cpp" />
+    <ClCompile Include="config_columns_v2.cpp" />
+    <ClCompile Include="config_filter.cpp" />
+    <ClCompile Include="config_layout.cpp" />
+    <ClCompile Include="config_vars.cpp" />
+    <ClCompile Include="fcl.cpp" />
+    <ClCompile Include="fcl_legacy_fonts.cpp" />
+    <ClCompile Include="fcl_layout.cpp" />
+    <ClCompile Include="fcl_titles.cpp" />
+    <ClCompile Include="status_pane.cpp" />
+    <ClCompile Include="status_pane_msgproc.cpp" />
+    <ClCompile Include="helpers.cpp" />
+    <ClCompile Include="config_host.cpp" />
+    <ClCompile Include="list_view_panel.cpp" />
+    <ClCompile Include="system_tray.cpp" />
+    <ClCompile Include="output_device.cpp" />
+    <ClCompile Include="playlist_item_helpers.cpp" />
+    <ClCompile Include="rebar_band.cpp" />
+    <ClCompile Include="replaygain_mode.cpp" />
+    <ClCompile Include="splitter_utils.cpp" />
+    <ClCompile Include="tab_layout.cpp" />
+    <ClCompile Include="tab_layout_misc.cpp" />
+    <ClCompile Include="tab_pview_artwork.cpp" />
+    <ClCompile Include="wic.cpp" />
+    <ClCompile Include="win32.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="artwork_decoder.h" />
+    <ClInclude Include="artwork_reader.h" />
+    <ClInclude Include="buttons.h" />
+    <ClInclude Include="colour_manager_data.h" />
+    <ClInclude Include="colour_utils.h" />
+    <ClInclude Include="columns_v2.h" />
+    <ClInclude Include="config_appearance.h" />
+    <ClInclude Include="config_defaults.h" />
+    <ClInclude Include="config_items.h" />
+    <ClInclude Include="core_dark_list_view.h" />
+    <ClInclude Include="core_drop_down_list_toolbar.h" />
+    <ClInclude Include="dark_mode_dialog.h" />
+    <ClInclude Include="dark_mode_active_ui.h" />
+    <ClInclude Include="dark_mode_spin.h" />
+    <ClInclude Include="event_token.h" />
+    <ClInclude Include="file_info_utils.h" />
+    <ClInclude Include="font_manager_data.h" />
+    <ClInclude Include="font_picker.h" />
+    <ClInclude Include="gdi.h" />
+    <ClInclude Include="gdiplus.h" />
+    <ClInclude Include="get_msg_hook.h" />
+    <ClInclude Include="icons.h" />
+    <ClInclude Include="item_details.h" />
+    <ClInclude Include="item_details_format_parser.h" />
+    <ClInclude Include="item_details_text.h" />
+    <ClInclude Include="item_properties.h" />
+    <ClInclude Include="lexy_user_config.hpp" />
+    <ClInclude Include="menu_helpers.h" />
+    <ClInclude Include="metadb_helpers.h" />
+    <ClInclude Include="mw_drop_target.h" />
+    <ClInclude Include="resource_utils.h" />
+    <ClInclude Include="string.h" />
+    <ClInclude Include="svg.h" />
+    <ClInclude Include="system_appearance_manager.h" />
+    <ClInclude Include="button_items.h" />
+    <ClInclude Include="dark_mode.h" />
+    <ClInclude Include="dark_mode_tabs.h" />
+    <ClInclude Include="dark_mode_trackbar.h" />
+    <ClInclude Include="filter_config_var.h" />
+    <ClInclude Include="filter_utils.h" />
+    <ClInclude Include="font_utils.h" />
+    <ClInclude Include="functional.h" />
+    <ClInclude Include="help.h" />
+    <ClInclude Include="legacy_artwork_config.h" />
+    <ClInclude Include="menu_mnemonics.h" />
+    <ClInclude Include="migrate.h" />
+    <ClInclude Include="panel_menu_item.h" />
+    <ClInclude Include="playlist_switcher_title_formatting.h" />
+    <ClInclude Include="playlist_view_tfhooks.h" />
+    <ClInclude Include="setup_dialog.h" />
+    <ClInclude Include="file_info_reader.h" />
+    <ClInclude Include="ng_playlist\ng_playlist.h" />
+    <ClInclude Include="ng_playlist\ng_playlist_groups.h" />
+    <ClInclude Include="ng_playlist\ng_playlist_style.h" />
+    <ClInclude Include="playlist_search.h" />
+    <ClInclude Include="playlist_manager_utils.h" />
+    <ClInclude Include="playlist_switcher.h" />
+    <ClInclude Include="playlist_switcher_v2.h" />
+    <ClInclude Include="playlist_tabs.h" />
+    <ClInclude Include="artwork.h" />
+    <ClInclude Include="filter.h" />
+    <ClInclude Include="splitter.h" />
+    <ClInclude Include="splitter_tabs.h" />
+    <ClInclude Include="resource.h" />
+    <ClInclude Include="main_window.h" />
+    <ClInclude Include="layout.h" />
+    <ClInclude Include="rebar.h" />
+    <ClInclude Include="common.h" />
+    <ClInclude Include="menu_items.h" />
+    <ClInclude Include="status_bar.h" />
+    <ClInclude Include="pch.h" />
+    <ClInclude Include="tab_colours.h" />
+    <ClInclude Include="tab_fonts.h" />
+    <ClInclude Include="tab_text_rendering.h" />
+    <ClInclude Include="volume.h" />
+    <ClInclude Include="seekbar.h" />
+    <ClInclude Include="vis_gen_host.h" />
+    <ClInclude Include="config.h" />
+    <ClInclude Include="config_vars.h" />
+    <ClInclude Include="prefs_utils.h" />
+    <ClInclude Include="fcl.h" />
+    <ClInclude Include="status_pane.h" />
+    <ClInclude Include="helpers.h" />
+    <ClInclude Include="config_columns_v2.h" />
+    <ClInclude Include="config_host.h" />
+    <ClInclude Include="drop_down_list_toolbar.h" />
+    <ClInclude Include="filter_search_bar.h" />
+    <ClInclude Include="list_view_panel.h" />
+    <ClInclude Include="system_tray.h" />
+    <ClInclude Include="playlist_item_helpers.h" />
+    <ClInclude Include="rebar_band.h" />
+    <ClInclude Include="rename_dialog.h" />
+    <ClInclude Include="splitter_utils.h" />
+    <ClInclude Include="tab_dark_mode.h" />
+    <ClInclude Include="tab_layout.h" />
+    <ClInclude Include="tab_layout_misc.h" />
+    <ClInclude Include="title_formatting.h" />
+    <ClInclude Include="urls.h" />
+    <ClInclude Include="vis_spectrum.h" />
+    <ClInclude Include="wic.h" />
+    <ClInclude Include="win32.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include=".clang-format" />
+    <None Include="assets\vectors\minified\dark-next.svg" />
+    <None Include="assets\vectors\minified\dark-open.svg" />
+    <None Include="assets\vectors\minified\dark-padlock.svg" />
+    <None Include="assets\vectors\minified\dark-pause.svg" />
+    <None Include="assets\vectors\minified\dark-play-random.svg" />
+    <None Include="assets\vectors\minified\dark-play.svg" />
+    <None Include="assets\vectors\minified\dark-previous.svg" />
+    <None Include="assets\vectors\minified\dark-reset.svg" />
+    <None Include="assets\vectors\minified\dark-star-gold.svg" />
+    <None Include="assets\vectors\minified\dark-star-grey.svg" />
+    <None Include="assets\vectors\minified\dark-stop-after-current.svg" />
+    <None Include="assets\vectors\minified\dark-stop.svg" />
+    <None Include="assets\vectors\minified\light-next.svg" />
+    <None Include="assets\vectors\minified\light-open.svg" />
+    <None Include="assets\vectors\minified\light-padlock.svg" />
+    <None Include="assets\vectors\minified\light-pause.svg" />
+    <None Include="assets\vectors\minified\light-play-random.svg" />
+    <None Include="assets\vectors\minified\light-play.svg" />
+    <None Include="assets\vectors\minified\light-previous.svg" />
+    <None Include="assets\vectors\minified\light-reset.svg" />
+    <None Include="assets\vectors\minified\light-star-gold.svg" />
+    <None Include="assets\vectors\minified\light-star-grey.svg" />
+    <None Include="assets\vectors\minified\light-stop-after-current.svg" />
+    <None Include="assets\vectors\minified\light-stop.svg" />
+    <None Include="version.h.template" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="foo_ui_columns.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\columns_ui-sdk\columns_ui-sdk.vcxproj">
+      <Project>{93ec0ede-01cd-4fb0-b8e8-4f2a027e026e}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\fbh\fbh.vcxproj">
+      <Project>{84d30275-d3d7-4867-82d2-8031a53dce20}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\foobar2000\foobar2000_component_client\foobar2000_component_client.vcxproj">
+      <Project>{71ad2674-065b-48f5-b8b0-e1f9d3892081}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\foobar2000\SDK\foobar2000_SDK.vcxproj">
+      <Project>{e8091321-d79d-4575-86ef-064ea1a4a20d}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\mmh\mmh.vcxproj">
+      <Project>{c90a19c3-554d-4037-b4d3-bd12c1f1ad86}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\pfc\pfc.vcxproj">
+      <Project>{ebfffb4e-261d-44d3-b89c-957b31a0bf9c}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\ui_helpers\ui_helpers.vcxproj">
+      <Project>{a8c4298d-00f5-46f7-91ba-f503fd581590}</Project>
+    </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="assets\blank.bmp" />
+    <Image Include="assets\vectors\rendered\dark-next.ico" />
+    <Image Include="assets\vectors\rendered\dark-open.ico" />
+    <Image Include="assets\vectors\rendered\dark-padlock.ico" />
+    <Image Include="assets\vectors\rendered\dark-pause.ico" />
+    <Image Include="assets\vectors\rendered\dark-placeholder-artwork.png" />
+    <Image Include="assets\vectors\rendered\dark-play-random.ico" />
+    <Image Include="assets\vectors\rendered\dark-play.ico" />
+    <Image Include="assets\vectors\rendered\dark-previous.ico" />
+    <Image Include="assets\vectors\rendered\dark-reset.ico" />
+    <Image Include="assets\vectors\rendered\dark-star-gold.ico" />
+    <Image Include="assets\vectors\rendered\dark-star-grey.ico" />
+    <Image Include="assets\vectors\rendered\dark-stop-after-current.ico" />
+    <Image Include="assets\vectors\rendered\dark-stop.ico" />
+    <Image Include="assets\vectors\rendered\light-next.ico" />
+    <Image Include="assets\vectors\rendered\light-open.ico" />
+    <Image Include="assets\vectors\rendered\light-padlock.ico" />
+    <Image Include="assets\vectors\rendered\light-pause.ico" />
+    <Image Include="assets\vectors\rendered\light-placeholder-artwork.png" />
+    <Image Include="assets\vectors\rendered\light-play-random.ico" />
+    <Image Include="assets\vectors\rendered\light-play.ico" />
+    <Image Include="assets\vectors\rendered\light-previous.ico" />
+    <Image Include="assets\vectors\rendered\light-reset.ico" />
+    <Image Include="assets\vectors\rendered\light-star-gold.ico" />
+    <Image Include="assets\vectors\rendered\light-star-grey.ico" />
+    <Image Include="assets\vectors\rendered\light-stop-after-current.ico" />
+    <Image Include="assets\vectors\rendered\light-stop.ico" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets" />
+</Project>

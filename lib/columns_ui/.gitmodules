@@ -1,0 +1,24 @@
+[submodule "foobar2000"]
+	path = foobar2000
+	url = https://github.com/reupen/foobar2000-sdk-modified.git
+[submodule "ui_helpers"]
+	path = ui_helpers
+	url = https://github.com/reupen/ui_helpers.git
+[submodule "mmh"]
+	path = mmh
+	url = https://github.com/reupen/mmh.git
+[submodule "pfc"]
+	path = pfc
+	url = https://github.com/reupen/pfc-modified.git
+[submodule "columns_ui-sdk"]
+	path = columns_ui-sdk
+	url = https://github.com/reupen/columns_ui-sdk.git
+[submodule "fbh"]
+	path = fbh
+	url = https://github.com/reupen/fbh.git
+[submodule "scripts"]
+	path = scripts
+	url = https://github.com/reupen/foobar2000-development-scripts.git
+[submodule "svg-services"]
+	path = svg-services
+	url = https://github.com/reupen/svg-services.git

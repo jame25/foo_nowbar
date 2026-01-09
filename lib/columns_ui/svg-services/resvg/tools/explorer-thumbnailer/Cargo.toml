@@ -1,0 +1,22 @@
+[package]
+name = "explorer-thumbnailer"
+version = "0.45.1"
+license.workspace = true
+edition = "2021"
+publish = false
+
+# TODO: Remove this workspace.package section when this package is part of the repo's workspace.
+[workspace.package]
+license = "Apache-2.0 OR MIT"
+
+[dependencies]
+com = "0.2"
+winapi = { version = "0.3.9", features = ["impl-default", "objidlbase", "windef", "wingdi"] }
+log = "0.4"
+winlog = "0.2"
+resvg = { path = "../../crates/resvg" }
+
+[lib]
+# name can only be "server.dll", see https://github.com/microsoft/com-rs/issues/157
+name = "server"
+crate-type = ["rlib", "cdylib"]

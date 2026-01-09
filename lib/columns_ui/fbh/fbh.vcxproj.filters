@@ -1,0 +1,34 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="initquit.cpp" />
+    <ClCompile Include="library.cpp" />
+    <ClCompile Include="stdafx.cpp" />
+    <ClCompile Include="fcl.cpp" />
+    <ClCompile Include="low_level_hook.cpp" />
+    <ClCompile Include="info_box.cpp" />
+    <ClCompile Include="dark_mode.cpp" />
+    <ClCompile Include="wil.cpp" />
+    <ClCompile Include="dialog.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="initquit.h" />
+    <ClInclude Include="library.h" />
+    <ClInclude Include="sort.h" />
+    <ClInclude Include="stdafx.h" />
+    <ClInclude Include="config_var.h" />
+    <ClInclude Include="fcl.h" />
+    <ClInclude Include="low_level_hook.h" />
+    <ClInclude Include="config_object.h" />
+    <ClInclude Include="info_box.h" />
+    <ClInclude Include="console.h" />
+    <ClInclude Include="dark_mode.h" />
+    <ClInclude Include="utility.h" />
+    <ClInclude Include="wil.h" />
+    <ClInclude Include="dialog.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="README.md" />
+    <None Include="LICENCE" />
+  </ItemGroup>
+</Project>

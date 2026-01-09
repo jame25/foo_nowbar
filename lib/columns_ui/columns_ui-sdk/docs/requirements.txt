@@ -1,0 +1,3 @@
+breathe~=4.36
+sphinx~=8.2
+takao

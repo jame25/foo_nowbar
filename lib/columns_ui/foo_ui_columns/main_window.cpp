@@ -1,0 +1,552 @@
+/**
+ * Columns UI foobar2000 component
+ *
+ * \author musicmusic
+ */
+
+#include "pch.h"
+
+#include "main_window.h"
+
+#include "config_appearance.h"
+#include "status_pane.h"
+#include "layout.h"
+#include "dark_mode.h"
+#include "dark_mode_dialog.h"
+#include "icons.h"
+#include "system_tray.h"
+#include "status_bar.h"
+#include "migrate.h"
+#include "legacy_artwork_config.h"
+#include "rebar.h"
+#include "resource_utils.h"
+#include "svg.h"
+
+cui::rebar::RebarWindow* g_rebar_window = nullptr;
+LayoutWindow g_layout_window;
+cui::MainWindow cui::main_window;
+
+HIMAGELIST g_imagelist = nullptr;
+
+HWND g_status = nullptr;
+
+bool g_icon_created = false;
+bool ui_initialising = false, g_minimised = false;
+
+HICON g_icon = nullptr;
+
+bool remember_window_pos()
+{
+    return config_object::g_get_data_bool_simple(standard_config_objects::bool_remember_window_positions, false);
+}
+
+const TCHAR* main_window_class_name = _T("{E7076D1C-A7BF-4f39-B771-BCBE88F2A2A8}");
+
+const char* unsupported_os_message
+    = "Sorry, your operating system version is not supported by this version "
+      "of Columns UI. Please upgrade to Windows 7 Service Pack 1 or newer and try again.\n\n"
+      "Otherwise, uninstall the Columns UI component to return to the Default User Interface.";
+
+HWND cui::MainWindow::initialise(user_interface::HookProc_t hook, bool is_hidden)
+{
+    fbh::enable_wil_console_logging();
+
+    if (!IsWindows7SP1OrGreater()) {
+        dark::modal_info_box(nullptr, "Unsupported operating system – Columns UI", unsupported_os_message,
+            uih::InfoBoxType::Error, uih::InfoBoxModalType::OK);
+        return nullptr;
+    }
+
+    warn_if_ui_hacks_installed();
+
+    try {
+        THROW_IF_FAILED(OleInitialize(nullptr));
+    } catch (const wil::ResultException& ex) {
+        pfc::string8 message = "Unknown COM initialisation error";
+        uFormatMessage(ex.GetFailureInfo().hr, message);
+
+        dark::modal_info_box(nullptr, "Failed to initialise COM – Columns UI", message.c_str(), uih::InfoBoxType::Error,
+            uih::InfoBoxModalType::OK);
+        return nullptr;
+    }
+
+    uih::direct_write::Context::Ptr direct_write_context;
+
+    try {
+        direct_write_context = uih::direct_write::Context::s_create();
+    } catch (const wil::ResultException& ex) {
+        pfc::string8 error_message = "Unknown DirectWrite initialisation error";
+        uFormatMessage(ex.GetFailureInfo().hr, error_message);
+
+        const auto message
+            = IsWindows8OrGreater() ? error_message.get_ptr() : "The Platform Update for Windows 7 is required.";
+
+        dark::modal_info_box(nullptr, "Failed to initialise DirectWrite – Columns UI", message, uih::InfoBoxType::Error,
+            uih::InfoBoxModalType::OK);
+        return nullptr;
+    }
+
+    migrate::apply_first_run_defaults();
+    migrate::migrate_all();
+
+    m_hook_proc = hook;
+
+    systray::create_icon_handle();
+
+    WNDCLASS wc{};
+    wc.lpfnWndProc = s_on_message;
+    wc.style = CS_DBLCLKS;
+    wc.hInstance = core_api::get_my_instance();
+    wc.hIcon = ui_control::get()->get_main_icon();
+    wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
+    wc.lpszClassName = main_window_class_name;
+
+    RegisterClass(&wc);
+
+    RECT rc_work{};
+    SystemParametersInfo(SPI_GETWORKAREA, NULL, &rc_work, NULL);
+
+    const int cx = (rc_work.right - rc_work.left) * 80 / 100;
+    const int cy = (rc_work.bottom - rc_work.top) * 80 / 100;
+
+    const int left = (rc_work.right - rc_work.left - cx) / 2;
+    const int top = (rc_work.bottom - rc_work.top - cy) / 2;
+
+    if (main_window::config_get_is_first_run()) {
+        cfg_plist_width = cx * 10 / 100;
+    }
+
+    const DWORD ex_styles = main_window::config_get_transparency_enabled() ? WS_EX_LAYERED : 0;
+    constexpr DWORD styles = WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN | WS_CLIPSIBLINGS;
+
+    m_wnd = CreateWindowEx(ex_styles, main_window_class_name, _T("foobar2000"), styles, left, top, cx, cy, nullptr,
+        nullptr, core_api::get_my_instance(), &main_window);
+
+    main_window::on_transparency_enabled_change();
+
+    const bool rem_pos = remember_window_pos();
+
+    if (rem_pos && !main_window::config_get_is_first_run()) {
+        auto placement = cfg_window_placement_columns.get_value();
+
+        if (((cfg_main_window_is_hidden || is_hidden) && cfg_minimise_to_tray)
+            || (cfg_main_window_is_hidden && config::advbool_close_to_system_tray_icon.get())) {
+            cfg_main_window_is_hidden = true;
+            placement.showCmd = SW_SHOWMINNOACTIVE;
+        } else {
+            cfg_main_window_is_hidden = false;
+
+            if (is_hidden)
+                placement.showCmd = SW_SHOWMINNOACTIVE;
+        }
+
+        SetWindowPlacement(m_wnd, &placement);
+        resize_child_windows();
+
+    } else {
+        resize_child_windows();
+        ShowWindow(m_wnd, is_hidden ? SW_SHOWMINNOACTIVE : SW_SHOWNORMAL);
+    }
+
+    if (rebar::g_rebar)
+        ShowWindow(rebar::g_rebar, SW_SHOWNORMAL);
+    if (g_status)
+        ShowWindow(g_status, SW_SHOWNORMAL);
+    if (status_pane::g_status_pane.get_wnd())
+        ShowWindow(status_pane::g_status_pane.get_wnd(), SW_SHOWNORMAL);
+    g_layout_window.show_window();
+
+    RedrawWindow(m_wnd, nullptr, nullptr, RDW_UPDATENOW | RDW_ALLCHILDREN);
+
+    if (main_window::config_get_is_first_run())
+        SendMessage(m_wnd, MSG_RUN_INITIAL_SETUP, NULL, NULL);
+
+    main_window::config_set_is_first_run();
+
+    fb2k::inMainThread(artwork::legacy::prompt_to_reconfigure);
+
+    return m_wnd;
+}
+
+void cui::MainWindow::shutdown()
+{
+    DestroyWindow(m_wnd);
+    UnregisterClass(main_window_class_name, core_api::get_my_instance());
+    m_wnd = nullptr;
+    if (g_icon)
+        DestroyIcon(g_icon);
+    g_icon = nullptr;
+
+    OleUninitialize();
+}
+
+void cui::MainWindow::on_query_capability()
+{
+    if (!m_wnd)
+        m_should_handle_multimedia_keys = false;
+}
+
+void cui::MainWindow::update_title()
+{
+    metadb_handle_ptr track;
+    const auto play_api = play_control::get();
+    play_api->get_now_playing(track);
+    if (track.is_valid()) {
+        pfc::string8 title;
+        service_ptr_t<titleformat_object> to_wtitle;
+        titleformat_compiler::get()->compile_safe(to_wtitle, main_window::config_main_window_title_script.get());
+        play_api->playback_format_title_ex(track, nullptr, title, to_wtitle, nullptr, play_control::display_level_all);
+        set_title(title);
+        track.release();
+    } else {
+        set_title(core_version_info_v2::get()->get_name());
+    }
+}
+
+void cui::MainWindow::reset_title()
+{
+    set_title(core_version_info_v2::get()->get_name());
+}
+
+void cui::MainWindow::set_title(const char* ptr)
+{
+    if (strcmp(m_window_title, ptr) != 0)
+        uSetWindowText(m_wnd, ptr);
+    m_window_title = ptr;
+}
+
+bool cui::MainWindow::update_taskbar_button_images() const
+{
+    if (!m_taskbar_list)
+        return false;
+
+    int cx{};
+    int cy{};
+
+    if (!ImageList_GetIconSize(m_taskbar_button_images.get(), &cx, &cy))
+        return false;
+
+    if (icons::use_svg_icon(cx, cy)) {
+        for (auto [index, icon_config] : ranges::views::enumerate(taskbar_icon_configs)) {
+            auto hbitmap = render_svg(icon_config, cx, cy);
+            ImageList_Replace(m_taskbar_button_images.get(), gsl::narrow<int>(index), hbitmap.get(), nullptr);
+        }
+    } else {
+        for (auto [index, icon_config] : ranges::views::enumerate(taskbar_icon_configs)) {
+            auto icon = load_icon(icon_config, cx, cy);
+            ImageList_ReplaceIcon(m_taskbar_button_images.get(), gsl::narrow<int>(index), icon.get());
+        }
+    }
+
+    return SUCCEEDED(m_taskbar_list->ThumbBarSetImageList(m_wnd, m_taskbar_button_images.get()));
+}
+
+void cui::MainWindow::update_taskbar_buttons(bool update) const
+{
+    if (m_wnd && m_taskbar_list) {
+        const auto play_api = playback_control::get();
+
+        bool b_is_playing = play_api->is_playing();
+        bool b_is_paused = play_api->is_paused();
+
+        const WCHAR* ttips[6]
+            = {L"Stop", L"Previous", (b_is_playing && !b_is_paused ? L"Pause" : L"Play"), L"Next", L"Random"};
+        const UINT bitmap_indices[] = {0u, 1u, (b_is_playing && !b_is_paused ? 2u : 3u), 4u, 5u};
+
+        THUMBBUTTON tb[std::size(bitmap_indices)]{};
+
+        for (size_t i = 0; i < std::size(bitmap_indices); i++) {
+            tb[i].dwMask = THB_BITMAP | THB_TOOLTIP /*|THB_FLAGS*/;
+            tb[i].iId = gsl::narrow<uint32_t>(taskbar_buttons::ID_FIRST + i);
+            tb[i].iBitmap = bitmap_indices[i];
+            wcscpy_s(tb[i].szTip, std::size(tb[i].szTip), ttips[i]);
+            // if (tb[i].iId == ID_STOP && !b_is_playing)
+            //    tb[i].dwFlags |= THBF_DISABLED;
+        }
+
+        if (update)
+            m_taskbar_list->ThumbBarUpdateButtons(m_wnd, gsl::narrow<UINT>(std::size(tb)), tb);
+        else
+            m_taskbar_list->ThumbBarAddButtons(m_wnd, gsl::narrow<UINT>(std::size(tb)), tb);
+    }
+}
+
+void cui::MainWindow::save_focus_state()
+{
+    HWND wnd_focused_before_menu{};
+
+    if (!rebar::g_rebar_window || !rebar::g_rebar_window->get_previous_menu_focus_window(wnd_focused_before_menu))
+        wnd_focused_before_menu = g_layout_window.get_previous_menu_focus_window();
+
+    if (wnd_focused_before_menu) {
+        m_last_focused_wnd = wnd_focused_before_menu;
+        return;
+    }
+
+    HWND wnd_focus = GetFocus();
+    if (wnd_focus && IsChild(m_wnd, wnd_focus))
+        m_last_focused_wnd = wnd_focus;
+    else
+        m_last_focused_wnd = nullptr;
+}
+
+void cui::MainWindow::queue_taskbar_button_update(bool update)
+{
+    PostMessage(m_wnd, update ? MSG_UPDATE_TASKBAR_BUTTONS : MSG_CREATE_TASKBAR_BUTTONS, 0, 0);
+}
+
+void cui::MainWindow::warn_if_ui_hacks_installed()
+{
+    constexpr auto ui_hacks_warning
+        = "Columns UI detected that the UI Hacks (foo_ui_hacks) component is installed. UI Hacks "
+          "interferes with normal Columns UI operation and should be uninstalled to avoid problems.";
+
+    HMODULE ui_hacks_module = nullptr;
+    const auto is_ui_hacks_installed
+        = GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, L"foo_ui_hacks.dll", &ui_hacks_module);
+
+    if (is_ui_hacks_installed)
+        console::print(ui_hacks_warning);
+}
+
+void cui::MainWindow::on_create()
+{
+    INITCOMMONCONTROLSEX icex{};
+    icex.dwSize = sizeof(INITCOMMONCONTROLSEX);
+    icex.dwICC = ICC_BAR_CLASSES | ICC_COOL_CLASSES | ICC_LISTVIEW_CLASSES | ICC_TAB_CLASSES | ICC_WIN95_CLASSES;
+    InitCommonControlsEx(&icex);
+
+    Gdiplus::GdiplusStartupInput gdiplusStartupInput{};
+    m_gdiplus_initialised = (Gdiplus::Ok == GdiplusStartup(&m_gdiplus_instance, &gdiplusStartupInput, nullptr));
+
+    set_dark_mode_attributes();
+}
+
+void cui::MainWindow::on_destroy()
+{
+    if (m_gdiplus_initialised)
+        Gdiplus::GdiplusShutdown(m_gdiplus_instance);
+    m_gdiplus_initialised = false;
+}
+
+void cui::MainWindow::set_dark_mode_attributes(bool is_update) const
+{
+    if (!m_wnd || !dark::does_os_support_dark_mode())
+        return;
+
+    const auto is_dark = colours::is_dark_mode_active();
+    dark::set_titlebar_mode(m_wnd, is_dark);
+    dark::set_app_mode(is_dark ? dark::PreferredAppMode::Dark : dark::PreferredAppMode::Light);
+
+    if (!is_update)
+        return;
+
+    update_taskbar_button_images();
+
+    dark::force_titlebar_redraw(m_wnd);
+}
+
+void cui::MainWindow::create_child_windows()
+{
+    pfc::vartoggle_t<bool> initialising(ui_initialising, true);
+
+    RECT rc;
+    GetWindowRect(m_wnd, &rc);
+
+    g_layout_window.create(m_wnd);
+
+    rebar::create_rebar();
+    status_bar::create_window();
+    if (settings::show_status_pane)
+        status_pane::g_status_pane.create(m_wnd);
+}
+
+void cui::MainWindow::resize_child_windows()
+{
+    if (!/*g_minimised*/ IsIconic(m_wnd) && !ui_initialising) {
+        RECT rc_main_client;
+        GetClientRect(m_wnd, &rc_main_client);
+
+        HDWP dwp = BeginDeferWindowPos(7);
+        if (dwp) {
+            int status_height = 0;
+            if (g_status) {
+                // SendMessage(g_status, WM_SETREDRAW, FALSE, 0);
+                SendMessage(g_status, WM_SIZE, 0, 0);
+                RECT rc_status;
+                GetWindowRect(g_status, &rc_status);
+
+                status_height += rc_status.bottom - rc_status.top;
+
+                // dwp = DeferWindowPos(dwp, g_status, 0, 0, rc_main_client.bottom-status_height,
+                // rc_main_client.right-rc_main_client.left, status_height, SWP_NOZORDER|SWP_NOREDRAW);
+            }
+            if (status_pane::g_status_pane.get_wnd()) {
+                int cy = status_pane::g_status_pane.get_ideal_height();
+                RedrawWindow(status_pane::g_status_pane.get_wnd(), nullptr, nullptr, RDW_INVALIDATE);
+                dwp = DeferWindowPos(dwp, status_pane::g_status_pane.get_wnd(), nullptr, 0,
+                    rc_main_client.bottom - status_height - cy, rc_main_client.right - rc_main_client.left, cy,
+                    SWP_NOZORDER);
+                status_height += cy;
+            }
+            int rebar_height = 0;
+
+            if (rebar::g_rebar) {
+                RECT rc_rebar;
+                GetWindowRect(rebar::g_rebar, &rc_rebar);
+                rebar_height = rc_rebar.bottom - rc_rebar.top;
+            }
+            if (g_layout_window.get_wnd())
+                dwp = DeferWindowPos(dwp, g_layout_window.get_wnd(), nullptr, 0, rebar_height,
+                    rc_main_client.right - rc_main_client.left,
+                    rc_main_client.bottom - rc_main_client.top - rebar_height - status_height, SWP_NOZORDER);
+            if (rebar::g_rebar) {
+                RedrawWindow(rebar::g_rebar, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE);
+                dwp = DeferWindowPos(dwp, rebar::g_rebar, nullptr, 0, 0, rc_main_client.right - rc_main_client.left,
+                    rebar_height, SWP_NOZORDER);
+            }
+
+            EndDeferWindowPos(dwp);
+
+            if (g_status) {
+                set_part_sizes(status_bar::t_parts_none);
+            }
+        }
+    }
+}
+
+bool process_keydown(UINT msg, LPARAM lp, WPARAM wp, bool playlist, bool keyb)
+{
+    const auto keyboard_api = keyboard_shortcut_manager_v2::get();
+
+    if (msg == WM_SYSKEYDOWN) {
+        if (keyb && uie::window::g_process_keydown_keyboard_shortcuts(wp)) {
+            return true;
+        }
+    } else if (msg == WM_KEYDOWN) {
+        if (keyb && uie::window::g_process_keydown_keyboard_shortcuts(wp)) {
+            return true;
+        }
+        if (wp == VK_TAB) {
+            uie::window::g_on_tab(GetFocus());
+        }
+    }
+    return false;
+}
+
+class MainWindowPlaylistCallback : public playlist_callback_single_static {
+public:
+    void on_items_added(
+        size_t start, const pfc::list_base_const_t<metadb_handle_ptr>& p_data, const bit_array& p_selection) noexcept
+        override // inside any of these methods, you can call IPlaylist APIs to get exact info about what happened (but
+                 // only methods that read playlist state, not those that modify it)
+    {
+        if (cui::main_window.get_wnd()) {
+            cui::status_bar::set_part_sizes(cui::status_bar::t_part_length | cui::status_bar::t_part_count);
+        }
+    }
+    void on_items_reordered(const size_t* order, size_t count) override {
+    } // changes selection too; doesnt actually change set of items that are selected or
+      // item having focus, just changes their order
+    void on_items_removing(const bit_array& p_mask, size_t p_old_count, size_t p_new_count) override {
+    } // called before actually removing them
+    void on_items_removed(const bit_array& p_mask, size_t p_old_count, size_t p_new_count) noexcept override
+    {
+        if (cui::main_window.get_wnd()) {
+            cui::status_bar::set_part_sizes(cui::status_bar::t_part_length | cui::status_bar::t_part_count);
+        }
+    }
+    void on_items_selection_change(const bit_array& affected, const bit_array& state) noexcept override
+    {
+        if (cui::main_window.get_wnd()) {
+            cui::status_bar::set_part_sizes(cui::status_bar::t_part_length | cui::status_bar::t_part_count);
+        }
+    }
+    void on_item_focus_change(size_t from, size_t to) override {
+    } // focus may be -1 when no item has focus; reminder: focus may also change on other callbacks
+    void on_items_modified(const bit_array& p_mask) override {}
+    void on_items_modified_fromplayback(const bit_array& p_mask, play_control::t_display_level p_level) override {}
+    void on_items_replaced(const bit_array& p_mask,
+        const pfc::list_base_const_t<playlist_callback::t_on_items_replaced_entry>& p_data) override
+    {
+    }
+    void on_item_ensure_visible(size_t idx) override {}
+
+    void on_playlist_switch() noexcept override
+    {
+        if (cui::main_window.get_wnd()) {
+            set_part_sizes(cui::status_bar::t_parts_all);
+        }
+    }
+    void on_playlist_renamed(const char* p_new_name, size_t p_new_name_len) override {}
+    void on_playlist_locked(bool p_locked) noexcept override
+    {
+        if (cui::main_window.get_wnd())
+            if (g_status && main_window::config_get_status_show_lock())
+                set_part_sizes(cui::status_bar::t_parts_all);
+    }
+
+    void on_default_format_changed() override {}
+    void on_playback_order_changed(size_t p_new_index) override {}
+
+    unsigned get_flags() override { return flag_all; }
+};
+
+static service_factory_single_t<MainWindowPlaylistCallback> asdf2;
+
+void on_show_status_change()
+{
+    if (cui::main_window.get_wnd()) {
+        cui::status_bar::create_window();
+        if (g_status) {
+            ShowWindow(g_status, SW_SHOWNORMAL);
+            UpdateWindow(g_status);
+        }
+        cui::main_window.resize_child_windows();
+    }
+}
+
+void on_show_status_pane_change()
+{
+    if (cui::main_window.get_wnd()) {
+        if (settings::show_status_pane != (cui::status_pane::g_status_pane.get_wnd() != nullptr)) {
+            if (settings::show_status_pane) {
+                cui::status_pane::g_status_pane.create(cui::main_window.get_wnd());
+                ShowWindow(cui::status_pane::g_status_pane.get_wnd(), SW_SHOWNORMAL);
+            } else
+                cui::status_pane::g_status_pane.destroy();
+            cui::main_window.resize_child_windows();
+        }
+    }
+}
+
+void on_show_toolbars_change()
+{
+    if (const auto main_wnd = cui::main_window.get_wnd()) {
+        SetWindowRedraw(main_wnd, FALSE);
+
+        cui::rebar::create_rebar();
+        cui::main_window.resize_child_windows();
+
+        if (cui::rebar::g_rebar) {
+            ShowWindow(cui::rebar::g_rebar, SW_SHOWNORMAL);
+        }
+
+        SetWindowRedraw(main_wnd, TRUE);
+        RedrawWindow(main_wnd, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
+    }
+}
+
+class UIControl : public columns_ui::control {
+public:
+    bool get_string(const GUID& p_guid, pfc::string_base& p_out) const override
+    {
+        if (p_guid == columns_ui::strings::guid_global_variables) {
+            p_out = cfg_globalstring;
+            return true;
+        }
+        return false;
+    }
+};
+
+service_factory_single_t<UIControl> g_control_impl;

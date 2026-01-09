@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="List View">
+      <UniqueIdentifier>{849e6bdd-edd2-4504-ada7-02bb241d39ec}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Data Object">
+      <UniqueIdentifier>{29b3132f-c094-4c8d-a22c-92ca8ed4b40f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Trackbar">
+      <UniqueIdentifier>{cd91f854-e740-4719-bd4a-d0d160aae3bf}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="gdi.h" />
+    <ClInclude Include="menu.h" />
+    <ClInclude Include="message_hook.h" />
+    <ClInclude Include="solid_fill.h" />
+    <ClInclude Include="stdafx.h" />
+    <ClInclude Include="uniscribe_text_out.h" />
+    <ClInclude Include="win32_helpers.h" />
+    <ClInclude Include="ole.h" />
+    <ClInclude Include="drag_image.h" />
+    <ClInclude Include="container_window.h" />
+    <ClInclude Include="info_box.h" />
+    <ClInclude Include="list_view\list_view.h">
+      <Filter>List View</Filter>
+    </ClInclude>
+    <ClInclude Include="OLE\data_object.h">
+      <Filter>Data Object</Filter>
+    </ClInclude>
+    <ClInclude Include="ole\enum_format_etc.h">
+      <Filter>Data Object</Filter>
+    </ClInclude>
+    <ClInclude Include="theming.h" />
+    <ClInclude Include="list_view\list_view_renderer.h">
+      <Filter>List View</Filter>
+    </ClInclude>
+    <ClInclude Include="literals.h" />
+    <ClInclude Include="dpi.h" />
+    <ClInclude Include="dialog.h" />
+    <ClInclude Include="trackbar.h">
+      <Filter>Trackbar</Filter>
+    </ClInclude>
+    <ClInclude Include="trackbar_base.h">
+      <Filter>Trackbar</Filter>
+    </ClInclude>
+    <ClInclude Include="window_subclasser.h" />
+    <ClInclude Include="event_token.h" />
+    <ClInclude Include="direct_write.h" />
+    <ClInclude Include="uniscribe.h" />
+    <ClInclude Include="direct_write_text_out.h" />
+    <ClInclude Include="text_out_helpers.h" />
+    <ClInclude Include="direct_2d.h" />
+    <ClInclude Include="emoji.h" />
+    <ClInclude Include="direct_write_emoji.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="message_hook.cpp" />
+    <ClCompile Include="solid_fill.cpp" />
+    <ClCompile Include="stdafx.cpp" />
+    <ClCompile Include="uniscribe_text_out.cpp" />
+    <ClCompile Include="win32_helpers.cpp" />
+    <ClCompile Include="ole.cpp" />
+    <ClCompile Include="drag_image.cpp" />
+    <ClCompile Include="container_window.cpp" />
+    <ClCompile Include="list_view\list_view_columns.cpp">
+      <Filter>List View</Filter>
+    </ClCompile>
+    <ClCompile Include="list_view\list_view_drag_image.cpp">
+      <Filter>List View</Filter>
+    </ClCompile>
+    <ClCompile Include="list_view\list_view_header.cpp">
+      <Filter>List View</Filter>
+    </ClCompile>
+    <ClCompile Include="list_view\list_view_hittest.cpp">
+      <Filter>List View</Filter>
+    </ClCompile>
+    <ClCompile Include="list_view\list_view_inline_edit.cpp">
+      <Filter>List View</Filter>
+    </ClCompile>
+    <ClCompile Include="list_view\list_view_item_state.cpp">
+      <Filter>List View</Filter>
+    </ClCompile>
+    <ClCompile Include="list_view\list_view_items.cpp">
+      <Filter>List View</Filter>
+    </ClCompile>
+    <ClCompile Include="list_view\list_view_keyboard.cpp">
+      <Filter>List View</Filter>
+    </ClCompile>
+    <ClCompile Include="list_view\list_view_misc.cpp">
+      <Filter>List View</Filter>
+    </ClCompile>
+    <ClCompile Include="list_view\list_view_msgproc.cpp">
+      <Filter>List View</Filter>
+    </ClCompile>
+    <ClCompile Include="list_view\list_view_renderer.cpp">
+      <Filter>List View</Filter>
+    </ClCompile>
+    <ClCompile Include="list_view\list_view_scroll.cpp">
+      <Filter>List View</Filter>
+    </ClCompile>
+    <ClCompile Include="list_view\list_view_search.cpp">
+      <Filter>List View</Filter>
+    </ClCompile>
+    <ClCompile Include="list_view\list_view_tooltip.cpp">
+      <Filter>List View</Filter>
+    </ClCompile>
+    <ClCompile Include="ole\data_object.cpp">
+      <Filter>Data Object</Filter>
+    </ClCompile>
+    <ClCompile Include="ole\enum_format_etc.cpp">
+      <Filter>Data Object</Filter>
+    </ClCompile>
+    <ClCompile Include="gdi.cpp" />
+    <ClCompile Include="literals.cpp" />
+    <ClCompile Include="dpi.cpp" />
+    <ClCompile Include="dialog.cpp" />
+    <ClCompile Include="trackbar.cpp">
+      <Filter>Trackbar</Filter>
+    </ClCompile>
+    <ClCompile Include="trackbar_base.cpp">
+      <Filter>Trackbar</Filter>
+    </ClCompile>
+    <ClCompile Include="window_subclasser.cpp" />
+    <ClCompile Include="direct_write.cpp" />
+    <ClCompile Include="direct_write_text_out.cpp" />
+    <ClCompile Include="text_out_helpers.cpp" />
+    <ClCompile Include="info_box.cpp" />
+    <ClCompile Include="direct_2d.cpp" />
+    <ClCompile Include="emoji.cpp" />
+    <ClCompile Include="direct_write_emoji.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="README.md" />
+    <None Include="LICENCE" />
+  </ItemGroup>
+</Project>

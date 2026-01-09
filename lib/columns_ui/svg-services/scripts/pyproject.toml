@@ -1,0 +1,9 @@
+[project]
+requires-python = ">=3.11"
+
+[tool.ruff.lint]
+extend-select = ["B0", "I", "SIM", "UP"]
+extend-ignore = ["SIM112"]
+
+[tool.ruff.lint.isort]
+split-on-trailing-comma=false

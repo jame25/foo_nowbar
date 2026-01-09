@@ -1,0 +1,69 @@
+name: VS 2022
+
+on:
+  workflow_dispatch:
+  pull_request:
+  schedule:
+    - cron: 0 4 * * WED
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: windows-2022
+
+    strategy:
+      matrix:
+        configuration: ["release", "debug"]
+        platform: ["win32", "x64"]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: true
+
+      - name: Set up MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: C:\Users\runneradmin\AppData\Local\vcpkg\archives
+          key: ${{ runner.os }}-vcpkg-archives-${{ hashFiles('vcpkg.json') }}
+
+      - name: Set up vcpkg
+        run: |
+          git -C C:\vcpkg fetch
+          vcpkg version
+          vcpkg integrate install
+
+      - name: Set up MSBuild logger
+        run: |
+          Invoke-WebRequest -Uri https://github.com/reupen/msbuild-github-logger/releases/download/v1.0.1/Reupen.MSBuild.GitHubLogger.dll -OutFile "$Env:Temp\Reupen.MSBuild.GitHubLogger.dll"
+
+      - name: Set up Rust toolchains
+        if: matrix.platform == 'win32'
+        run: |
+          rustup toolchain install stable-i686-pc-windows-msvc
+
+      - name: Build resvg
+        run: |
+          py .\build-resvg.py '${{ matrix.configuration }}' '${{ matrix.platform }}'
+
+      - name: Build
+        run: |
+          msbuild /m '/p:Platform=${{ matrix.platform }};Configuration=${{ matrix.configuration }}' "/logger:$Env:Temp\Reupen.MSBuild.GitHubLogger.dll" vc17\svg-services.sln
+
+      - uses: actions/upload-artifact@v4
+        if: matrix.configuration == 'release'
+        with:
+          name: Component package (${{ matrix.configuration }}, ${{ matrix.platform }})
+          path: vc17\release-*\*.fb2k-component
+
+      - uses: actions/upload-artifact@v4
+        if: matrix.configuration == 'release'
+        with:
+          name: Symbols for debugging (${{ matrix.configuration }}, ${{ matrix.platform }})
+          path: vc17\release-*\*.pdb

@@ -1,0 +1,31 @@
+exclude: |
+  (?x)(
+      .rc|
+      .vcxproj|
+      .vcxproj.filters
+  )$
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-json
+      - id: check-yaml
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v4.0.0-alpha.8
+    hooks:
+      - id: prettier
+        types_or: [json, markdown, yaml]
+  - repo: https://github.com/LilSpazJoekp/docstrfmt
+    rev: v1.10.0
+    hooks:
+      - id: docstrfmt
+        types_or: [rst]
+        args:
+          - -l 80
+  - repo: https://github.com/pre-commit/mirrors-clang-format
+    rev: v20.1.7
+    hooks:
+      - id: clang-format
+        types_or: [c++]

@@ -1,0 +1,46 @@
+#include "ui_extension.h"
+
+namespace cui::fonts {
+
+#ifdef _WIN64
+
+const GUID manager::class_guid = {0x3e5a965d, 0xe161, 0x45b1, {0x98, 0xf9, 0xcf, 0xa1, 0x49, 0xd9, 0xea, 0x43}};
+
+const GUID manager_v2::class_guid = {0x82534e1a, 0x1c15, 0x4386, {0x8d, 0xe2, 0x11, 0x00, 0x98, 0x3b, 0x7a, 0xd3}};
+
+const GUID client::class_guid = {0x6632d984, 0xc1d3, 0x477b, {0x8e, 0x14, 0x38, 0xc8, 0xa0, 0x25, 0xea, 0xde}};
+
+#else
+
+const GUID manager::class_guid = {0x5b277e9, 0x83c3, 0x4f75, {0xb9, 0x2f, 0x66, 0xc1, 0x4, 0x9d, 0xb, 0x68}};
+
+const GUID manager_v2::class_guid = {0x6dcfd77f, 0x891, 0x4fc0, {0x85, 0x74, 0x4e, 0xe3, 0x91, 0x9b, 0xd4, 0x6a}};
+
+const GUID client::class_guid = {0x3fbcc2b0, 0x978e, 0x406f, {0xa4, 0x46, 0x46, 0x77, 0xe0, 0xd4, 0xc5, 0x8e}};
+
+#endif
+
+void helper::get_font(LOGFONT& p_out) const
+{
+    p_out = get_log_font_with_fallback(m_font_id);
+}
+
+HFONT helper::get_font() const
+{
+    return create_hfont_with_fallback(m_font_id);
+}
+
+bool client::create_by_guid(const GUID& p_guid, client::ptr& p_out)
+{
+    service_enum_t<client> p_enum;
+    client::ptr ptr;
+    while (p_enum.next(ptr)) {
+        if (ptr->get_client_guid() == p_guid) {
+            p_out = ptr;
+            return true;
+        }
+    }
+    return false;
+}
+
+} // namespace cui::fonts

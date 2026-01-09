@@ -1,0 +1,7 @@
+<Project>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalOptions Condition="'$(PlatformToolset)'=='ClangCL'">%(AdditionalOptions) -Wno-error=delete-non-abstract-non-virtual-dtor</AdditionalOptions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+</Project>

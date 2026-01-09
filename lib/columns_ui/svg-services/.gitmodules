@@ -1,0 +1,12 @@
+[submodule "foobar2000"]
+	path = foobar2000
+	url = https://github.com/reupen/foobar2000-sdk.git
+[submodule "pfc"]
+	path = pfc
+	url = https://github.com/reupen/pfc.git
+[submodule "resvg"]
+	path = resvg
+	url = https://github.com/RazrFalcon/resvg.git
+[submodule "scripts"]
+	path = scripts
+	url = https://github.com/reupen/foobar2000-development-scripts.git
