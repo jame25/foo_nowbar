@@ -94,8 +94,9 @@ jobs:
       run: msbuild columns_ui/pfc/pfc.vcxproj /p:Configuration=Release /p:Platform=x64
 
     # 3.2 Build Foobar2000 SDK
+    # FORCE OutDir to match what foo_nowbar expects: SDK/x64/foobar2000_SDK/
     - name: Build Foobar2000 SDK
-      run: msbuild columns_ui/foobar2000/SDK/foobar2000_SDK.vcxproj /p:Configuration=Release /p:Platform=x64
+      run: msbuild columns_ui/foobar2000/SDK/foobar2000_SDK.vcxproj /p:Configuration=Release /p:Platform=x64 /p:OutDir=x64\foobar2000_SDK\
 
     # 3.3 Build Columns UI SDK
     - name: Build Columns UI SDK
