@@ -38,22 +38,27 @@ jobs:
         path: columns_ui/pfc
 
     # 5. Checkout libPPUI (from marc2k3/foobar2000-sdk)
-    # Uses sparse-checkout to grab ONLY the 'libPPUI' folder
     - name: Checkout libPPUI
       uses: actions/checkout@v4
       with:
         repository: marc2k3/foobar2000-sdk
-        path: temp_libppui  # Temporary folder
+        path: temp_libppui
         sparse-checkout: libPPUI
         sparse-checkout-cone-mode: false
 
-    # 6. Move libPPUI to correct location
-    # We downloaded it to temp_libppui/libPPUI, now we move it to columns_ui/libPPUI
     - name: Move libPPUI
       run: |
         move temp_libppui\libPPUI columns_ui\libPPUI
         rmdir /s /q temp_libppui
       shell: cmd
+
+    # 6. Checkout SVG Services
+    # This satisfies: ../columns_ui/svg-services/api/api.h
+    - name: Checkout SVG Services
+      uses: actions/checkout@v4
+      with:
+        repository: reupen/svg-services
+        path: columns_ui/svg-services
 
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v2
