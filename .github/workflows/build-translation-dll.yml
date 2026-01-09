@@ -3,12 +3,6 @@ name: Build Translation DLL
 on:
   push:
     branches: [ "main" ]
-    paths:
-      - '**/*.rc'
-      - '**/*.cpp'
-      - '**/*.h'
-      - '**/*.vcxproj'
-      - '**/*.vcxproj.filters'
   workflow_dispatch:
 
 jobs:
@@ -16,39 +10,37 @@ jobs:
     runs-on: windows-latest
 
     steps:
-    # 1. Checkout my repository (foo_nowbar) into a subfolder
+    # 1. Checkout YOUR code
     - name: Checkout foo_nowbar
       uses: actions/checkout@v4
       with:
         path: foo_nowbar
 
-    # 2. Checkout the SDK (columns_ui) into a sibling folder
-    # This recreates the structure:
-    #   D:\a\foo_nowbar\foo_nowbar (Your Code)
-    #   D:\a\foo_nowbar\columns_ui (The SDK)
+    # 2. Checkout Columns UI SDK (The outer wrapper)
     - name: Checkout Columns UI SDK
       uses: actions/checkout@v4
       with:
         repository: reupen/columns_ui
         path: columns_ui
-        # If you need a specific version, uncomment the next line:
-        # ref: v2.0.0
 
-    # 3. Setup MSBuild
+    # 3. Checkout Foobar2000 SDK (The missing inner piece)
+    # We place it exactly where your include path expects it: inside columns_ui/foobar2000
+    - name: Checkout Foobar2000 SDK
+      uses: actions/checkout@v4
+      with:
+        repository: reupen/foobar2000-sdk-modified
+        path: columns_ui/foobar2000  # <--- NESTED HERE
+
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v2
 
-    # 4. Build the project
-    # Note the path: foo_nowbar/foo_nowbar.vcxproj (because of step 1)
+    # 4. Build
     - name: Build Project
       run: msbuild foo_nowbar/foo_nowbar.vcxproj /p:Configuration=Release /p:Platform=x64
 
-    # 5. Upload the result
-    - name: Upload DLL Artifact
+    - name: Upload DLL
       uses: actions/upload-artifact@v4
       with:
         name: foo_nowbar_dll
-        # Path to where the DLL is built.
-        # Since we are in a subfolder, the output is likely inside foo_nowbar/x64/Release/
         path: foo_nowbar/x64/Release/foo_nowbar.dll
         if-no-files-found: error
