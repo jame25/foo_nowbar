@@ -91,7 +91,7 @@ jobs:
 
     # 3.1 Build PFC
     - name: Build PFC
-      run: msbuild columns_ui/pfc/pfc.vcxproj /p:Configuration=Release /p:Platform=x64
+      run: msbuild columns_ui/pfc/pfc.vcxproj /p:Configuration=Release /p:Platform=x64 /p:OutDir=x64\pfc\
 
     # 3.2 Build Foobar2000 SDK
     # FORCE OutDir to match what foo_nowbar expects: SDK/x64/foobar2000_SDK/
