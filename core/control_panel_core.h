@@ -279,6 +279,8 @@ private:
     // Background transition animation
     std::unique_ptr<Gdiplus::Bitmap> m_prev_background;  // Cached previous background for crossfade
     SIZE m_prev_background_size = {0, 0};  // Size of cached background
+    std::unique_ptr<Gdiplus::Bitmap> m_target_background;  // Cached target background (double buffer for smooth crossfade)
+    SIZE m_target_background_size = {0, 0};  // Size of target background
     int m_prev_bg_style = -1;  // Previous background style to detect changes
     bool m_bg_transition_active = false;  // Animation in progress
     bool m_bg_cache_valid = false;  // Whether the background cache is up-to-date
