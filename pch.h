@@ -36,32 +36,34 @@
 // ----------------------------------------------------------------------------
 // SDK INCLUDE PATH HANDLING
 // ----------------------------------------------------------------------------
-// This block handles both local development (where 'columns_ui' is a sibling)
-// and GitHub Actions (where 'columns_ui' is inside 'lib/').
 
 // 1. foobar2000 SDK
-#if __has_include("lib/columns_ui/foobar2000/SDK/foobar2000.h")
-#include "lib/columns_ui/foobar2000/SDK/foobar2000.h"
-#include "lib/columns_ui/foobar2000/SDK/coreDarkMode.h"
-#include "lib/columns_ui/foobar2000/helpers/helpers.h"
+// Check for sibling folder (GitHub Actions / Local Sibling setup)
+#if __has_include("../columns_ui/foobar2000/SDK/foobar2000.h")
+    #include "../columns_ui/foobar2000/SDK/foobar2000.h"
+    #include "../columns_ui/foobar2000/SDK/coreDarkMode.h"
+    #include "../columns_ui/foobar2000/helpers/helpers.h"
+// Check for internal lib folder (Local Subfolder setup)
+#elif __has_include("lib/columns_ui/foobar2000/SDK/foobar2000.h")
+    #include "lib/columns_ui/foobar2000/SDK/foobar2000.h"
+    #include "lib/columns_ui/foobar2000/SDK/coreDarkMode.h"
+    #include "lib/columns_ui/foobar2000/helpers/helpers.h"
 #else
-#include "../columns_ui/foobar2000/SDK/foobar2000.h"
-#include "../columns_ui/foobar2000/SDK/coreDarkMode.h"
-#include "../columns_ui/foobar2000/helpers/helpers.h"
+    #error "Cannot find foobar2000 SDK! Checked '../columns_ui' and 'lib/columns_ui'"
 #endif
 
 // 2. Columns UI SDK
-#if __has_include("lib/columns_ui/columns_ui-sdk/ui_extension.h")
-#include "lib/columns_ui/columns_ui-sdk/ui_extension.h"
-#else
-#include "../columns_ui/columns_ui-sdk/ui_extension.h"
+#if __has_include("../columns_ui/columns_ui-sdk/ui_extension.h")
+    #include "../columns_ui/columns_ui-sdk/ui_extension.h"
+#elif __has_include("lib/columns_ui/columns_ui-sdk/ui_extension.h")
+    #include "lib/columns_ui/columns_ui-sdk/ui_extension.h"
 #endif
 
-// 3. SVG Services API (for SVG icon support)
-#if __has_include("lib/columns_ui/svg-services/api/api.h")
-#include "lib/columns_ui/svg-services/api/api.h"
-#else
-#include "../columns_ui/svg-services/api/api.h"
+// 3. SVG Services API
+#if __has_include("../columns_ui/svg-services/api/api.h")
+    #include "../columns_ui/svg-services/api/api.h"
+#elif __has_include("lib/columns_ui/svg-services/api/api.h")
+    #include "lib/columns_ui/svg-services/api/api.h"
 #endif
 
 // Project headers
