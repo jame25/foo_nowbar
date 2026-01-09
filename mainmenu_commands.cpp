@@ -146,10 +146,10 @@ static void execute_cbutton_action(int button_index) {
     }
 }
 
-// Register the Now Bar menu group under Playback
+// Register the Now Bar menu group under File (hidden by default, shown with Shift)
 static mainmenu_group_popup_factory g_nowbar_menu_group(
     guid_nowbar_menu_group,
-    mainmenu_groups::playback,
+    mainmenu_groups::file,
     mainmenu_commands::sort_priority_base + 1000,  // Low priority to appear near bottom
     "Now Bar"
 );
@@ -227,16 +227,11 @@ public:
     bool get_display(t_uint32 p_index, pfc::string_base& p_text, t_uint32& p_flags) override {
         if (p_index >= 12) return false;
         
-        // Hide Custom Buttons 7-12 unless Shift is held
-        if (p_index >= 6) {
-            const bool shift_down = (GetKeyState(VK_SHIFT) < 0);
-            if (!shift_down) return false;
-        }
-        
         get_name(p_index, p_text);
         
-        // Gray out disabled or unconfigured buttons
-        p_flags = 0;
+        // Hidden by default, shown when Shift is held (flag_defaulthidden)
+        // All 12 buttons are visible once the Now Bar submenu is accessed
+        p_flags = flag_defaulthidden;
         
         if (p_index < 6) {
             // Visible buttons - check enabled state
