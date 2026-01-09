@@ -16,31 +16,49 @@ jobs:
       with:
         path: foo_nowbar
 
-    # 2. Checkout Columns UI SDK (The outer wrapper)
+    # 2. Checkout Columns UI SDK (The wrapper)
     - name: Checkout Columns UI SDK
       uses: actions/checkout@v4
       with:
         repository: reupen/columns_ui
         path: columns_ui
 
-    # 3. Checkout Foobar2000 SDK (Nested inside columns_ui)
+    # 3. Checkout Foobar2000 SDK
     - name: Checkout Foobar2000 SDK
       uses: actions/checkout@v4
       with:
         repository: reupen/foobar2000-sdk-modified
         path: columns_ui/foobar2000
 
-    # 4. Checkout PFC (Nested inside columns_ui, sibling to foobar2000)
+    # 4. Checkout PFC
     - name: Checkout PFC
       uses: actions/checkout@v4
       with:
         repository: reupen/pfc-modified
         path: columns_ui/pfc
 
+    # 5. Checkout libPPUI (from marc2k3/foobar2000-sdk)
+    # Uses sparse-checkout to grab ONLY the 'libPPUI' folder
+    - name: Checkout libPPUI
+      uses: actions/checkout@v4
+      with:
+        repository: marc2k3/foobar2000-sdk
+        path: temp_libppui  # Temporary folder
+        sparse-checkout: libPPUI
+        sparse-checkout-cone-mode: false
+
+    # 6. Move libPPUI to correct location
+    # We downloaded it to temp_libppui/libPPUI, now we move it to columns_ui/libPPUI
+    - name: Move libPPUI
+      run: |
+        move temp_libppui\libPPUI columns_ui\libPPUI
+        rmdir /s /q temp_libppui
+      shell: cmd
+
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v2
 
-    # 5. Build
+    # 7. Build
     - name: Build Project
       run: msbuild foo_nowbar/foo_nowbar.vcxproj /p:Configuration=Release /p:Platform=x64
 
