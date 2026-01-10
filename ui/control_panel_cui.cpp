@@ -244,6 +244,11 @@ LRESULT ControlPanelCUI::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp) {
             m_core->on_settings_changed();
         }
         return 0;
+        
+    case WM_TIMER:
+        // Animation timer fired - trigger a repaint to continue the animation
+        InvalidateRect(wnd, nullptr, FALSE);
+        return 0;
     }
     
     return DefWindowProc(wnd, msg, wp, lp);
