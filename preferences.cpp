@@ -379,6 +379,9 @@ static void create_default_config_file() {
     std::ofstream file(wide_path.get_ptr(), std::ios::out | std::ios::binary);
     if (!file.is_open()) return;
     
+    // Write UTF-8 BOM for proper encoding detection
+    file.write("\xEF\xBB\xBF", 3);
+    
     file << "# Now Bar Custom Buttons Configuration\n";
     file << "# Buttons 1-6: Visible on panel + keyboard shortcuts\n";
     file << "# Buttons 7-12: Hidden (keyboard shortcuts only)\n";
@@ -515,6 +518,9 @@ static void save_config_file() {
     
     std::ofstream file(wide_path.get_ptr(), std::ios::out | std::ios::binary);
     if (!file.is_open()) return;
+    
+    // Write UTF-8 BOM for proper encoding detection
+    file.write("\xEF\xBB\xBF", 3);
     
     file << "# Now Bar Custom Buttons Configuration\n";
     file << "# Buttons 1-6: Visible on panel + keyboard shortcuts\n";
