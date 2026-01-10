@@ -1010,6 +1010,24 @@ void ControlPanelCore::paint(HDC hdc, const RECT &rect) {
         m_rect_miniplayer.right - mp_inset, m_rect_miniplayer.bottom - mp_inset};
     draw_miniplayer_icon(g, miniplayerIconRect, mpColor);
   }
+  
+  // Centralized animation loop: manage animation timer based on active animations
+  if (get_nowbar_smooth_animations_enabled()) {
+    bool any_animation_active = m_seekbar_animating || m_hover_animating || 
+                                 m_cbutton_animating || m_bg_animating;
+    
+    if (any_animation_active) {
+      // Animations are running - request next frame
+      request_animation();
+    } else {
+      // No animations active - make sure timer is stopped to avoid wasting CPU
+      if (m_animation_timer_active) {
+        KillTimer(m_hwnd, ANIMATION_TIMER_ID);
+        m_animation_timer_active = false;
+      }
+      m_animation_requested = false;
+    }
+  }
 }
 
 float ControlPanelCore::get_hover_opacity(HitRegion region) {
@@ -1164,10 +1182,9 @@ void ControlPanelCore::draw_background(Gdiplus::Graphics &g, const RECT &rect) {
     
     g.DrawImage(m_target_background.get(), r, 0, 0, width, height, Gdiplus::UnitPixel, &ia);
     
-    // Continue animation
-    if (m_bg_transition_active) {
-        invalidate();
-    }
+    // Track whether background animation is still in progress
+    // The centralized animation loop in paint() will request the next frame
+    m_bg_animating = m_bg_transition_active;
     
     // End of transition handling
     if (transition_alpha >= 1.0f) {
@@ -1181,6 +1198,8 @@ void ControlPanelCore::draw_background(Gdiplus::Graphics &g, const RECT &rect) {
     }
   } else {
     // No transition - use cached background if available for performance
+    m_bg_animating = false;  // No transition in progress
+    
     if (m_bg_cache_valid && m_prev_background && 
         m_prev_background_size.cx == width && 
         m_prev_background_size.cy == height) {
@@ -1564,11 +1583,9 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
       m_rect_super.right - super_inset, m_rect_super.bottom - super_inset};
   draw_super_icon(g, superIconRect, icon_secondary_color);
   
-  // Continue animation loop if hover transition is in progress
-  // Only needed when smooth animations are enabled
-  if (hover_animating && get_nowbar_smooth_animations_enabled()) {
-    invalidate();  // Direct invalidate for smooth animation (no frame rate limiting)
-  }
+  // Track whether hover animation is still in progress
+  // The centralized animation loop in paint() will request the next frame
+  m_hover_animating = hover_animating && get_nowbar_smooth_animations_enabled();
 
   // Custom buttons #1-6 (only render if enabled)
   // Update fade animation if active
@@ -1582,6 +1599,12 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
       m_cbutton_target_opacity = target;
       m_cbutton_fade_start_time = std::chrono::steady_clock::now();
       m_cbutton_fade_active = true;
+      
+      // Immediately kick off the animation loop (in case no other animations are running)
+      if (get_nowbar_smooth_animations_enabled()) {
+        m_cbutton_animating = true;
+        request_animation();
+      }
     }
     
     // When smooth animations disabled, use instant opacity change
@@ -1612,10 +1635,9 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
   
   // Skip rendering if fully transparent
   if (m_cbutton_opacity <= 0.01f) {
-    // Request another paint if animation is still active
-    if (m_cbutton_fade_active) {
-      invalidate();
-    }
+    // Animation tracking is handled at end of function
+    // Just skip drawing the buttons
+    m_cbutton_animating = m_cbutton_fade_active && get_nowbar_smooth_animations_enabled();
     return;  // Don't draw any custom buttons
   }
   
@@ -1688,11 +1710,9 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
   draw_cbutton(4, m_rect_cbutton5, HitRegion::CButton5);
   draw_cbutton(5, m_rect_cbutton6, HitRegion::CButton6);
   
-  // Continue animation loop if fade is in progress
-  // Only needed when smooth animations are enabled
-  if (m_cbutton_fade_active && get_nowbar_smooth_animations_enabled()) {
-    invalidate();  // Direct invalidate for smooth animation (no frame rate limiting)
-  }
+  // Track whether custom button animation is still in progress
+  // The centralized animation loop in paint() will request the next frame
+  m_cbutton_animating = m_cbutton_fade_active && get_nowbar_smooth_animations_enabled();
 }
 
 void ControlPanelCore::draw_button(Gdiplus::Graphics &g, const RECT &rect,
@@ -1829,12 +1849,11 @@ void ControlPanelCore::draw_seekbar(Gdiplus::Graphics &g) {
     }
   }
   
-  // Continue animation if not at target
-  // Only needed when smooth animations are enabled
-  if (get_nowbar_smooth_animations_enabled() && 
-      std::abs(m_animated_progress - m_target_progress) > 0.0005 && !m_seeking) {
-    invalidate();  // Direct invalidate for smooth animation
-  }
+  // Track whether seekbar animation is still in progress
+  // The centralized animation loop in paint() will request the next frame
+  m_seekbar_animating = get_nowbar_smooth_animations_enabled() && 
+                        std::abs(m_animated_progress - m_target_progress) > 0.0005 && 
+                        !m_seeking;
 
   // Seek handle (only on hover)
   if (m_hover_region == HitRegion::SeekBar || m_seeking) {
@@ -2876,7 +2895,17 @@ void ControlPanelCore::on_playback_time_changed(double time) {
       m_target_progress = 0.0;
     }
     
-    invalidate();
+    // When smooth animations are enabled, the seekbar interpolation loop
+    // handles continuous repainting. Only invalidate when time display changes
+    // to update the displayed seconds (reduces invalidation from 10Hz to 1Hz).
+    if (get_nowbar_smooth_animations_enabled()) {
+      // The seekbar animation loop will be activated by the progress change
+      // and handle frame scheduling via the centralized timer
+      m_seekbar_animating = true;
+    } else {
+      // Smooth animations disabled - must invalidate on every update
+      invalidate();
+    }
   }
 }
 
@@ -2968,6 +2997,39 @@ void ControlPanelCore::invalidate() {
 void ControlPanelCore::invalidate_rect(const RECT& rect) {
   if (m_hwnd) {
     InvalidateRect(m_hwnd, &rect, FALSE);
+  }
+}
+
+void ControlPanelCore::request_animation() {
+  // Throttled animation request - schedules frames at ~60 FPS
+  // Uses SetTimer to ensure the animation loop continues even without mouse events
+  if (!m_hwnd) return;
+  
+  auto now = std::chrono::steady_clock::now();
+  float elapsed_ms = std::chrono::duration<float, std::milli>(now - m_last_invalidate_time).count();
+  
+  if (elapsed_ms >= TARGET_FRAME_INTERVAL_MS) {
+    // Enough time has passed, perform actual invalidation
+    m_last_invalidate_time = now;
+    m_animation_requested = false;
+    
+    // Kill any pending timer since we're painting now
+    if (m_animation_timer_active) {
+      KillTimer(m_hwnd, ANIMATION_TIMER_ID);
+      m_animation_timer_active = false;
+    }
+    
+    InvalidateRect(m_hwnd, nullptr, FALSE);
+  } else if (!m_animation_timer_active) {
+    // Not enough time has passed - schedule a timer to fire when it's time
+    // Calculate how long until we should paint again
+    UINT delay_ms = static_cast<UINT>(TARGET_FRAME_INTERVAL_MS - elapsed_ms + 1);
+    if (delay_ms < 1) delay_ms = 1;
+    if (delay_ms > 17) delay_ms = 17;  // Cap at ~60 FPS
+    
+    SetTimer(m_hwnd, ANIMATION_TIMER_ID, delay_ms, nullptr);
+    m_animation_timer_active = true;
+    m_animation_requested = true;
   }
 }
 
