@@ -376,7 +376,7 @@ static void create_default_config_file() {
     pfc::string8 file_path = get_config_file_path();
     pfc::stringcvt::string_wide_from_utf8 wide_path(file_path);
     
-    std::ofstream file(wide_path.get_ptr());
+    std::ofstream file(wide_path.get_ptr(), std::ios::out | std::ios::binary);
     if (!file.is_open()) return;
     
     file << "# Now Bar Custom Buttons Configuration\n";
@@ -513,7 +513,7 @@ static void save_config_file() {
     pfc::string8 file_path = get_config_file_path();
     pfc::stringcvt::string_wide_from_utf8 wide_path(file_path);
     
-    std::ofstream file(wide_path.get_ptr());
+    std::ofstream file(wide_path.get_ptr(), std::ios::out | std::ios::binary);
     if (!file.is_open()) return;
     
     file << "# Now Bar Custom Buttons Configuration\n";
