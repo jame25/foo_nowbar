@@ -1033,27 +1033,9 @@ void ControlPanelCore::paint(HDC hdc, const RECT &rect) {
 float ControlPanelCore::get_hover_opacity(HitRegion region) {
   if (region == HitRegion::None) return 0.0f;
   
-  // When smooth animations are disabled, return instant on/off values
-  if (!get_nowbar_smooth_animations_enabled()) {
-    return (region == m_hover_region) ? 1.0f : 0.0f;
-  }
-  
-  auto now = std::chrono::steady_clock::now();
-  float elapsed_ms = std::chrono::duration<float, std::milli>(now - m_hover_change_time).count();
-  float progress = std::min(1.0f, elapsed_ms / HOVER_FADE_DURATION_MS);
-  
-  // Ease-out interpolation
-  float ease = 1.0f - (1.0f - progress) * (1.0f - progress);
-  
-  if (region == m_hover_region) {
-    // Fading in - this region is currently hovered
-    return ease;
-  } else if (region == m_prev_hover_region) {
-    // Fading out - this was the previous hover region
-    return 1.0f - ease;
-  }
-  
-  return 0.0f;  // Not involved in current transition
+  // Hover effects are instant (no fade animation) for performance
+  // The Smooth Animations setting does not affect hover effects
+  return (region == m_hover_region) ? 1.0f : 0.0f;
 }
 
 void ControlPanelCore::draw_background(Gdiplus::Graphics &g, const RECT &rect) {
@@ -1583,9 +1565,10 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
       m_rect_super.right - super_inset, m_rect_super.bottom - super_inset};
   draw_super_icon(g, superIconRect, icon_secondary_color);
   
-  // Track whether hover animation is still in progress
-  // The centralized animation loop in paint() will request the next frame
-  m_hover_animating = hover_animating && get_nowbar_smooth_animations_enabled();
+  // Hover fade animation is disabled for performance - don't drive continuous repaints
+  // The hover effect still works when get_hover_opacity() is called during paint 
+  // triggered by hover region changes
+  m_hover_animating = false;
 
   // Custom buttons #1-6 (only render if enabled)
   // Update fade animation if active
