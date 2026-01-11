@@ -105,14 +105,14 @@
       <PreprocessorDefinitions>_DEBUG;FOO_NOWBAR_EXPORTS;_WINDOWS;_USRDLL;UNICODE;_UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)..;$(ProjectDir)lib\columns_ui\foobar2000;$(ProjectDir)lib\columns_ui\foobar2000\SDK;$(ProjectDir)lib\columns_ui\foobar2000\helpers;$(ProjectDir)lib\columns_ui;$(ProjectDir)lib\columns_ui\pfc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)..;$(ProjectDir)..\columns_ui\foobar2000;$(ProjectDir)..\columns_ui\foobar2000\SDK;$(ProjectDir)..\columns_ui\foobar2000\helpers;$(ProjectDir)..\columns_ui;$(ProjectDir)..\columns_ui\pfc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>gdiplus.lib;comctl32.lib;shlwapi.lib;$(ProjectDir)lib\columns_ui\foobar2000\SDK\debug-x86\foobar2000_SDK\foobar2000_SDK.lib;$(ProjectDir)lib\columns_ui\foobar2000\shared\shared-Win32.lib;$(ProjectDir)lib\columns_ui\pfc\debug-x86\pfc\pfc.lib;$(ProjectDir)lib\columns_ui\columns_ui-sdk\debug-x86\columns_ui_sdk\columns_ui_sdk.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>gdiplus.lib;comctl32.lib;shlwapi.lib;$(ProjectDir)..\columns_ui\foobar2000\SDK\debug-x86\foobar2000_SDK\foobar2000_SDK.lib;$(ProjectDir)..\columns_ui\foobar2000\shared\shared-Win32.lib;$(ProjectDir)..\columns_ui\pfc\debug-x86\pfc\pfc.lib;$(ProjectDir)..\columns_ui\columns_ui-sdk\debug-x86\columns_ui_sdk\columns_ui_sdk.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   
@@ -127,7 +127,7 @@
       <PreprocessorDefinitions>NDEBUG;FOO_NOWBAR_EXPORTS;_WINDOWS;_USRDLL;UNICODE;_UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)..;$(ProjectDir)lib\columns_ui\foobar2000;$(ProjectDir)lib\columns_ui\foobar2000\SDK;$(ProjectDir)lib\columns_ui\foobar2000\helpers;$(ProjectDir)lib\columns_ui;$(ProjectDir)lib\columns_ui\pfc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)..;$(ProjectDir)..\columns_ui\foobar2000;$(ProjectDir)..\columns_ui\foobar2000\SDK;$(ProjectDir)..\columns_ui\foobar2000\helpers;$(ProjectDir)..\columns_ui;$(ProjectDir)..\columns_ui\pfc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
@@ -136,7 +136,7 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>gdiplus.lib;comctl32.lib;shlwapi.lib;$(ProjectDir)lib\columns_ui\foobar2000\SDK\x86\foobar2000_SDK\foobar2000_SDK.lib;$(ProjectDir)lib\columns_ui\foobar2000\shared\shared-Win32.lib;$(ProjectDir)lib\columns_ui\pfc\x86\pfc\pfc.lib;$(ProjectDir)lib\columns_ui\columns_ui-sdk\x86\columns_ui_sdk\columns_ui_sdk.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>gdiplus.lib;comctl32.lib;shlwapi.lib;$(ProjectDir)..\columns_ui\foobar2000\SDK\x86\foobar2000_SDK\foobar2000_SDK.lib;$(ProjectDir)..\columns_ui\foobar2000\shared\shared-Win32.lib;$(ProjectDir)..\columns_ui\pfc\x86\pfc\pfc.lib;$(ProjectDir)..\columns_ui\columns_ui-sdk\x86\columns_ui_sdk\columns_ui_sdk.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   
@@ -149,14 +149,14 @@
       <PreprocessorDefinitions>_DEBUG;FOO_NOWBAR_EXPORTS;_WINDOWS;_USRDLL;UNICODE;_UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)..;$(ProjectDir)lib\columns_ui\foobar2000;$(ProjectDir)lib\columns_ui\foobar2000\SDK;$(ProjectDir)lib\columns_ui\foobar2000\helpers;$(ProjectDir)lib\columns_ui;$(ProjectDir)lib\columns_ui\pfc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)..;$(ProjectDir)..\columns_ui\foobar2000;$(ProjectDir)..\columns_ui\foobar2000\SDK;$(ProjectDir)..\columns_ui\foobar2000\helpers;$(ProjectDir)..\columns_ui;$(ProjectDir)..\columns_ui\pfc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>gdiplus.lib;comctl32.lib;shlwapi.lib;$(ProjectDir)lib\columns_ui\foobar2000\SDK\debug-x64\foobar2000_SDK\foobar2000_SDK.lib;$(ProjectDir)lib\columns_ui\foobar2000\shared\shared-x64.lib;$(ProjectDir)lib\columns_ui\pfc\debug-x64\pfc\pfc.lib;$(ProjectDir)lib\columns_ui\columns_ui-sdk\debug-x64\columns_ui_sdk\columns_ui_sdk.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>gdiplus.lib;comctl32.lib;shlwapi.lib;$(ProjectDir)..\columns_ui\foobar2000\SDK\debug-x64\foobar2000_SDK\foobar2000_SDK.lib;$(ProjectDir)..\columns_ui\foobar2000\shared\shared-x64.lib;$(ProjectDir)..\columns_ui\pfc\debug-x64\pfc\pfc.lib;$(ProjectDir)..\columns_ui\columns_ui-sdk\debug-x64\columns_ui_sdk\columns_ui_sdk.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   
@@ -171,7 +171,7 @@
       <PreprocessorDefinitions>NDEBUG;FOO_NOWBAR_EXPORTS;_WINDOWS;_USRDLL;UNICODE;_UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)..;$(ProjectDir)lib\columns_ui\foobar2000;$(ProjectDir)lib\columns_ui\foobar2000\SDK;$(ProjectDir)lib\columns_ui\foobar2000\helpers;$(ProjectDir)lib\columns_ui;$(ProjectDir)lib\columns_ui\pfc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)..;$(ProjectDir)..\columns_ui\foobar2000;$(ProjectDir)..\columns_ui\foobar2000\SDK;$(ProjectDir)..\columns_ui\foobar2000\helpers;$(ProjectDir)..\columns_ui;$(ProjectDir)..\columns_ui\pfc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
@@ -180,7 +180,7 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>gdiplus.lib;comctl32.lib;shlwapi.lib;$(ProjectDir)lib\columns_ui\foobar2000\SDK\x64\foobar2000_SDK\foobar2000_SDK.lib;$(ProjectDir)lib\columns_ui\foobar2000\shared\shared-x64.lib;$(ProjectDir)lib\columns_ui\pfc\x64\pfc\pfc.lib;$(ProjectDir)lib\columns_ui\columns_ui-sdk\x64\columns_ui_sdk\columns_ui_sdk.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>gdiplus.lib;comctl32.lib;shlwapi.lib;$(ProjectDir)..\columns_ui\foobar2000\SDK\x64\foobar2000_SDK\foobar2000_SDK.lib;$(ProjectDir)..\columns_ui\foobar2000\shared\shared-x64.lib;$(ProjectDir)..\columns_ui\pfc\x64\pfc\pfc.lib;$(ProjectDir)..\columns_ui\columns_ui-sdk\x64\columns_ui_sdk\columns_ui_sdk.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   
