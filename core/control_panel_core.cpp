@@ -951,13 +951,41 @@ void ControlPanelCore::update_layout(const RECT &rect) {
 
   // Seekbar (directly below control icons, extended to span from heart to super)
   int seek_y = m_rect_play.bottom + seek_gap;
-  
+
   // Position seekbar to extend beyond heart icon (left) and super button (right)
-  // Left edge: use heart button left if visible, otherwise shuffle left
-  int seekbar_left = get_nowbar_mood_icon_visible() ? m_rect_heart.left : m_rect_shuffle.left;
-  // Right edge: use super button right if visible, otherwise repeat button right
-  int seekbar_right = get_nowbar_super_icon_visible() ? m_rect_super.right : m_rect_repeat.right;
-  
+  // Use FULL SCALE (1.0) button positions so seekbar expands when panel shrinks
+  // This creates a wider seekbar at smaller panel heights for easier interaction
+  int full_button_size = static_cast<int>(m_metrics.button_size);
+  int full_play_size = static_cast<int>(m_metrics.play_button_size);
+  int full_spacing = static_cast<int>(m_metrics.spacing);
+  int full_core_width = full_button_size * (core_buttons - 1) + full_play_size +
+                        full_spacing * (core_buttons - 1);
+  int full_core_start_x = rect.left + (w - full_core_width) / 2;
+  full_core_start_x = std::max(full_core_start_x, min_controls_x);
+
+  // Calculate full-scale shuffle position (first button in core)
+  int full_shuffle_left = full_core_start_x;
+  // Calculate full-scale heart position (to the left of shuffle)
+  int full_heart_left = full_shuffle_left - full_spacing - full_button_size;
+
+  // Calculate full-scale positions for right side
+  // Traverse: shuffle, prev, play, next, [stop], repeat, [super]
+  int full_x = full_core_start_x;
+  full_x += full_button_size + full_spacing; // past shuffle
+  full_x += full_button_size + full_spacing; // past prev
+  full_x += full_play_size + full_spacing;   // past play
+  full_x += full_button_size + full_spacing; // past next
+  if (stop_visible) {
+    full_x += full_button_size + full_spacing; // past stop
+  }
+  int full_repeat_right = full_x + full_button_size;
+  int full_super_right = full_repeat_right + full_spacing + full_button_size;
+
+  // Left edge: use heart if visible, otherwise shuffle
+  int seekbar_left = get_nowbar_mood_icon_visible() ? full_heart_left : full_shuffle_left;
+  // Right edge: use super if visible, otherwise repeat
+  int seekbar_right = get_nowbar_super_icon_visible() ? full_super_right : full_repeat_right;
+
   m_rect_seekbar = {seekbar_left,
                     seek_y,
                     seekbar_right,
@@ -1281,8 +1309,11 @@ void ControlPanelCore::draw_artwork(Gdiplus::Graphics &g) {
     g.DrawImage(m_artwork_bitmap.get(), m_rect_artwork.left, m_rect_artwork.top,
                 w, h);
   } else {
-    // Draw placeholder
-    Gdiplus::SolidBrush brush(Gdiplus::Color(255, 60, 60, 60));
+    // Draw placeholder - use theme-appropriate background color
+    Gdiplus::Color placeholderBg = m_dark_mode
+        ? Gdiplus::Color(255, 60, 60, 60)    // Dark gray for dark themes
+        : Gdiplus::Color(255, 200, 200, 200); // Light gray for light themes
+    Gdiplus::SolidBrush brush(placeholderBg);
     Gdiplus::Rect artR(m_rect_artwork.left, m_rect_artwork.top, w, h);
     g.FillRectangle(&brush, artR);
 
@@ -1370,12 +1401,16 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
                               (bg_style == 2 && m_blurred_artwork);
   
   // Override icon colors for artwork-based backgrounds (they have dark overlays)
-  Gdiplus::Color icon_secondary_color = use_light_foreground 
+  Gdiplus::Color icon_secondary_color = use_light_foreground
       ? Gdiplus::Color(255, 200, 200, 200)  // Light gray for visibility
       : m_text_secondary_color;
+
+  // Get custom button accent color from preferences
+  COLORREF btn_accent = get_nowbar_button_accent_color();
+  Gdiplus::Color custom_accent(255, GetRValue(btn_accent), GetGValue(btn_accent), GetBValue(btn_accent));
   Gdiplus::Color icon_accent_color = use_light_foreground
-      ? Gdiplus::Color(255, 120, 200, 255)  // Bright accent for visibility
-      : m_accent_color;
+      ? Gdiplus::Color(255, 120, 200, 255)  // Bright accent for visibility on dark backgrounds
+      : custom_accent;
   Gdiplus::Color icon_hover_color = use_light_foreground
       ? Gdiplus::Color(40, 255, 255, 255)   // White hover for dark backgrounds
       : m_button_hover_color;
@@ -1813,8 +1848,10 @@ void ControlPanelCore::draw_seekbar(Gdiplus::Graphics &g) {
   int progress_w = static_cast<int>(w * progress);
 
   if (progress_w > 0) {
+    // Get custom progress accent color from preferences
+    COLORREF prog_accent = get_nowbar_progress_accent_color();
     Gdiplus::SolidBrush progressBrush(
-        Gdiplus::Color(255, 140, 140, 140)); // Darker gray
+        Gdiplus::Color(255, GetRValue(prog_accent), GetGValue(prog_accent), GetBValue(prog_accent)));
     if (is_pill && progress_w > radius * 2) {
       Gdiplus::GraphicsPath progressPath;
       int r = std::min(radius, progress_w / 2);
@@ -2035,8 +2072,10 @@ void ControlPanelCore::draw_volume(Gdiplus::Graphics &g) {
   int level_w = static_cast<int>(bar_w * bar_level);
 
   if (level_w > 0) {
+    // Get custom volume accent color from preferences
+    COLORREF vol_accent = get_nowbar_volume_accent_color();
     Gdiplus::SolidBrush levelBrush(
-        Gdiplus::Color(255, 140, 140, 140)); // Darker gray like seekbar
+        Gdiplus::Color(255, GetRValue(vol_accent), GetGValue(vol_accent), GetBValue(vol_accent)));
     if (is_pill && level_w > radius * 2) {
       Gdiplus::GraphicsPath levelPath;
       int r = std::min(radius, level_w / 2);
