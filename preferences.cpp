@@ -90,6 +90,21 @@ static cfg_int cfg_nowbar_smooth_animations(
     0  // Default: Disabled
 );
 
+static cfg_int cfg_nowbar_button_accent_color(
+    GUID{0xABCDEF54, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xE4}},
+    RGB(100, 180, 255)  // Default: Light blue (matches current m_accent_color)
+);
+
+static cfg_int cfg_nowbar_progress_accent_color(
+    GUID{0xABCDEF55, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xE5}},
+    RGB(140, 140, 140)  // Default: Gray (matches current progress bar color)
+);
+
+static cfg_int cfg_nowbar_volume_accent_color(
+    GUID{0xABCDEF56, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xE6}},
+    RGB(140, 140, 140)  // Default: Gray (matches current volume bar color)
+);
+
 static cfg_int cfg_nowbar_custom_button_action(
     GUID{0xABCDEF0A, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0x92}},
     0  // Default: None (0=None, 1=Open URL, 2=Run Executable)
@@ -1261,6 +1276,18 @@ bool get_nowbar_smooth_animations_enabled() {
     return cfg_nowbar_smooth_animations != 0;
 }
 
+COLORREF get_nowbar_button_accent_color() {
+    return static_cast<COLORREF>(cfg_nowbar_button_accent_color.get_value());
+}
+
+COLORREF get_nowbar_progress_accent_color() {
+    return static_cast<COLORREF>(cfg_nowbar_progress_accent_color.get_value());
+}
+
+COLORREF get_nowbar_volume_accent_color() {
+    return static_cast<COLORREF>(cfg_nowbar_volume_accent_color.get_value());
+}
+
 bool get_nowbar_custom_button_visible() {
     return cfg_nowbar_custom_button_visible != 0;
 }
@@ -1770,6 +1797,12 @@ void nowbar_preferences::switch_tab(int tab) {
     ShowWindow(GetDlgItem(m_hwnd, IDC_GLASS_EFFECT_COMBO), show_appearance);
     ShowWindow(GetDlgItem(m_hwnd, IDC_SMOOTH_ANIMATIONS_LABEL), show_appearance);
     ShowWindow(GetDlgItem(m_hwnd, IDC_SMOOTH_ANIMATIONS_COMBO), show_appearance);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_BUTTON_ACCENT_LABEL), show_appearance);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_BUTTON_ACCENT_BTN), show_appearance);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_PROGRESS_ACCENT_LABEL), show_appearance);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_PROGRESS_ACCENT_BTN), show_appearance);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_VOLUME_ACCENT_LABEL), show_appearance);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_VOLUME_ACCENT_BTN), show_appearance);
 
     // Icons tab controls (Tab 2)
     BOOL show_icons = (tab == 2) ? SW_SHOW : SW_HIDE;
@@ -1867,6 +1900,22 @@ void nowbar_preferences::switch_tab(int tab) {
     ShowWindow(GetDlgItem(m_hwnd, IDC_ARTIST_FONT_LABEL), show_fonts);
     ShowWindow(GetDlgItem(m_hwnd, IDC_ARTIST_FONT_DISPLAY), show_fonts);
     ShowWindow(GetDlgItem(m_hwnd, IDC_ARTIST_FONT_SELECT), show_fonts);
+}
+
+// Helper to show the Windows color picker dialog
+static bool show_color_picker(HWND hwnd, COLORREF& color) {
+    static COLORREF custom_colors[16] = {0};
+    CHOOSECOLOR cc = {};
+    cc.lStructSize = sizeof(cc);
+    cc.hwndOwner = hwnd;
+    cc.rgbResult = color;
+    cc.lpCustColors = custom_colors;
+    cc.Flags = CC_FULLOPEN | CC_RGBINIT;
+    if (ChooseColor(&cc)) {
+        color = cc.rgbResult;
+        return true;
+    }
+    return false;
 }
 
 // Helper to update Cover Margin combobox state based on Cover Artwork selection
@@ -2655,9 +2704,64 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
                 p_this->select_artist_font();
             }
             break;
+
+        case IDC_BUTTON_ACCENT_BTN:
+            if (HIWORD(wp) == BN_CLICKED) {
+                COLORREF color = static_cast<COLORREF>(cfg_nowbar_button_accent_color.get_value());
+                if (show_color_picker(hwnd, color)) {
+                    cfg_nowbar_button_accent_color = color;
+                    InvalidateRect(GetDlgItem(hwnd, IDC_BUTTON_ACCENT_BTN), nullptr, TRUE);
+                    p_this->on_changed();
+                }
+            }
+            break;
+
+        case IDC_PROGRESS_ACCENT_BTN:
+            if (HIWORD(wp) == BN_CLICKED) {
+                COLORREF color = static_cast<COLORREF>(cfg_nowbar_progress_accent_color.get_value());
+                if (show_color_picker(hwnd, color)) {
+                    cfg_nowbar_progress_accent_color = color;
+                    InvalidateRect(GetDlgItem(hwnd, IDC_PROGRESS_ACCENT_BTN), nullptr, TRUE);
+                    p_this->on_changed();
+                }
+            }
+            break;
+
+        case IDC_VOLUME_ACCENT_BTN:
+            if (HIWORD(wp) == BN_CLICKED) {
+                COLORREF color = static_cast<COLORREF>(cfg_nowbar_volume_accent_color.get_value());
+                if (show_color_picker(hwnd, color)) {
+                    cfg_nowbar_volume_accent_color = color;
+                    InvalidateRect(GetDlgItem(hwnd, IDC_VOLUME_ACCENT_BTN), nullptr, TRUE);
+                    p_this->on_changed();
+                }
+            }
+            break;
         }
         break;
-        
+
+    case WM_DRAWITEM:
+        {
+            DRAWITEMSTRUCT* dis = reinterpret_cast<DRAWITEMSTRUCT*>(lp);
+            if (dis->CtlID == IDC_BUTTON_ACCENT_BTN || dis->CtlID == IDC_PROGRESS_ACCENT_BTN || dis->CtlID == IDC_VOLUME_ACCENT_BTN) {
+                COLORREF color;
+                if (dis->CtlID == IDC_BUTTON_ACCENT_BTN) {
+                    color = static_cast<COLORREF>(cfg_nowbar_button_accent_color.get_value());
+                } else if (dis->CtlID == IDC_PROGRESS_ACCENT_BTN) {
+                    color = static_cast<COLORREF>(cfg_nowbar_progress_accent_color.get_value());
+                } else {
+                    color = static_cast<COLORREF>(cfg_nowbar_volume_accent_color.get_value());
+                }
+                HBRUSH hBrush = CreateSolidBrush(color);
+                FillRect(dis->hDC, &dis->rcItem, hBrush);
+                DeleteObject(hBrush);
+                // Draw border
+                FrameRect(dis->hDC, &dis->rcItem, (HBRUSH)GetStockObject(BLACK_BRUSH));
+                return TRUE;
+            }
+        }
+        break;
+
     case WM_NOTIFY:
         {
             NMHDR* pnmhdr = reinterpret_cast<NMHDR*>(lp);
@@ -2842,6 +2946,9 @@ void nowbar_preferences::reset_settings() {
             cfg_nowbar_bar_style = 0;  // Pill-shaped
             cfg_nowbar_glass_effect = 0;  // Disabled
             cfg_nowbar_smooth_animations = 0;  // Disabled (default for performance)
+            cfg_nowbar_button_accent_color = RGB(100, 180, 255);  // Default: Light blue
+            cfg_nowbar_progress_accent_color = RGB(140, 140, 140);  // Default: Gray
+            cfg_nowbar_volume_accent_color = RGB(140, 140, 140);  // Default: Gray
 
             // Update Appearance tab UI
             SendMessage(GetDlgItem(m_hwnd, IDC_THEME_MODE_COMBO), CB_SETCURSEL, 0, 0);
@@ -2851,6 +2958,9 @@ void nowbar_preferences::reset_settings() {
             SendMessage(GetDlgItem(m_hwnd, IDC_BAR_STYLE_COMBO), CB_SETCURSEL, 0, 0);
             SendMessage(GetDlgItem(m_hwnd, IDC_GLASS_EFFECT_COMBO), CB_SETCURSEL, 0, 0);  // Default: Disabled
             SendMessage(GetDlgItem(m_hwnd, IDC_SMOOTH_ANIMATIONS_COMBO), CB_SETCURSEL, 1, 0);  // Default: Disabled (index 1)
+            InvalidateRect(GetDlgItem(m_hwnd, IDC_BUTTON_ACCENT_BTN), nullptr, TRUE);
+            InvalidateRect(GetDlgItem(m_hwnd, IDC_PROGRESS_ACCENT_BTN), nullptr, TRUE);
+            InvalidateRect(GetDlgItem(m_hwnd, IDC_VOLUME_ACCENT_BTN), nullptr, TRUE);
             update_cover_margin_state(m_hwnd);  // Re-enable Cover Margin (Cover Artwork is Yes)
         } else if (m_current_tab == 2) {
             // Reset Icons tab settings
