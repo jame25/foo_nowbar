@@ -25,6 +25,11 @@ static cfg_int cfg_nowbar_cover_margin(
     1  // Default: Yes (margin enabled)
 );
 
+static cfg_int cfg_nowbar_cover_artwork_visible(
+    GUID{0xABCDEF53, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xE3}},
+    1  // Default: Yes (show artwork)
+);
+
 static cfg_int cfg_nowbar_bar_style(
     GUID{0xABCDEF06, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0x8E}},
     0  // Default: Pill-shaped
@@ -38,6 +43,11 @@ static cfg_int cfg_nowbar_mood_icon_visible(
 static cfg_int cfg_nowbar_stop_icon_visible(
     GUID{0xABCDEF51, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xE1}},
     0  // Default: Hidden
+);
+
+static cfg_int cfg_nowbar_super_icon_visible(
+    GUID{0xABCDEF52, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xE2}},
+    1  // Default: Show
 );
 
 static cfg_int cfg_nowbar_miniplayer_icon_visible(
@@ -1194,8 +1204,11 @@ int get_nowbar_theme_mode() {
 }
 
 bool get_nowbar_cover_margin() {
-    // Cover margin option removed - always use edge-to-edge (no margin)
-    return false;
+    return cfg_nowbar_cover_margin != 0;
+}
+
+bool get_nowbar_cover_artwork_visible() {
+    return cfg_nowbar_cover_artwork_visible != 0;
 }
 
 int get_nowbar_bar_style() {
@@ -1211,6 +1224,10 @@ bool get_nowbar_mood_icon_visible() {
 
 bool get_nowbar_stop_icon_visible() {
     return cfg_nowbar_stop_icon_visible != 0;
+}
+
+bool get_nowbar_super_icon_visible() {
+    return cfg_nowbar_super_icon_visible != 0;
 }
 
 bool get_nowbar_miniplayer_icon_visible() {
@@ -1702,24 +1719,30 @@ void nowbar_preferences::reset() {
 
 void nowbar_preferences::init_tab_control() {
     HWND hTab = GetDlgItem(m_hwnd, IDC_TAB_CONTROL);
-    
+
     TCITEM tie = {};
     tie.mask = TCIF_TEXT;
-    
+
     tie.pszText = (LPWSTR)L"General";
     TabCtrl_InsertItem(hTab, 0, &tie);
-    
-    tie.pszText = (LPWSTR)L"Custom Button";
+
+    tie.pszText = (LPWSTR)L"Appearance";
     TabCtrl_InsertItem(hTab, 1, &tie);
-    
-    tie.pszText = (LPWSTR)L"Fonts";
+
+    tie.pszText = (LPWSTR)L"Icons";
     TabCtrl_InsertItem(hTab, 2, &tie);
+
+    tie.pszText = (LPWSTR)L"Custom Button";
+    TabCtrl_InsertItem(hTab, 3, &tie);
+
+    tie.pszText = (LPWSTR)L"Fonts";
+    TabCtrl_InsertItem(hTab, 4, &tie);
 }
 
 void nowbar_preferences::switch_tab(int tab) {
     m_current_tab = tab;
-    
-    // General tab controls
+
+    // General tab controls (Tab 0)
     BOOL show_general = (tab == 0) ? SW_SHOW : SW_HIDE;
     // Display Format section
     ShowWindow(GetDlgItem(m_hwnd, IDC_DISPLAY_FORMAT_GROUP), show_general);
@@ -1727,30 +1750,44 @@ void nowbar_preferences::switch_tab(int tab) {
     ShowWindow(GetDlgItem(m_hwnd, IDC_LINE1_FORMAT_EDIT), show_general);
     ShowWindow(GetDlgItem(m_hwnd, IDC_LINE2_FORMAT_LABEL), show_general);
     ShowWindow(GetDlgItem(m_hwnd, IDC_LINE2_FORMAT_EDIT), show_general);
-    // Appearance settings
-    ShowWindow(GetDlgItem(m_hwnd, IDC_THEME_MODE_LABEL), show_general);
-    ShowWindow(GetDlgItem(m_hwnd, IDC_THEME_MODE_COMBO), show_general);
-    ShowWindow(GetDlgItem(m_hwnd, IDC_SMOOTH_ANIMATIONS_LABEL), show_general);
-    ShowWindow(GetDlgItem(m_hwnd, IDC_SMOOTH_ANIMATIONS_COMBO), show_general);
-    ShowWindow(GetDlgItem(m_hwnd, IDC_BACKGROUND_STYLE_LABEL), show_general);
-    ShowWindow(GetDlgItem(m_hwnd, IDC_BACKGROUND_STYLE_COMBO), show_general);
-    ShowWindow(GetDlgItem(m_hwnd, IDC_BAR_STYLE_LABEL), show_general);
-    ShowWindow(GetDlgItem(m_hwnd, IDC_BAR_STYLE_COMBO), show_general);
-    ShowWindow(GetDlgItem(m_hwnd, IDC_MOOD_ICON_LABEL), show_general);
-    ShowWindow(GetDlgItem(m_hwnd, IDC_MOOD_ICON_COMBO), show_general);
-    ShowWindow(GetDlgItem(m_hwnd, IDC_STOP_ICON_LABEL), show_general);
-    ShowWindow(GetDlgItem(m_hwnd, IDC_STOP_ICON_COMBO), show_general);
-    ShowWindow(GetDlgItem(m_hwnd, IDC_MINIPLAYER_ICON_LABEL), show_general);
-    ShowWindow(GetDlgItem(m_hwnd, IDC_MINIPLAYER_ICON_COMBO), show_general);
-    ShowWindow(GetDlgItem(m_hwnd, IDC_ALTERNATE_ICONS_LABEL), show_general);
-    ShowWindow(GetDlgItem(m_hwnd, IDC_ALTERNATE_ICONS_COMBO), show_general);
+    // Auto-hide C-buttons (behavior setting)
     ShowWindow(GetDlgItem(m_hwnd, IDC_AUTOHIDE_CBUTTONS_LABEL), show_general);
     ShowWindow(GetDlgItem(m_hwnd, IDC_AUTOHIDE_CBUTTONS_COMBO), show_general);
-    ShowWindow(GetDlgItem(m_hwnd, IDC_GLASS_EFFECT_LABEL), show_general);
-    ShowWindow(GetDlgItem(m_hwnd, IDC_GLASS_EFFECT_COMBO), show_general);
 
-    // Custom Button tab controls
-    BOOL show_cbutton = (tab == 1) ? SW_SHOW : SW_HIDE;
+    // Appearance tab controls (Tab 1)
+    BOOL show_appearance = (tab == 1) ? SW_SHOW : SW_HIDE;
+    ShowWindow(GetDlgItem(m_hwnd, IDC_THEME_MODE_LABEL), show_appearance);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_THEME_MODE_COMBO), show_appearance);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_COVER_ARTWORK_LABEL), show_appearance);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_COVER_ARTWORK_COMBO), show_appearance);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_COVER_MARGIN_LABEL), show_appearance);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_COVER_MARGIN_COMBO), show_appearance);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_BACKGROUND_STYLE_LABEL), show_appearance);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_BACKGROUND_STYLE_COMBO), show_appearance);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_BAR_STYLE_LABEL), show_appearance);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_BAR_STYLE_COMBO), show_appearance);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_GLASS_EFFECT_LABEL), show_appearance);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_GLASS_EFFECT_COMBO), show_appearance);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_SMOOTH_ANIMATIONS_LABEL), show_appearance);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_SMOOTH_ANIMATIONS_COMBO), show_appearance);
+
+    // Icons tab controls (Tab 2)
+    BOOL show_icons = (tab == 2) ? SW_SHOW : SW_HIDE;
+    ShowWindow(GetDlgItem(m_hwnd, IDC_MOOD_ICON_LABEL), show_icons);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_MOOD_ICON_COMBO), show_icons);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_STOP_ICON_LABEL), show_icons);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_STOP_ICON_COMBO), show_icons);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_SUPER_ICON_LABEL), show_icons);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_SUPER_ICON_COMBO), show_icons);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_MINIPLAYER_ICON_LABEL), show_icons);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_MINIPLAYER_ICON_COMBO), show_icons);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_HOVER_CIRCLES_LABEL), show_icons);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_HOVER_CIRCLES_COMBO), show_icons);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_ALTERNATE_ICONS_LABEL), show_icons);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_ALTERNATE_ICONS_COMBO), show_icons);
+
+    // Custom Button tab controls (Tab 3)
+    BOOL show_cbutton = (tab == 3) ? SW_SHOW : SW_HIDE;
     // Profile configuration controls
     ShowWindow(GetDlgItem(m_hwnd, IDC_PROFILE_NAME_LABEL), show_cbutton);
     ShowWindow(GetDlgItem(m_hwnd, IDC_PROFILE_COMBO), show_cbutton);
@@ -1821,8 +1858,8 @@ void nowbar_preferences::switch_tab(int tab) {
     ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON5_LABEL), show_cbutton);
     ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON6_LABEL), show_cbutton);
     
-    // Fonts tab controls
-    BOOL show_fonts = (tab == 2) ? SW_SHOW : SW_HIDE;
+    // Fonts tab controls (Tab 4)
+    BOOL show_fonts = (tab == 4) ? SW_SHOW : SW_HIDE;
     ShowWindow(GetDlgItem(m_hwnd, IDC_FONTS_GROUP), show_fonts);
     ShowWindow(GetDlgItem(m_hwnd, IDC_TRACK_FONT_LABEL), show_fonts);
     ShowWindow(GetDlgItem(m_hwnd, IDC_TRACK_FONT_DISPLAY), show_fonts);
@@ -1830,6 +1867,13 @@ void nowbar_preferences::switch_tab(int tab) {
     ShowWindow(GetDlgItem(m_hwnd, IDC_ARTIST_FONT_LABEL), show_fonts);
     ShowWindow(GetDlgItem(m_hwnd, IDC_ARTIST_FONT_DISPLAY), show_fonts);
     ShowWindow(GetDlgItem(m_hwnd, IDC_ARTIST_FONT_SELECT), show_fonts);
+}
+
+// Helper to update Cover Margin combobox state based on Cover Artwork selection
+static void update_cover_margin_state(HWND hwnd) {
+    int coverArtworkSel = (int)SendMessage(GetDlgItem(hwnd, IDC_COVER_ARTWORK_COMBO), CB_GETCURSEL, 0, 0);
+    // Cover Artwork: 0=Yes, 1=No - disable Cover Margin when artwork is hidden
+    EnableWindow(GetDlgItem(hwnd, IDC_COVER_MARGIN_COMBO), coverArtworkSel == 0);
 }
 
 // Helper to update path control states based on action selection
@@ -1896,7 +1940,13 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         SendMessage(hThemeCombo, CB_ADDSTRING, 0, (LPARAM)L"Light");
         SendMessage(hThemeCombo, CB_ADDSTRING, 0, (LPARAM)L"Custom");
         SendMessage(hThemeCombo, CB_SETCURSEL, cfg_nowbar_theme_mode, 0);
-        
+
+        // Initialize cover artwork visibility combobox
+        HWND hCoverArtworkCombo = GetDlgItem(hwnd, IDC_COVER_ARTWORK_COMBO);
+        SendMessage(hCoverArtworkCombo, CB_ADDSTRING, 0, (LPARAM)L"Yes");
+        SendMessage(hCoverArtworkCombo, CB_ADDSTRING, 0, (LPARAM)L"No");
+        SendMessage(hCoverArtworkCombo, CB_SETCURSEL, cfg_nowbar_cover_artwork_visible ? 0 : 1, 0);
+
         // Initialize smooth animations combobox (moved from end of list, now after Theme Mode)
         HWND hSmoothAnimCombo = GetDlgItem(hwnd, IDC_SMOOTH_ANIMATIONS_COMBO);
         SendMessage(hSmoothAnimCombo, CB_ADDSTRING, 0, (LPARAM)L"Enabled");
@@ -1915,7 +1965,16 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         SendMessage(hBarStyleCombo, CB_ADDSTRING, 0, (LPARAM)L"Pill-shaped");
         SendMessage(hBarStyleCombo, CB_ADDSTRING, 0, (LPARAM)L"Rectangular");
         SendMessage(hBarStyleCombo, CB_SETCURSEL, cfg_nowbar_bar_style, 0);
-        
+
+        // Initialize cover margin combobox
+        HWND hCoverMarginCombo = GetDlgItem(hwnd, IDC_COVER_MARGIN_COMBO);
+        SendMessage(hCoverMarginCombo, CB_ADDSTRING, 0, (LPARAM)L"Yes");
+        SendMessage(hCoverMarginCombo, CB_ADDSTRING, 0, (LPARAM)L"No");
+        SendMessage(hCoverMarginCombo, CB_SETCURSEL, cfg_nowbar_cover_margin ? 0 : 1, 0);
+
+        // Update Cover Margin state based on Cover Artwork visibility
+        update_cover_margin_state(hwnd);
+
         // Initialize mood icon visibility combobox
         HWND hMoodIconCombo = GetDlgItem(hwnd, IDC_MOOD_ICON_COMBO);
         SendMessage(hMoodIconCombo, CB_ADDSTRING, 0, (LPARAM)L"Show");
@@ -1927,12 +1986,24 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         SendMessage(hStopIconCombo, CB_ADDSTRING, 0, (LPARAM)L"Show");
         SendMessage(hStopIconCombo, CB_ADDSTRING, 0, (LPARAM)L"Hidden");
         SendMessage(hStopIconCombo, CB_SETCURSEL, cfg_nowbar_stop_icon_visible ? 0 : 1, 0);
-        
+
+        // Initialize super icon visibility combobox
+        HWND hSuperIconCombo = GetDlgItem(hwnd, IDC_SUPER_ICON_COMBO);
+        SendMessage(hSuperIconCombo, CB_ADDSTRING, 0, (LPARAM)L"Show");
+        SendMessage(hSuperIconCombo, CB_ADDSTRING, 0, (LPARAM)L"Hidden");
+        SendMessage(hSuperIconCombo, CB_SETCURSEL, cfg_nowbar_super_icon_visible ? 0 : 1, 0);
+
         // Initialize miniplayer icon visibility combobox
         HWND hMiniplayerIconCombo = GetDlgItem(hwnd, IDC_MINIPLAYER_ICON_COMBO);
         SendMessage(hMiniplayerIconCombo, CB_ADDSTRING, 0, (LPARAM)L"Show");
         SendMessage(hMiniplayerIconCombo, CB_ADDSTRING, 0, (LPARAM)L"Hidden");
         SendMessage(hMiniplayerIconCombo, CB_SETCURSEL, cfg_nowbar_miniplayer_icon_visible ? 0 : 1, 0);
+
+        // Initialize hover circles combobox
+        HWND hHoverCirclesCombo = GetDlgItem(hwnd, IDC_HOVER_CIRCLES_COMBO);
+        SendMessage(hHoverCirclesCombo, CB_ADDSTRING, 0, (LPARAM)L"Show");
+        SendMessage(hHoverCirclesCombo, CB_ADDSTRING, 0, (LPARAM)L"Hide");
+        SendMessage(hHoverCirclesCombo, CB_SETCURSEL, cfg_nowbar_hover_circles ? 0 : 1, 0);
 
         // Initialize alternate icons combobox
         HWND hAlternateIconsCombo = GetDlgItem(hwnd, IDC_ALTERNATE_ICONS_COMBO);
@@ -2041,13 +2112,23 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         case IDC_SMOOTH_ANIMATIONS_COMBO:
         case IDC_BACKGROUND_STYLE_COMBO:
         case IDC_BAR_STYLE_COMBO:
+        case IDC_COVER_MARGIN_COMBO:
         case IDC_MOOD_ICON_COMBO:
         case IDC_STOP_ICON_COMBO:
+        case IDC_SUPER_ICON_COMBO:
         case IDC_MINIPLAYER_ICON_COMBO:
+        case IDC_HOVER_CIRCLES_COMBO:
         case IDC_ALTERNATE_ICONS_COMBO:
         case IDC_AUTOHIDE_CBUTTONS_COMBO:
         case IDC_GLASS_EFFECT_COMBO:
             if (HIWORD(wp) == CBN_SELCHANGE) {
+                p_this->on_changed();
+            }
+            break;
+
+        case IDC_COVER_ARTWORK_COMBO:
+            if (HIWORD(wp) == CBN_SELCHANGE) {
+                update_cover_margin_state(hwnd);
                 p_this->on_changed();
             }
             break;
@@ -2615,10 +2696,18 @@ void nowbar_preferences::apply_settings() {
         // Save smooth animations (0=Enabled, 1=Disabled in combobox -> config 1=Enabled, 0=Disabled)
         int smoothAnimSel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_SMOOTH_ANIMATIONS_COMBO), CB_GETCURSEL, 0, 0);
         cfg_nowbar_smooth_animations = (smoothAnimSel == 0) ? 1 : 0;
-        
+
+        // Save cover artwork visibility (0=Yes, 1=No in combobox -> config 1=Yes, 0=No)
+        int coverArtworkSel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_COVER_ARTWORK_COMBO), CB_GETCURSEL, 0, 0);
+        cfg_nowbar_cover_artwork_visible = (coverArtworkSel == 0) ? 1 : 0;
+
         // Save bar style (0=Pill-shaped, 1=Rectangular)
         cfg_nowbar_bar_style = (int)SendMessage(GetDlgItem(m_hwnd, IDC_BAR_STYLE_COMBO), CB_GETCURSEL, 0, 0);
-        
+
+        // Save cover margin setting (0=Yes, 1=No in combobox -> config 1=Yes, 0=No)
+        int coverMarginSel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_COVER_MARGIN_COMBO), CB_GETCURSEL, 0, 0);
+        cfg_nowbar_cover_margin = (coverMarginSel == 0) ? 1 : 0;
+
         // Save mood icon visibility (0=Show, 1=Hidden in combobox -> config 1=Show, 0=Hidden)
         int moodIconSel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_MOOD_ICON_COMBO), CB_GETCURSEL, 0, 0);
         cfg_nowbar_mood_icon_visible = (moodIconSel == 0) ? 1 : 0;
@@ -2626,10 +2715,18 @@ void nowbar_preferences::apply_settings() {
         // Save stop icon visibility (0=Show, 1=Hidden in combobox -> config 1=Show, 0=Hidden)
         int stopIconSel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_STOP_ICON_COMBO), CB_GETCURSEL, 0, 0);
         cfg_nowbar_stop_icon_visible = (stopIconSel == 0) ? 1 : 0;
-        
+
+        // Save super icon visibility (0=Show, 1=Hidden in combobox -> config 1=Show, 0=Hidden)
+        int superIconSel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_SUPER_ICON_COMBO), CB_GETCURSEL, 0, 0);
+        cfg_nowbar_super_icon_visible = (superIconSel == 0) ? 1 : 0;
+
         // Save miniplayer icon visibility (0=Show, 1=Hidden in combobox -> config 1=Show, 0=Hidden)
         int miniplayerIconSel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_MINIPLAYER_ICON_COMBO), CB_GETCURSEL, 0, 0);
         cfg_nowbar_miniplayer_icon_visible = (miniplayerIconSel == 0) ? 1 : 0;
+
+        // Save hover circles setting (0=Show, 1=Hide in combobox -> config 1=Show, 0=Hide)
+        int hoverCirclesSel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_HOVER_CIRCLES_COMBO), CB_GETCURSEL, 0, 0);
+        cfg_nowbar_hover_circles = (hoverCirclesSel == 0) ? 1 : 0;
 
         // Save alternate icons setting (0=Enabled, 1=Disabled in combobox -> config 1=Enabled, 0=Disabled)
         int alternateIconsSel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_ALTERNATE_ICONS_COMBO), CB_GETCURSEL, 0, 0);
@@ -2727,33 +2824,51 @@ void nowbar_preferences::apply_settings() {
 void nowbar_preferences::reset_settings() {
     if (m_hwnd) {
         if (m_current_tab == 0) {
-            // Reset General tab settings
+            // Reset General tab settings (Display Format, Auto-hide C-buttons)
             cfg_nowbar_line1_format = "%title%";  // Default format
             cfg_nowbar_line2_format = "%artist%";  // Default format
-            cfg_nowbar_theme_mode = 0;  // Auto
-            cfg_nowbar_smooth_animations = 0;  // Disabled (default for performance)
-            cfg_nowbar_background_style = 0;  // Solid
-            cfg_nowbar_bar_style = 0;  // Pill-shaped
-            cfg_nowbar_mood_icon_visible = 1;  // Show (visible)
-            cfg_nowbar_miniplayer_icon_visible = 1;  // Show (visible)
-            cfg_nowbar_hover_circles = 1;  // Yes (show hover circles)
-            cfg_nowbar_alternate_icons = 0;  // Disabled
             cfg_nowbar_cbutton_autohide = 1;  // Yes (default)
 
             // Update General tab UI
             uSetDlgItemText(m_hwnd, IDC_LINE1_FORMAT_EDIT, "%title%");
             uSetDlgItemText(m_hwnd, IDC_LINE2_FORMAT_EDIT, "%artist%");
+            SendMessage(GetDlgItem(m_hwnd, IDC_AUTOHIDE_CBUTTONS_COMBO), CB_SETCURSEL, 0, 0);  // Default: Yes
+        } else if (m_current_tab == 1) {
+            // Reset Appearance tab settings
+            cfg_nowbar_theme_mode = 0;  // Auto
+            cfg_nowbar_cover_artwork_visible = 1;  // Yes (show artwork)
+            cfg_nowbar_cover_margin = 1;  // Yes (margin enabled)
+            cfg_nowbar_background_style = 0;  // Solid
+            cfg_nowbar_bar_style = 0;  // Pill-shaped
+            cfg_nowbar_glass_effect = 0;  // Disabled
+            cfg_nowbar_smooth_animations = 0;  // Disabled (default for performance)
+
+            // Update Appearance tab UI
             SendMessage(GetDlgItem(m_hwnd, IDC_THEME_MODE_COMBO), CB_SETCURSEL, 0, 0);
-            SendMessage(GetDlgItem(m_hwnd, IDC_SMOOTH_ANIMATIONS_COMBO), CB_SETCURSEL, 1, 0);  // Default: Disabled (index 1)
+            SendMessage(GetDlgItem(m_hwnd, IDC_COVER_ARTWORK_COMBO), CB_SETCURSEL, 0, 0);  // Default: Yes
+            SendMessage(GetDlgItem(m_hwnd, IDC_COVER_MARGIN_COMBO), CB_SETCURSEL, 0, 0);  // Default: Yes
             SendMessage(GetDlgItem(m_hwnd, IDC_BACKGROUND_STYLE_COMBO), CB_SETCURSEL, 0, 0);  // Default: Solid
             SendMessage(GetDlgItem(m_hwnd, IDC_BAR_STYLE_COMBO), CB_SETCURSEL, 0, 0);
+            SendMessage(GetDlgItem(m_hwnd, IDC_GLASS_EFFECT_COMBO), CB_SETCURSEL, 0, 0);  // Default: Disabled
+            SendMessage(GetDlgItem(m_hwnd, IDC_SMOOTH_ANIMATIONS_COMBO), CB_SETCURSEL, 1, 0);  // Default: Disabled (index 1)
+            update_cover_margin_state(m_hwnd);  // Re-enable Cover Margin (Cover Artwork is Yes)
+        } else if (m_current_tab == 2) {
+            // Reset Icons tab settings
+            cfg_nowbar_mood_icon_visible = 1;  // Show (visible)
+            cfg_nowbar_stop_icon_visible = 0;  // Hidden (default)
+            cfg_nowbar_super_icon_visible = 1;  // Show (default)
+            cfg_nowbar_miniplayer_icon_visible = 1;  // Show (visible)
+            cfg_nowbar_hover_circles = 1;  // Show (default)
+            cfg_nowbar_alternate_icons = 0;  // Disabled
+
+            // Update Icons tab UI
             SendMessage(GetDlgItem(m_hwnd, IDC_MOOD_ICON_COMBO), CB_SETCURSEL, 0, 0);
             SendMessage(GetDlgItem(m_hwnd, IDC_STOP_ICON_COMBO), CB_SETCURSEL, 1, 0);  // Default: Hidden
+            SendMessage(GetDlgItem(m_hwnd, IDC_SUPER_ICON_COMBO), CB_SETCURSEL, 0, 0);  // Default: Show
             SendMessage(GetDlgItem(m_hwnd, IDC_MINIPLAYER_ICON_COMBO), CB_SETCURSEL, 0, 0);
+            SendMessage(GetDlgItem(m_hwnd, IDC_HOVER_CIRCLES_COMBO), CB_SETCURSEL, 0, 0);  // Default: Show
             SendMessage(GetDlgItem(m_hwnd, IDC_ALTERNATE_ICONS_COMBO), CB_SETCURSEL, 1, 0);  // Default: Disabled
-            SendMessage(GetDlgItem(m_hwnd, IDC_AUTOHIDE_CBUTTONS_COMBO), CB_SETCURSEL, 0, 0);  // Default: Yes
-            SendMessage(GetDlgItem(m_hwnd, IDC_GLASS_EFFECT_COMBO), CB_SETCURSEL, 0, 0);  // Default: Disabled
-        } else if (m_current_tab == 1) {
+        } else if (m_current_tab == 3) {
             // Reset Custom Button tab settings
             cfg_cbutton1_enabled = 0;
             cfg_cbutton2_enabled = 0;
@@ -2794,7 +2909,7 @@ void nowbar_preferences::reset_settings() {
             SetDlgItemTextW(m_hwnd, IDC_CBUTTON5_PATH, L"");
             SetDlgItemTextW(m_hwnd, IDC_CBUTTON6_PATH, L"");
             update_all_cbutton_path_states(m_hwnd);
-        } else if (m_current_tab == 2) {
+        } else if (m_current_tab == 4) {
             // Reset Fonts tab settings
             reset_nowbar_fonts();
             update_font_displays();
