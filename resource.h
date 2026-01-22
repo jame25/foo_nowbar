@@ -54,6 +54,14 @@
 #define IDC_COVER_ARTWORK_LABEL    1138
 #define IDC_COVER_ARTWORK_COMBO    1139
 
+// Color picker controls (Appearance tab)
+#define IDC_BUTTON_ACCENT_LABEL    1140
+#define IDC_BUTTON_ACCENT_BTN      1141
+#define IDC_PROGRESS_ACCENT_LABEL  1142
+#define IDC_PROGRESS_ACCENT_BTN    1143
+#define IDC_VOLUME_ACCENT_LABEL    1144
+#define IDC_VOLUME_ACCENT_BTN      1145
+
 // Fonts tab controls
 #define IDC_FONTS_GROUP            1201
 #define IDC_TRACK_FONT_LABEL       1202
