@@ -79,6 +79,12 @@ void PlaybackStateManager::on_playback_stop(play_control::t_stop_reason p_reason
     m_state.track_length = 0.0;
     m_state.can_seek = false;
     m_state.current_track.release();  // Clear the track handle
+
+    // Clear track info to reset to initial state
+    m_state.track_title.reset();
+    m_state.track_artist.reset();
+    m_state.track_album.reset();
+
     notify_state_changed();
 }
 
