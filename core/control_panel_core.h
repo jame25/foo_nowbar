@@ -74,6 +74,9 @@ public:
     static void register_instance(ControlPanelCore* instance);
     static void unregister_instance(ControlPanelCore* instance);
     static void notify_theme_changed();
+
+    // Shutdown cleanup - must be called during on_quit() before services are gone
+    static void shutdown();
     
     // Painting
     void paint(HDC hdc, const RECT& rect);
