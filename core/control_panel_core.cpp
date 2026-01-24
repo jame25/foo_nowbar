@@ -2669,7 +2669,12 @@ void ControlPanelCore::show_autoplaylist_menu() {
     ID_RECENTLY_ADDED,
     ID_SAME_ARTIST,
     ID_SAME_TITLE,
-    ID_INFINITE_PLAYBACK
+    ID_INFINITE_PLAYBACK,
+    // Playback Preview submenu IDs
+    ID_PREVIEW_OFF,
+    ID_PREVIEW_35_PERCENT,
+    ID_PREVIEW_50_PERCENT,
+    ID_PREVIEW_60_SECONDS
   };
   
   // Create popup menu
@@ -2739,6 +2744,26 @@ void ControlPanelCore::show_autoplaylist_menu() {
   // Group 5: Playback mode
   UINT infinite_flags = MF_STRING | (get_nowbar_infinite_playback_enabled() ? MF_CHECKED : 0);
   AppendMenuW(menu, infinite_flags, ID_INFINITE_PLAYBACK, L"Infinite playback");
+
+  // Group 6: Playback Preview submenu
+  HMENU preview_submenu = CreatePopupMenu();
+  if (preview_submenu) {
+    int current_preview_mode = get_nowbar_preview_mode();
+
+    UINT off_flags = MF_STRING | (current_preview_mode == 0 ? MF_CHECKED : 0);
+    UINT p35_flags = MF_STRING | (current_preview_mode == 1 ? MF_CHECKED : 0);
+    UINT p50_flags = MF_STRING | (current_preview_mode == 2 ? MF_CHECKED : 0);
+    UINT p60_flags = MF_STRING | (current_preview_mode == 3 ? MF_CHECKED : 0);
+
+    AppendMenuW(preview_submenu, off_flags, ID_PREVIEW_OFF, L"Off");
+    AppendMenuW(preview_submenu, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(preview_submenu, p35_flags, ID_PREVIEW_35_PERCENT, L"35% of track");
+    AppendMenuW(preview_submenu, p50_flags, ID_PREVIEW_50_PERCENT, L"50% of track");
+    AppendMenuW(preview_submenu, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(preview_submenu, p60_flags, ID_PREVIEW_60_SECONDS, L"60 seconds");
+
+    AppendMenuW(menu, MF_POPUP, (UINT_PTR)preview_submenu, L"Playback Preview");
+  }
 
   // Get Super button position for menu placement
   POINT pt;
@@ -2870,6 +2895,18 @@ void ControlPanelCore::show_autoplaylist_menu() {
     case ID_INFINITE_PLAYBACK:
       // Toggle infinite playback mode
       set_nowbar_infinite_playback_enabled(!get_nowbar_infinite_playback_enabled());
+      break;
+    case ID_PREVIEW_OFF:
+      set_nowbar_preview_mode(0);
+      break;
+    case ID_PREVIEW_35_PERCENT:
+      set_nowbar_preview_mode(1);
+      break;
+    case ID_PREVIEW_50_PERCENT:
+      set_nowbar_preview_mode(2);
+      break;
+    case ID_PREVIEW_60_SECONDS:
+      set_nowbar_preview_mode(3);
       break;
     default:
       break;
