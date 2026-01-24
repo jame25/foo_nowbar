@@ -115,6 +115,11 @@ static cfg_int cfg_nowbar_infinite_playback(
     0  // Default: Disabled
 );
 
+static cfg_int cfg_nowbar_preview_mode(
+    GUID{0xABCDEF59, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xE9}},
+    0  // Default: Off (0=Off, 1=35%, 2=50%, 3=60sec)
+);
+
 static cfg_int cfg_nowbar_custom_button_action(
     GUID{0xABCDEF0A, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0x92}},
     0  // Default: None (0=None, 1=Open URL, 2=Run Executable)
@@ -1285,6 +1290,19 @@ bool get_nowbar_infinite_playback_enabled() {
 
 void set_nowbar_infinite_playback_enabled(bool enabled) {
     cfg_nowbar_infinite_playback = enabled ? 1 : 0;
+}
+
+int get_nowbar_preview_mode() {
+    int mode = cfg_nowbar_preview_mode;
+    if (mode < 0) mode = 0;
+    if (mode > 3) mode = 3;  // 0=Off, 1=35%, 2=50%, 3=60sec
+    return mode;
+}
+
+void set_nowbar_preview_mode(int mode) {
+    if (mode < 0) mode = 0;
+    if (mode > 3) mode = 3;
+    cfg_nowbar_preview_mode = mode;
 }
 
 int get_nowbar_background_style() {
