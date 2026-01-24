@@ -4,10 +4,33 @@
 
 namespace nowbar {
 
+// Pointer-based singleton to allow explicit destruction during on_quit()
+static PlaybackStateManager* g_instance = nullptr;
+static bool g_shutdown_called = false;
+
 PlaybackStateManager& PlaybackStateManager::get() {
-    // Singleton - persists for component lifetime
-    static PlaybackStateManager instance;
-    return instance;
+    if (!g_instance && !g_shutdown_called) {
+        g_instance = new PlaybackStateManager();
+    }
+    return *g_instance;
+}
+
+void PlaybackStateManager::shutdown() {
+    g_shutdown_called = true;
+    if (g_instance) {
+        delete g_instance;
+        g_instance = nullptr;
+    }
+}
+
+bool PlaybackStateManager::is_available() {
+    return g_instance != nullptr && !g_shutdown_called;
+}
+
+PlaybackStateManager::~PlaybackStateManager() {
+    // Clear metadb_handle_ptr while services are still available
+    m_state.current_track.release();
+    // Base class destructor will unregister from play_callback_manager
 }
 
 PlaybackStateManager::PlaybackStateManager() 
