@@ -138,6 +138,10 @@
 #define IDC_CBUTTON5_LABEL         1365
 #define IDC_CBUTTON6_LABEL         1366
 
+// Mood tag configuration controls (General tab)
+#define IDC_MOOD_TAG_LABEL         1146
+#define IDC_MOOD_TAG_COMBO         1147
+
 // Profile configuration controls (Custom Button tab)
 #define IDC_PROFILE_NAME_LABEL     1370
 #define IDC_PROFILE_COMBO          1371
