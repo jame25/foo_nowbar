@@ -17,6 +17,8 @@ bool get_nowbar_hover_circles_enabled();  // true=Yes (show), false=No (hide)
 bool get_nowbar_alternate_icons_enabled();  // true=Enabled, false=Disabled
 bool get_nowbar_cbutton_autohide();  // true=Yes (auto-hide), false=No
 bool get_nowbar_glass_effect_enabled();  // true=Enabled, false=Disabled (Windows 11 only)
+bool get_nowbar_infinite_playback_enabled();  // true=Enabled, false=Disabled
+void set_nowbar_infinite_playback_enabled(bool enabled);  // Toggle infinite playback mode
 int get_nowbar_background_style();  // 0=Solid, 1=Artwork Colors, 2=Blurred Artwork
 bool get_nowbar_smooth_animations_enabled();  // true=Enabled, false=Disabled
 COLORREF get_nowbar_button_accent_color();    // Button accent color for shuffle/repeat
