@@ -308,9 +308,15 @@ void ControlPanelCore::on_settings_changed() {
   
   // Update glass effect state from preferences
   m_glass_effect_enabled = get_nowbar_glass_effect_enabled();
-  
+
   // Invalidate target background to prevent stale content during transition
   m_target_background.reset();
+
+  // Refresh mood state in case mood tag config changed
+  update_mood_state();
+
+  // Repaint to reflect any visual changes
+  invalidate();
 }
 
 void ControlPanelCore::set_color_query_callback(ColorQueryCallback callback) {
@@ -2711,11 +2717,51 @@ void ControlPanelCore::show_autoplaylist_menu() {
                           "%rating% EQUAL 5",
                           "%album artist% | %album% | %discnumber% | %tracknumber%");
       break;
-    case ID_LOVED_TRACKS:
-      create_autoplaylist("Loved Tracks",
-                          "%mood% PRESENT",
-                          "%mood% | %album artist% | %album%");
+    case ID_LOVED_TRACKS: {
+      // Determine tag name based on mood tag mode setting
+      // 0=MOOD, 1=2003_LOVED, 2=FEEDBACK, 3=LFM_LOVED, 4=SMP_LOVED
+      int tag_mode = get_nowbar_mood_tag_mode();
+      const char* tag_name;
+      pfc::string8 query;
+      pfc::string8 sort;
+
+      switch (tag_mode) {
+        case 1:
+          tag_name = "2003_LOVED";
+          break;
+        case 2:
+          tag_name = "FEEDBACK";
+          break;
+        case 3:
+          tag_name = "LFM_LOVED";
+          break;
+        case 4:
+          tag_name = "SMP_LOVED";
+          break;
+        case 0:
+        default:
+          tag_name = "MOOD";
+          break;
+      }
+
+      // For FEEDBACK tag, check for value "1" (loved); for others, just check PRESENT
+      if (tag_mode == 2) {
+        query.set_string("%");
+        query.add_string(tag_name);
+        query.add_string("% EQUAL 1");
+      } else {
+        query.set_string("%");
+        query.add_string(tag_name);
+        query.add_string("% PRESENT");
+      }
+
+      sort.set_string("%");
+      sort.add_string(tag_name);
+      sort.add_string("% | %album artist% | %album%");
+
+      create_autoplaylist("Loved Tracks", query.c_str(), sort.c_str());
       break;
+    }
     case ID_RECENTLY_ADDED:
       create_autoplaylist("Recently added",
                           "%added% DURING LAST 2 WEEKS",
@@ -2815,26 +2861,27 @@ void ControlPanelCore::do_volume_change(float delta) {
   }
 }
 
-// Mood metadata filter for updating MOOD tag
+// Mood metadata filter for updating mood-related tags
 class MoodMetadataFilter : public file_info_filter {
 public:
-  MoodMetadataFilter(bool set_mood, const char *value)
-      : m_set_mood(set_mood), m_value(value) {}
+  MoodMetadataFilter(bool set_mood, const char *tag_name, const char *value)
+      : m_set_mood(set_mood), m_tag_name(tag_name), m_value(value) {}
 
   bool apply_filter(trackRef track, t_filestats stats,
                     file_info &info) override {
     (void)track;
     (void)stats;
     if (m_set_mood) {
-      info.meta_set("MOOD", m_value.c_str());
+      info.meta_set(m_tag_name.c_str(), m_value.c_str());
     } else {
-      info.meta_remove_field("MOOD");
+      info.meta_remove_field(m_tag_name.c_str());
     }
     return true;
   }
 
 private:
   bool m_set_mood;
+  pfc::string8 m_tag_name;
   pfc::string8 m_value;
 };
 
@@ -2845,18 +2892,52 @@ void ControlPanelCore::do_toggle_mood() {
     return;
   }
 
-  // Get current date/time
-  SYSTEMTIME st;
-  GetLocalTime(&st);
-  char datetime[64];
-  snprintf(datetime, sizeof(datetime), "%04d-%02d-%02d %02d:%02d:%02d",
-           st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
-
   // Toggle mood state
   bool new_mood = !m_mood_active;
 
+  // Determine tag name and value based on mood tag mode setting
+  // 0=MOOD (datetime), 1=2003_LOVED (1), 2=FEEDBACK (1/-1), 3=LFM_LOVED (1)
+  int tag_mode = get_nowbar_mood_tag_mode();
+  const char* tag_name;
+  pfc::string8 value;
+
+  switch (tag_mode) {
+    case 1: {  // 2003_LOVED - "1" if loved, remove if not
+      tag_name = "2003_LOVED";
+      value = "1";
+      break;
+    }
+    case 2: {  // FEEDBACK - "1" if loved, "-1" if hated (we only do loved via toggle)
+      tag_name = "FEEDBACK";
+      value = "1";
+      break;
+    }
+    case 3: {  // LFM_LOVED - "1" if loved, remove if not
+      tag_name = "LFM_LOVED";
+      value = "1";
+      break;
+    }
+    case 4: {  // SMP_LOVED - "1" if loved, remove if not
+      tag_name = "SMP_LOVED";
+      value = "1";
+      break;
+    }
+    case 0:  // MOOD - datetime string
+    default: {
+      tag_name = "MOOD";
+      // Get current date/time for MOOD tag
+      SYSTEMTIME st;
+      GetLocalTime(&st);
+      char datetime[64];
+      snprintf(datetime, sizeof(datetime), "%04d-%02d-%02d %02d:%02d:%02d",
+               st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+      value = datetime;
+      break;
+    }
+  }
+
   // Create filter
-  auto filter = fb2k::service_new<MoodMetadataFilter>(new_mood, datetime);
+  auto filter = fb2k::service_new<MoodMetadataFilter>(new_mood, tag_name, value.c_str());
 
   // Update metadata asynchronously
   metadb_handle_list tracks;
@@ -2877,12 +2958,51 @@ void ControlPanelCore::update_mood_state() {
     return;
   }
 
-  // Check if MOOD tag exists
+  // Determine tag name based on mood tag mode setting
+  // 0=MOOD, 1=2003_LOVED, 2=FEEDBACK, 3=LFM_LOVED
+  int tag_mode = get_nowbar_mood_tag_mode();
+  const char* tag_name;
+
+  switch (tag_mode) {
+    case 1: {
+      tag_name = "2003_LOVED";
+      break;
+    }
+    case 2: {
+      tag_name = "FEEDBACK";
+      break;
+    }
+    case 3: {
+      tag_name = "LFM_LOVED";
+      break;
+    }
+    case 4: {
+      tag_name = "SMP_LOVED";
+      break;
+    }
+    case 0:
+    default: {
+      tag_name = "MOOD";
+      break;
+    }
+  }
+
+  // Check if the configured tag exists and has a "positive" value
   metadb_info_container::ptr info_container = track->get_info_ref();
   if (info_container.is_valid()) {
     const file_info &info = info_container->info();
-    const char *mood = info.meta_get("MOOD", 0);
-    m_mood_active = (mood != nullptr && strlen(mood) > 0);
+    const char *tag_value = info.meta_get(tag_name, 0);
+    if (tag_value != nullptr && strlen(tag_value) > 0) {
+      // For FEEDBACK tag, check if value is "1" (loved) vs "-1" (hated)
+      // For other tags, any non-empty value means "loved"
+      if (tag_mode == 2) {  // FEEDBACK mode
+        m_mood_active = (strcmp(tag_value, "1") == 0);
+      } else {
+        m_mood_active = true;
+      }
+    } else {
+      m_mood_active = false;
+    }
   } else {
     m_mood_active = false;
   }
