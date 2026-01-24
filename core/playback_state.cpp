@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "playback_state.h"
+#include "../preferences.h"
 
 namespace nowbar {
 
@@ -67,6 +68,11 @@ void PlaybackStateManager::on_playback_new_track(metadb_handle_ptr p_track) {
 }
 
 void PlaybackStateManager::on_playback_stop(play_control::t_stop_reason p_reason) {
+    // Handle infinite playback before clearing state
+    if (p_reason == play_control::stop_reason_eof && get_nowbar_infinite_playback_enabled()) {
+        handle_infinite_playback();
+    }
+
     m_state.is_playing = false;
     m_state.is_paused = false;
     m_state.playback_time = 0.0;
@@ -190,6 +196,173 @@ void PlaybackStateManager::notify_track_changed() {
     for (auto* cb : m_callbacks) {
         cb->on_track_changed();
     }
+}
+
+// Callback to start playback on main thread
+class InfinitePlaybackCallback : public main_thread_callback {
+public:
+    InfinitePlaybackCallback(t_size start_index) : m_start_index(start_index) {}
+
+    void callback_run() override {
+        auto pm = playlist_manager::get();
+        t_size playlist = pm->get_active_playlist();
+        if (playlist != pfc_infinite) {
+            pm->playlist_set_focus_item(playlist, m_start_index);
+            playback_control::get()->start();
+        }
+    }
+
+private:
+    t_size m_start_index;
+};
+
+void PlaybackStateManager::handle_infinite_playback() {
+    auto pm = playlist_manager::get();
+    auto pc = playback_control::get();
+
+    // Don't add tracks if "stop after current" is enabled
+    if (pc->get_stop_after_current()) return;
+
+    t_size active_playlist = pm->get_active_playlist();
+    if (active_playlist == pfc_infinite) return;
+
+    // Check if playlist is an autoplaylist - if so, don't interfere
+    try {
+        auto apm = autoplaylist_manager::get();
+        if (apm->is_client_present(active_playlist)) {
+            return;  // This is an autoplaylist, skip infinite playback
+        }
+    } catch (...) {
+        // autoplaylist_manager might not be available, continue
+    }
+
+    // Get the position where we'll insert new tracks
+    t_size playlist_count = pm->playlist_get_item_count(active_playlist);
+    t_size insert_position = playlist_count;
+
+    // Collect genres from the last few tracks in the playlist (up to 10)
+    std::set<pfc::string8> genres;
+    t_size scan_count = std::min(playlist_count, (t_size)10);
+
+    for (t_size i = 0; i < scan_count; i++) {
+        t_size idx = playlist_count - 1 - i;
+        metadb_handle_ptr track;
+        if (pm->playlist_get_item_handle(track, active_playlist, idx) && track.is_valid()) {
+            metadb_info_container::ptr info = track->get_info_ref();
+            if (info.is_valid()) {
+                const file_info& fi = info->info();
+                // Check multiple genre fields
+                for (t_size g = 0; g < fi.meta_get_count_by_name("genre"); g++) {
+                    const char* genre = fi.meta_get("genre", g);
+                    if (genre && strlen(genre) > 0) {
+                        genres.insert(pfc::string8(genre));
+                    }
+                }
+            }
+        }
+    }
+
+    // Get all tracks from the library
+    auto library = library_manager::get();
+    pfc::list_t<metadb_handle_ptr> library_items;
+    library->get_all_items(library_items);
+
+    if (library_items.get_count() == 0) return;
+
+    // Collect current playlist tracks to avoid duplicates
+    std::set<pfc::string8> playlist_paths;
+    for (t_size i = 0; i < playlist_count; i++) {
+        metadb_handle_ptr track;
+        if (pm->playlist_get_item_handle(track, active_playlist, i) && track.is_valid()) {
+            playlist_paths.insert(pfc::string8(track->get_path()));
+        }
+    }
+
+    // Find matching tracks from library
+    pfc::list_t<metadb_handle_ptr> matching_tracks;
+    pfc::list_t<metadb_handle_ptr> fallback_tracks;
+
+    // Seed random with current time
+    srand(static_cast<unsigned int>(time(nullptr)));
+
+    for (t_size i = 0; i < library_items.get_count(); i++) {
+        metadb_handle_ptr track = library_items[i];
+        if (!track.is_valid()) continue;
+
+        // Skip if already in playlist
+        if (playlist_paths.count(pfc::string8(track->get_path())) > 0) continue;
+
+        metadb_info_container::ptr info = track->get_info_ref();
+        if (!info.is_valid()) continue;
+
+        const file_info& fi = info->info();
+
+        // Check if track matches any of our collected genres
+        bool matches_genre = false;
+        if (!genres.empty()) {
+            for (t_size g = 0; g < fi.meta_get_count_by_name("genre"); g++) {
+                const char* genre = fi.meta_get("genre", g);
+                if (genre && genres.count(pfc::string8(genre)) > 0) {
+                    matches_genre = true;
+                    break;
+                }
+            }
+        }
+
+        if (matches_genre) {
+            matching_tracks.add_item(track);
+        } else {
+            fallback_tracks.add_item(track);
+        }
+    }
+
+    // Select tracks to add (prefer matching, fall back to random)
+    pfc::list_t<metadb_handle_ptr> tracks_to_add;
+    const int tracks_to_select = 15;
+
+    // First, add from matching tracks (randomized)
+    if (matching_tracks.get_count() > 0) {
+        // Shuffle matching tracks
+        for (t_size i = matching_tracks.get_count() - 1; i > 0; i--) {
+            t_size j = rand() % (i + 1);
+            if (i != j) {
+                metadb_handle_ptr temp = matching_tracks[i];
+                matching_tracks.replace_item(i, matching_tracks[j]);
+                matching_tracks.replace_item(j, temp);
+            }
+        }
+
+        for (t_size i = 0; i < matching_tracks.get_count() && tracks_to_add.get_count() < tracks_to_select; i++) {
+            tracks_to_add.add_item(matching_tracks[i]);
+        }
+    }
+
+    // If we don't have enough, add from fallback (random tracks)
+    if (tracks_to_add.get_count() < tracks_to_select && fallback_tracks.get_count() > 0) {
+        // Shuffle fallback tracks
+        for (t_size i = fallback_tracks.get_count() - 1; i > 0; i--) {
+            t_size j = rand() % (i + 1);
+            if (i != j) {
+                metadb_handle_ptr temp = fallback_tracks[i];
+                fallback_tracks.replace_item(i, fallback_tracks[j]);
+                fallback_tracks.replace_item(j, temp);
+            }
+        }
+
+        for (t_size i = 0; i < fallback_tracks.get_count() && tracks_to_add.get_count() < tracks_to_select; i++) {
+            tracks_to_add.add_item(fallback_tracks[i]);
+        }
+    }
+
+    if (tracks_to_add.get_count() == 0) return;
+
+    // Add tracks to playlist
+    bit_array_false selection;
+    pm->playlist_insert_items(active_playlist, insert_position, tracks_to_add, selection);
+
+    // Start playback from the first new track using main thread callback
+    auto mtcm = main_thread_callback_manager::get();
+    mtcm->add_callback(fb2k::service_new<InfinitePlaybackCallback>(insert_position));
 }
 
 } // namespace nowbar
