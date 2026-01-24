@@ -17,6 +17,7 @@ namespace nowbar {
 // Static instance registry for theme/settings change notifications
 static std::vector<ControlPanelCore *> g_instances;
 static std::mutex g_instances_mutex;
+static bool g_shutdown = false;  // Prevents access to statics during shutdown
 
 // Forward declare to allow use before full definition
 class theme_change_callback;
@@ -43,6 +44,7 @@ void ControlPanelCore::register_instance(ControlPanelCore *instance) {
 }
 
 void ControlPanelCore::unregister_instance(ControlPanelCore *instance) {
+  if (g_shutdown) return;  // Static mutex may be destroyed
   std::lock_guard<std::mutex> lock(g_instances_mutex);
   g_instances.erase(
       std::remove(g_instances.begin(), g_instances.end(), instance),
@@ -50,11 +52,22 @@ void ControlPanelCore::unregister_instance(ControlPanelCore *instance) {
 }
 
 void ControlPanelCore::notify_theme_changed() {
+  if (g_shutdown) return;
   std::lock_guard<std::mutex> lock(g_instances_mutex);
   // Call on_settings_changed() which properly respects theme mode preferences
   for (auto *instance : g_instances) {
     instance->on_settings_changed();
   }
+}
+
+void ControlPanelCore::shutdown() {
+  g_shutdown = true;
+  // Destroy theme callback while services are still available
+  // (ui_config_callback_impl destructor needs to unregister)
+  g_theme_callback.reset();
+  // Clear instances while mutex is still valid
+  std::lock_guard<std::mutex> lock(g_instances_mutex);
+  g_instances.clear();
 }
 
 // Helper: format time as mm:ss or hh:mm:ss
@@ -137,9 +150,13 @@ ControlPanelCore::~ControlPanelCore() {
     DestroyWindow(m_tooltip_hwnd);
     m_tooltip_hwnd = nullptr;
   }
-  
+
   unregister_instance(this);
-  PlaybackStateManager::get().unregister_callback(this);
+
+  // Only access PlaybackStateManager if it hasn't been shut down
+  if (PlaybackStateManager::is_available()) {
+    PlaybackStateManager::get().unregister_callback(this);
+  }
 }
 
 void ControlPanelCore::initialize(HWND hwnd) {
