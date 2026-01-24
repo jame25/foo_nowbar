@@ -2611,7 +2611,8 @@ void ControlPanelCore::show_autoplaylist_menu() {
     ID_LOVED_TRACKS,
     ID_RECENTLY_ADDED,
     ID_SAME_ARTIST,
-    ID_SAME_TITLE
+    ID_SAME_TITLE,
+    ID_INFINITE_PLAYBACK
   };
   
   // Create popup menu
@@ -2674,7 +2675,14 @@ void ControlPanelCore::show_autoplaylist_menu() {
   UINT title_flags = MF_STRING | (current_title.is_empty() ? MF_GRAYED : 0);
   AppendMenuW(menu, artist_flags, ID_SAME_ARTIST, L"Same artist as currently selected");
   AppendMenuW(menu, title_flags, ID_SAME_TITLE, L"Same title as currently selected");
-  
+
+  // Separator
+  AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+
+  // Group 5: Playback mode
+  UINT infinite_flags = MF_STRING | (get_nowbar_infinite_playback_enabled() ? MF_CHECKED : 0);
+  AppendMenuW(menu, infinite_flags, ID_INFINITE_PLAYBACK, L"Infinite playback");
+
   // Get Super button position for menu placement
   POINT pt;
   pt.x = m_rect_super.left;
@@ -2791,16 +2799,20 @@ void ControlPanelCore::show_autoplaylist_menu() {
       if (!current_title.is_empty()) {
         // Escape double quotes in title using UTF-8 safe replace
         pfc::string8 escaped_title = current_title.replace("\"", "\\\"");
-        
+
         pfc::string8 query;
         query << "title IS \"" << escaped_title << "\"";
-        
+
         pfc::string8 name;
         name << "Title: " << current_title;
-        
+
         create_autoplaylist(name.c_str(), query.c_str(),
                             "%album artist% | %album%");
       }
+      break;
+    case ID_INFINITE_PLAYBACK:
+      // Toggle infinite playback mode
+      set_nowbar_infinite_playback_enabled(!get_nowbar_infinite_playback_enabled());
       break;
     default:
       break;
