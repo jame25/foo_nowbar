@@ -42,7 +42,7 @@ static cfg_int cfg_nowbar_mood_icon_visible(
 
 static cfg_int cfg_nowbar_mood_tag_mode(
     GUID{0xABCDEF57, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xE7}},
-    0  // Default: 0=MOOD, 1=2003_LOVED, 2=FEEDBACK, 3=LFM_LOVED, 4=SMP_LOVED
+    0  // Default: 0=FEEDBACK, 1=2003_LOVED, 2=LFM_LOVED, 3=SMP_LOVED, 4=MOOD
 );
 
 static cfg_int cfg_nowbar_stop_icon_visible(
@@ -2097,11 +2097,11 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
 
         // Initialize mood tag combobox
         HWND hMoodTagCombo = GetDlgItem(hwnd, IDC_MOOD_TAG_COMBO);
-        SendMessage(hMoodTagCombo, CB_ADDSTRING, 0, (LPARAM)L"%MOOD%");
-        SendMessage(hMoodTagCombo, CB_ADDSTRING, 0, (LPARAM)L"%2003_LOVED%");
         SendMessage(hMoodTagCombo, CB_ADDSTRING, 0, (LPARAM)L"%FEEDBACK%");
+        SendMessage(hMoodTagCombo, CB_ADDSTRING, 0, (LPARAM)L"%2003_LOVED%");
         SendMessage(hMoodTagCombo, CB_ADDSTRING, 0, (LPARAM)L"%LFM_LOVED%");
         SendMessage(hMoodTagCombo, CB_ADDSTRING, 0, (LPARAM)L"%SMP_LOVED%");
+        SendMessage(hMoodTagCombo, CB_ADDSTRING, 0, (LPARAM)L"%MOOD%");
         SendMessage(hMoodTagCombo, CB_SETCURSEL, cfg_nowbar_mood_tag_mode, 0);
 
         // Initialize glass effect combobox
@@ -2885,7 +2885,7 @@ void nowbar_preferences::apply_settings() {
         int autohideCbuttonsSel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_AUTOHIDE_CBUTTONS_COMBO), CB_GETCURSEL, 0, 0);
         cfg_nowbar_cbutton_autohide = (autohideCbuttonsSel == 0) ? 1 : 0;
 
-        // Save mood tag mode (0=MOOD, 1=2003_LOVED, 2=FEEDBACK, 3=LFM_LOVED)
+        // Save mood tag mode (0=FEEDBACK, 1=2003_LOVED, 2=LFM_LOVED, 3=SMP_LOVED, 4=MOOD)
         cfg_nowbar_mood_tag_mode = (int)SendMessage(GetDlgItem(m_hwnd, IDC_MOOD_TAG_COMBO), CB_GETCURSEL, 0, 0);
 
         // Save glass effect setting (0=Disabled, 1=Enabled in combobox -> config 0=Disabled, 1=Enabled)
@@ -2976,15 +2976,17 @@ void nowbar_preferences::apply_settings() {
 void nowbar_preferences::reset_settings() {
     if (m_hwnd) {
         if (m_current_tab == 0) {
-            // Reset General tab settings (Display Format, Auto-hide C-buttons)
+            // Reset General tab settings (Display Format, Auto-hide C-buttons, Mood Tag)
             cfg_nowbar_line1_format = "%title%";  // Default format
             cfg_nowbar_line2_format = "%artist%";  // Default format
             cfg_nowbar_cbutton_autohide = 1;  // Yes (default)
+            cfg_nowbar_mood_tag_mode = 0;  // FEEDBACK (default)
 
             // Update General tab UI
             uSetDlgItemText(m_hwnd, IDC_LINE1_FORMAT_EDIT, "%title%");
             uSetDlgItemText(m_hwnd, IDC_LINE2_FORMAT_EDIT, "%artist%");
             SendMessage(GetDlgItem(m_hwnd, IDC_AUTOHIDE_CBUTTONS_COMBO), CB_SETCURSEL, 0, 0);  // Default: Yes
+            SendMessage(GetDlgItem(m_hwnd, IDC_MOOD_TAG_COMBO), CB_SETCURSEL, 0, 0);  // Default: FEEDBACK
         } else if (m_current_tab == 1) {
             // Reset Appearance tab settings
             cfg_nowbar_theme_mode = 0;  // Auto
