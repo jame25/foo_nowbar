@@ -71,8 +71,10 @@ private:
     void notify_volume_changed(float volume);
     void notify_track_changed();
     void handle_infinite_playback();  // Add similar tracks when playlist ends
-    
+    void check_preview_skip(double current_time);  // Check if playback preview should skip to next track
+
     PlaybackState m_state;
+    bool m_preview_skip_triggered = false;  // Prevents multiple skips per track
     std::vector<IPlaybackStateCallback*> m_callbacks;
     mutable std::mutex m_mutex;
 };
