@@ -297,29 +297,37 @@ void ControlPanelCore::apply_theme() {
     return;
   }
 
-  // Force dark mode for artwork-based backgrounds when not in Light or Auto mode
+  // Special case: Custom theme + artwork background
+  // When stopped (no artwork visible), use DUI colors; when playing/paused, force dark
   // (artwork backgrounds have dark overlays that require light text)
-  bool force_dark = has_artwork_bg;
+  if (theme_mode == 3 && has_artwork_bg) {
+    if (is_stopped) {
+      // No artwork visible, use DUI color scheme
+      apply_custom_colors();
+    } else {
+      // Artwork visible with dark overlay, force dark mode for readability
+      set_dark_mode(true);
+    }
+    return;
+  }
 
-  if (theme_mode == 3 && !force_dark) {
+  if (theme_mode == 3) {
     // Custom - use DUI color scheme via callback
     apply_custom_colors();
   } else {
+    // At this point, artwork backgrounds are already handled above,
+    // so we only need to handle solid backgrounds
     bool dark;
-    if (force_dark) {
+    switch (theme_mode) {
+    case 1: // Dark
       dark = true;
-    } else {
-      switch (theme_mode) {
-      case 1: // Dark
-        dark = true;
-        break;
-      case 2: // Light
-        dark = false;
-        break;
-      default: // Auto (0) - follow system/foobar setting
-        dark = ui_config_manager::g_is_dark_mode();
-        break;
-      }
+      break;
+    case 2: // Light
+      dark = false;
+      break;
+    default: // Auto (0) - follow system/foobar setting
+      dark = ui_config_manager::g_is_dark_mode();
+      break;
     }
     set_dark_mode(dark);
   }
