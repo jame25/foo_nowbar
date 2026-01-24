@@ -19,6 +19,9 @@ BEGIN
     // Auto-hide C-buttons (behavior setting stays in General)
     LTEXT           "Auto-hide C-buttons:", IDC_AUTOHIDE_CBUTTONS_LABEL, 16, 86, 70, 12
     COMBOBOX        IDC_AUTOHIDE_CBUTTONS_COMBO, 90, 84, 100, 80, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    // Mood Tag setting
+    LTEXT           "Mood Tag:", IDC_MOOD_TAG_LABEL, 16, 104, 40, 12
+    COMBOBOX        IDC_MOOD_TAG_COMBO, 60, 102, 130, 80, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
 
     // === Appearance Tab Controls (Tab 1) ===
     LTEXT           "Theme Mode:", IDC_THEME_MODE_LABEL, 16, 26, 50, 12
