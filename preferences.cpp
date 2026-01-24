@@ -1937,6 +1937,20 @@ static void update_cover_margin_state(HWND hwnd) {
     EnableWindow(GetDlgItem(hwnd, IDC_COVER_MARGIN_COMBO), coverArtworkSel == 0);
 }
 
+// Helper to update Background Style combobox state based on Theme Mode selection
+static void update_background_style_state(HWND hwnd) {
+    int themeModeSel = (int)SendMessage(GetDlgItem(hwnd, IDC_THEME_MODE_COMBO), CB_GETCURSEL, 0, 0);
+    HWND hBgStyleCombo = GetDlgItem(hwnd, IDC_BACKGROUND_STYLE_COMBO);
+    // Theme Mode: 0=Auto, 1=Dark, 2=Light, 3=Custom
+    // Lock to Solid and disable when Light is selected
+    if (themeModeSel == 2) {
+        SendMessage(hBgStyleCombo, CB_SETCURSEL, 0, 0);  // Force Solid
+        EnableWindow(hBgStyleCombo, FALSE);
+    } else {
+        EnableWindow(hBgStyleCombo, TRUE);
+    }
+}
+
 // Helper to update path control states based on action selection
 static void update_cbutton_path_state(HWND hwnd, int action_id, int path_id, int browse_id) {
     int action = (int)SendMessage(GetDlgItem(hwnd, action_id), CB_GETCURSEL, 0, 0);
@@ -2035,6 +2049,9 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
 
         // Update Cover Margin state based on Cover Artwork visibility
         update_cover_margin_state(hwnd);
+
+        // Update Background Style state based on Theme Mode
+        update_background_style_state(hwnd);
 
         // Initialize mood icon visibility combobox
         HWND hMoodIconCombo = GetDlgItem(hwnd, IDC_MOOD_ICON_COMBO);
@@ -2179,6 +2196,12 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
     case WM_COMMAND:
         switch (LOWORD(wp)) {
         case IDC_THEME_MODE_COMBO:
+            if (HIWORD(wp) == CBN_SELCHANGE) {
+                update_background_style_state(hwnd);
+                p_this->on_changed();
+            }
+            break;
+
         case IDC_SMOOTH_ANIMATIONS_COMBO:
         case IDC_BACKGROUND_STYLE_COMBO:
         case IDC_BAR_STYLE_COMBO:
@@ -2987,6 +3010,7 @@ void nowbar_preferences::reset_settings() {
             InvalidateRect(GetDlgItem(m_hwnd, IDC_PROGRESS_ACCENT_BTN), nullptr, TRUE);
             InvalidateRect(GetDlgItem(m_hwnd, IDC_VOLUME_ACCENT_BTN), nullptr, TRUE);
             update_cover_margin_state(m_hwnd);  // Re-enable Cover Margin (Cover Artwork is Yes)
+            update_background_style_state(m_hwnd);  // Re-enable Background Style (Theme Mode is Auto)
         } else if (m_current_tab == 2) {
             // Reset Icons tab settings
             cfg_nowbar_mood_icon_visible = 1;  // Show (visible)
