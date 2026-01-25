@@ -22,8 +22,8 @@ BEGIN
     // Mood Tag setting
     LTEXT           "Mood Tag:", IDC_MOOD_TAG_LABEL, 16, 104, 40, 12
     COMBOBOX        IDC_MOOD_TAG_COMBO, 60, 102, 130, 80, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
-    // Playback Preview section
-    GROUPBOX        "Playback Preview", IDC_PLAYBACK_PREVIEW_GROUP, 12, 122, 316, 50
+    // Playback section
+    GROUPBOX        "Playback", IDC_PLAYBACK_PREVIEW_GROUP, 12, 122, 316, 50
     LTEXT           "Skip Low Rating:", IDC_SKIP_LOW_RATING_LABEL, 20, 136, 60, 12
     COMBOBOX        IDC_SKIP_LOW_RATING_COMBO, 84, 134, 100, 80, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
     LTEXT           "Rating Threshold:", IDC_SKIP_RATING_THRESHOLD_LABEL, 20, 152, 60, 12
