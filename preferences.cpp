@@ -120,6 +120,16 @@ static cfg_int cfg_nowbar_preview_mode(
     0  // Default: Off (0=Off, 1=35%, 2=50%, 3=60sec)
 );
 
+static cfg_int cfg_nowbar_skip_low_rating_enabled(
+    GUID{0xABCDEF5A, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xEA}},
+    0  // Default: Disabled
+);
+
+static cfg_int cfg_nowbar_skip_low_rating_threshold(
+    GUID{0xABCDEF5B, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xEB}},
+    1  // Default: 1 (skip if rating <= 1)
+);
+
 static cfg_int cfg_nowbar_custom_button_action(
     GUID{0xABCDEF0A, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0x92}},
     0  // Default: None (0=None, 1=Open URL, 2=Run Executable)
@@ -1305,6 +1315,17 @@ void set_nowbar_preview_mode(int mode) {
     cfg_nowbar_preview_mode = mode;
 }
 
+bool get_nowbar_skip_low_rating_enabled() {
+    return cfg_nowbar_skip_low_rating_enabled != 0;
+}
+
+int get_nowbar_skip_low_rating_threshold() {
+    int threshold = cfg_nowbar_skip_low_rating_threshold;
+    if (threshold < 1) threshold = 1;
+    if (threshold > 3) threshold = 3;  // 1, 2, or 3
+    return threshold;
+}
+
 int get_nowbar_background_style() {
     int style = cfg_nowbar_background_style;
     if (style < 0) style = 0;
@@ -1823,6 +1844,12 @@ void nowbar_preferences::switch_tab(int tab) {
     // Mood Tag setting
     ShowWindow(GetDlgItem(m_hwnd, IDC_MOOD_TAG_LABEL), show_general);
     ShowWindow(GetDlgItem(m_hwnd, IDC_MOOD_TAG_COMBO), show_general);
+    // Playback Preview section
+    ShowWindow(GetDlgItem(m_hwnd, IDC_PLAYBACK_PREVIEW_GROUP), show_general);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_SKIP_LOW_RATING_LABEL), show_general);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_SKIP_LOW_RATING_COMBO), show_general);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_SKIP_RATING_THRESHOLD_LABEL), show_general);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_SKIP_RATING_THRESHOLD_COMBO), show_general);
 
     // Appearance tab controls (Tab 1)
     BOOL show_appearance = (tab == 1) ? SW_SHOW : SW_HIDE;
@@ -2118,6 +2145,21 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         SendMessage(hMoodTagCombo, CB_ADDSTRING, 0, (LPARAM)L"%MOOD%");
         SendMessage(hMoodTagCombo, CB_SETCURSEL, cfg_nowbar_mood_tag_mode, 0);
 
+        // Initialize skip low rating combobox
+        HWND hSkipLowRatingCombo = GetDlgItem(hwnd, IDC_SKIP_LOW_RATING_COMBO);
+        SendMessage(hSkipLowRatingCombo, CB_ADDSTRING, 0, (LPARAM)L"Disabled");
+        SendMessage(hSkipLowRatingCombo, CB_ADDSTRING, 0, (LPARAM)L"Enabled");
+        SendMessage(hSkipLowRatingCombo, CB_SETCURSEL, cfg_nowbar_skip_low_rating_enabled ? 1 : 0, 0);
+
+        // Initialize skip rating threshold combobox
+        HWND hSkipRatingThresholdCombo = GetDlgItem(hwnd, IDC_SKIP_RATING_THRESHOLD_COMBO);
+        SendMessage(hSkipRatingThresholdCombo, CB_ADDSTRING, 0, (LPARAM)L"1 (skip if rating = 1)");
+        SendMessage(hSkipRatingThresholdCombo, CB_ADDSTRING, 0, (LPARAM)L"2 (skip if rating <= 2)");
+        SendMessage(hSkipRatingThresholdCombo, CB_ADDSTRING, 0, (LPARAM)L"3 (skip if rating <= 3)");
+        SendMessage(hSkipRatingThresholdCombo, CB_SETCURSEL, cfg_nowbar_skip_low_rating_threshold - 1, 0);
+        // Enable/disable threshold combo based on skip low rating setting
+        EnableWindow(hSkipRatingThresholdCombo, cfg_nowbar_skip_low_rating_enabled != 0);
+
         // Initialize glass effect combobox
         HWND hGlassEffectCombo = GetDlgItem(hwnd, IDC_GLASS_EFFECT_COMBO);
         SendMessage(hGlassEffectCombo, CB_ADDSTRING, 0, (LPARAM)L"Disabled");
@@ -2223,7 +2265,17 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         case IDC_AUTOHIDE_CBUTTONS_COMBO:
         case IDC_GLASS_EFFECT_COMBO:
         case IDC_MOOD_TAG_COMBO:
+        case IDC_SKIP_RATING_THRESHOLD_COMBO:
             if (HIWORD(wp) == CBN_SELCHANGE) {
+                p_this->on_changed();
+            }
+            break;
+
+        case IDC_SKIP_LOW_RATING_COMBO:
+            if (HIWORD(wp) == CBN_SELCHANGE) {
+                // Enable/disable threshold combo based on skip low rating setting
+                int sel = (int)SendMessage(GetDlgItem(hwnd, IDC_SKIP_LOW_RATING_COMBO), CB_GETCURSEL, 0, 0);
+                EnableWindow(GetDlgItem(hwnd, IDC_SKIP_RATING_THRESHOLD_COMBO), sel == 1);
                 p_this->on_changed();
             }
             break;
@@ -2896,6 +2948,12 @@ void nowbar_preferences::apply_settings() {
         // Save mood tag mode (0=FEEDBACK, 1=2003_LOVED, 2=LFM_LOVED, 3=SMP_LOVED, 4=MOOD)
         cfg_nowbar_mood_tag_mode = (int)SendMessage(GetDlgItem(m_hwnd, IDC_MOOD_TAG_COMBO), CB_GETCURSEL, 0, 0);
 
+        // Save skip low rating settings
+        int skipLowRatingSel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_SKIP_LOW_RATING_COMBO), CB_GETCURSEL, 0, 0);
+        cfg_nowbar_skip_low_rating_enabled = (skipLowRatingSel == 1) ? 1 : 0;
+        int skipRatingThresholdSel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_SKIP_RATING_THRESHOLD_COMBO), CB_GETCURSEL, 0, 0);
+        cfg_nowbar_skip_low_rating_threshold = skipRatingThresholdSel + 1;  // Convert 0-based to 1-3
+
         // Save glass effect setting (0=Disabled, 1=Enabled in combobox -> config 0=Disabled, 1=Enabled)
         int glassEffectSel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_GLASS_EFFECT_COMBO), CB_GETCURSEL, 0, 0);
         cfg_nowbar_glass_effect = (glassEffectSel == 1) ? 1 : 0;
@@ -2984,17 +3042,22 @@ void nowbar_preferences::apply_settings() {
 void nowbar_preferences::reset_settings() {
     if (m_hwnd) {
         if (m_current_tab == 0) {
-            // Reset General tab settings (Display Format, Auto-hide C-buttons, Mood Tag)
+            // Reset General tab settings (Display Format, Auto-hide C-buttons, Mood Tag, Skip Low Rating)
             cfg_nowbar_line1_format = "%title%";  // Default format
             cfg_nowbar_line2_format = "%artist%";  // Default format
             cfg_nowbar_cbutton_autohide = 1;  // Yes (default)
             cfg_nowbar_mood_tag_mode = 0;  // FEEDBACK (default)
+            cfg_nowbar_skip_low_rating_enabled = 0;  // Disabled (default)
+            cfg_nowbar_skip_low_rating_threshold = 1;  // 1 (default)
 
             // Update General tab UI
             uSetDlgItemText(m_hwnd, IDC_LINE1_FORMAT_EDIT, "%title%");
             uSetDlgItemText(m_hwnd, IDC_LINE2_FORMAT_EDIT, "%artist%");
             SendMessage(GetDlgItem(m_hwnd, IDC_AUTOHIDE_CBUTTONS_COMBO), CB_SETCURSEL, 0, 0);  // Default: Yes
             SendMessage(GetDlgItem(m_hwnd, IDC_MOOD_TAG_COMBO), CB_SETCURSEL, 0, 0);  // Default: FEEDBACK
+            SendMessage(GetDlgItem(m_hwnd, IDC_SKIP_LOW_RATING_COMBO), CB_SETCURSEL, 0, 0);  // Default: Disabled
+            SendMessage(GetDlgItem(m_hwnd, IDC_SKIP_RATING_THRESHOLD_COMBO), CB_SETCURSEL, 0, 0);  // Default: 1
+            EnableWindow(GetDlgItem(m_hwnd, IDC_SKIP_RATING_THRESHOLD_COMBO), FALSE);  // Disabled when skip is off
         } else if (m_current_tab == 1) {
             // Reset Appearance tab settings
             cfg_nowbar_theme_mode = 0;  // Auto
