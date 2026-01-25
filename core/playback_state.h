@@ -75,8 +75,11 @@ private:
 
     PlaybackState m_state;
     bool m_preview_skip_triggered = false;  // Prevents multiple skips per track
+    int m_consecutive_rating_skips = 0;     // Counter for consecutive low-rating skips (max 10)
     std::vector<IPlaybackStateCallback*> m_callbacks;
     mutable std::mutex m_mutex;
+
+    bool check_and_skip_low_rating(metadb_handle_ptr p_track);  // Check rating and skip if needed
 };
 
 } // namespace nowbar
