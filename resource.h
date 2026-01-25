@@ -142,6 +142,13 @@
 #define IDC_MOOD_TAG_LABEL         1146
 #define IDC_MOOD_TAG_COMBO         1147
 
+// Playback Preview section (General tab)
+#define IDC_PLAYBACK_PREVIEW_GROUP      1148
+#define IDC_SKIP_LOW_RATING_LABEL       1149
+#define IDC_SKIP_LOW_RATING_COMBO       1150
+#define IDC_SKIP_RATING_THRESHOLD_LABEL 1151
+#define IDC_SKIP_RATING_THRESHOLD_COMBO 1152
+
 // Profile configuration controls (Custom Button tab)
 #define IDC_PROFILE_NAME_LABEL     1370
 #define IDC_PROFILE_COMBO          1371
