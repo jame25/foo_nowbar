@@ -1080,10 +1080,13 @@ void ControlPanelCore::paint(HDC hdc, const RECT &rect) {
 
   Gdiplus::Graphics g(hdc);
   g.SetSmoothingMode(Gdiplus::SmoothingModeHighQuality);
-  g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHighQuality);
   g.SetTextRenderingHint(Gdiplus::TextRenderingHintClearTypeGridFit);
 
+  // Draw background with pixel-aligned mode to avoid a 1px border artifact
+  // on the left and top edges caused by PixelOffsetModeHalf shifting coords by -0.5
+  g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeNone);
   draw_background(g, rect);
+  g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHighQuality);
   if (get_nowbar_cover_artwork_visible()) {
     draw_artwork(g);
   }
