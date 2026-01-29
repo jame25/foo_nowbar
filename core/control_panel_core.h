@@ -156,6 +156,7 @@ private:
 
     void draw_super_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color);  // Super button icon (3x3 grid of dots)
     void draw_stop_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color, bool filled = false);  // Stop icon (square)
+    void draw_radio_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color);  // Radio icon for streams
     
     // Playback control actions
     void do_play_pause();
