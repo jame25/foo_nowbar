@@ -1385,17 +1385,26 @@ void ControlPanelCore::draw_artwork(Gdiplus::Graphics &g) {
     Gdiplus::Rect artR(m_rect_artwork.left, m_rect_artwork.top, w, h);
     g.FillRectangle(&brush, artR);
 
-    // Music note icon placeholder
-    Gdiplus::SolidBrush iconBrush(m_text_secondary_color);
-    Gdiplus::Font iconFont(L"Segoe MDL2 Assets", 24.0f * m_dpi_scale,
-                           Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
-    Gdiplus::StringFormat sf;
-    sf.SetAlignment(Gdiplus::StringAlignmentCenter);
-    sf.SetLineAlignment(Gdiplus::StringAlignmentCenter);
-    Gdiplus::RectF artRect((float)m_rect_artwork.left,
-                           (float)m_rect_artwork.top, (float)w, (float)h);
-    g.DrawString(L"\uE8D6", -1, &iconFont, artRect, &sf,
-                 &iconBrush); // Music note
+    // Check if the current track is a remote stream (http://, https://, etc.)
+    bool is_stream = m_state.current_track.is_valid() &&
+        (strstr(m_state.current_track->get_path(), "://") != nullptr);
+
+    if (is_stream) {
+      RECT iconRect = m_rect_artwork;
+      draw_radio_icon(g, iconRect, m_text_secondary_color);
+    } else {
+      // Music note icon placeholder
+      Gdiplus::SolidBrush iconBrush(m_text_secondary_color);
+      Gdiplus::Font iconFont(L"Segoe MDL2 Assets", 24.0f * m_dpi_scale,
+                             Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
+      Gdiplus::StringFormat sf;
+      sf.SetAlignment(Gdiplus::StringAlignmentCenter);
+      sf.SetLineAlignment(Gdiplus::StringAlignmentCenter);
+      Gdiplus::RectF artRect((float)m_rect_artwork.left,
+                             (float)m_rect_artwork.top, (float)w, (float)h);
+      g.DrawString(L"\uE8D6", -1, &iconFont, artRect, &sf,
+                   &iconBrush); // Music note
+    }
   }
 }
 
@@ -4112,24 +4121,39 @@ void ControlPanelCore::update_title_formats() {
 
 void ControlPanelCore::evaluate_title_formats() {
   if (!m_state.current_track.is_valid()) {
-    // Fallback to raw title/artist when no track handle available
     m_formatted_line1 = m_state.track_title;
     m_formatted_line2 = m_state.track_artist;
     return;
   }
 
-  // Evaluate Line 1 format
+  // Use playback_format_title when playing - it merges dynamic stream
+  // metadata (internet radio artist/title) with static file metadata.
+  // Fall back to metadb_handle::format_title when not actively playing.
+  auto pc = playback_control::get();
+  bool use_playback = pc->is_playing() || pc->is_paused();
+
   if (m_titleformat_line1.is_valid()) {
-    m_state.current_track->format_title(nullptr, m_formatted_line1,
-                                        m_titleformat_line1, nullptr);
+    if (use_playback) {
+      pc->playback_format_title(nullptr, m_formatted_line1,
+                                m_titleformat_line1, nullptr,
+                                playback_control::display_level_all);
+    } else {
+      m_state.current_track->format_title(nullptr, m_formatted_line1,
+                                          m_titleformat_line1, nullptr);
+    }
   } else {
     m_formatted_line1 = m_state.track_title;
   }
 
-  // Evaluate Line 2 format
   if (m_titleformat_line2.is_valid()) {
-    m_state.current_track->format_title(nullptr, m_formatted_line2,
-                                        m_titleformat_line2, nullptr);
+    if (use_playback) {
+      pc->playback_format_title(nullptr, m_formatted_line2,
+                                m_titleformat_line2, nullptr,
+                                playback_control::display_level_all);
+    } else {
+      m_state.current_track->format_title(nullptr, m_formatted_line2,
+                                          m_titleformat_line2, nullptr);
+    }
   } else {
     m_formatted_line2 = m_state.track_artist;
   }
@@ -4205,6 +4229,140 @@ void ControlPanelCore::draw_stop_icon(Gdiplus::Graphics &g, const RECT &rect,
     g.FillRectangle(&brush, x + w - outer_inset - border, y + outer_inset + border, 
                     border, h - outer_inset * 2.0f - border * 2.0f);
   }
+}
+
+// Draw radio icon from Material Design SVG for internet radio streams
+// SVG path: M160-80q-33 0-56.5-23.5T80-160v-480q0-25 13.5-45t36.5-29l506-206 26 66-330 134h468q33 0 56.5 23.5T880-640v480q0 33-23.5 56.5T800-80H160Z
+// Plus sub-shapes for display panel, dial circle, etc.
+void ControlPanelCore::draw_radio_icon(Gdiplus::Graphics &g, const RECT &rect,
+                                       const Gdiplus::Color &color) {
+  float w = static_cast<float>(rect.right - rect.left);
+  float h = static_cast<float>(rect.bottom - rect.top);
+  float cx = (rect.left + rect.right) / 2.0f;
+  float cy = (rect.top + rect.bottom) / 2.0f;
+
+  // Scale icon to ~50% of the artwork rect, matching music note sizing
+  float iconDim = std::min(w, h) * 0.5f;
+  float scale = iconDim / 24.0f;
+
+  Gdiplus::Matrix oldMatrix;
+  g.GetTransform(&oldMatrix);
+
+  Gdiplus::Matrix matrix;
+  matrix.Translate(cx - 12 * scale, cy - 12 * scale);
+  matrix.Scale(scale, scale);
+  g.SetTransform(&matrix);
+
+  Gdiplus::SolidBrush brush(color);
+  Gdiplus::GraphicsPath path;
+  Gdiplus::SmoothingMode oldSmoothing = g.GetSmoothingMode();
+  g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+
+  // Radio body outline (simplified from SVG path)
+  // The SVG viewBox is 0 -960 960 960, converted via svgToNorm()
+  // Main body: rounded rect from (80,-160) to (880,-640) with corners
+  // Antenna line going from top of body up-left
+
+  // --- Antenna line ---
+  // SVG: l506-206 26 66-330 134 => a diagonal line from top of radio
+  // Simplified as a thick line from roughly (662,-234) up to (336,-366)
+  // which maps to the antenna segment
+  {
+    Gdiplus::Pen pen(color, 1.5f);
+    pen.SetStartCap(Gdiplus::LineCapRound);
+    pen.SetEndCap(Gdiplus::LineCapRound);
+    // Antenna: from about (330,-640) going up-left to (166,-706)
+    // In SVG coords: the path goes l506-206 from (130,-234)
+    // Simplified: draw from (636,-234) => svgToNorm to (330,-700)
+    g.DrawLine(&pen, svgToNorm(330, -700), svgToNorm(636, -234));
+  }
+
+  // --- Radio body (rounded rectangle) ---
+  // Body spans from x=160 to x=800, y=-160 to y=-640
+  // With rounded corners (radius ~57 from the q-33 bezier)
+  {
+    float bx1 = svgToNorm(160, 0).X;
+    float by1 = svgToNorm(0, -640).Y;
+    float bx2 = svgToNorm(800, 0).X;
+    float by2 = svgToNorm(0, -160).Y;
+    float bw = bx2 - bx1;
+    float bh = by2 - by1;
+    float radius = 57.0f / 40.0f; // Corner radius in normalized coords
+
+    Gdiplus::GraphicsPath bodyPath;
+    // Top-left corner
+    bodyPath.AddArc(bx1, by1, radius * 2, radius * 2, 180, 90);
+    // Top edge
+    bodyPath.AddLine(bx1 + radius, by1, bx2 - radius, by1);
+    // Top-right corner
+    bodyPath.AddArc(bx2 - radius * 2, by1, radius * 2, radius * 2, 270, 90);
+    // Right edge
+    bodyPath.AddLine(bx2, by1 + radius, bx2, by2 - radius);
+    // Bottom-right corner
+    bodyPath.AddArc(bx2 - radius * 2, by2 - radius * 2, radius * 2, radius * 2, 0, 90);
+    // Bottom edge
+    bodyPath.AddLine(bx2 - radius, by2, bx1 + radius, by2);
+    // Bottom-left corner
+    bodyPath.AddArc(bx1, by2 - radius * 2, radius * 2, radius * 2, 90, 90);
+    bodyPath.CloseFigure();
+
+    g.FillPath(&brush, &bodyPath);
+  }
+
+  // --- Display panel (cutout drawn as darker rect) ---
+  // SVG sub-path: M160-520h480v-80h80v80h80v-120H160v120Z
+  // This is the top section of the radio body, y=-520 to y=-640
+  // We draw the lower section in body color and a display area on top
+  // Display: from (160,-640) to (800,-520) with a notch
+  {
+    // Draw display panel as a slightly different shade (darken/lighten)
+    int r = color.GetR(), gc = color.GetG(), b = color.GetB();
+    // Make it slightly darker/lighter for contrast
+    Gdiplus::Color displayColor(color.GetA(),
+        (BYTE)std::max(0, r - 40),
+        (BYTE)std::max(0, gc - 40),
+        (BYTE)std::max(0, b - 40));
+    Gdiplus::SolidBrush displayBrush(displayColor);
+
+    // Display area: x=160..640, y=-640..-520 (the main screen area)
+    Gdiplus::PointF tl = svgToNorm(160, -640);
+    Gdiplus::PointF br = svgToNorm(640, -520);
+    float dw = br.X - tl.X;
+    float dh = br.Y - tl.Y;
+    float dRadius = 57.0f / 40.0f;
+    // Only round top-left corner since it's in the body corner
+    g.FillRectangle(&displayBrush, tl.X, tl.Y + dRadius, dw, dh - dRadius);
+    // Top portion with rounded top-left corner
+    Gdiplus::GraphicsPath displayTop;
+    displayTop.AddArc(tl.X, tl.Y, dRadius * 2, dRadius * 2, 180, 90);
+    displayTop.AddLine(tl.X + dRadius, tl.Y, tl.X + dw, tl.Y);
+    displayTop.AddLine(tl.X + dw, tl.Y, tl.X + dw, tl.Y + dRadius);
+    displayTop.AddLine(tl.X + dw, tl.Y + dRadius, tl.X, tl.Y + dRadius);
+    displayTop.CloseFigure();
+    g.FillPath(&displayBrush, &displayTop);
+  }
+
+  // --- Tuning dial (circle) ---
+  // SVG: M320-200 circle centered at (320,-320) with radius 71
+  // Actually the sub-path describes: center at (320, -300) radius ~71
+  // q42 0 71-29t29-71q0-42-29-71t-71-29q-42 0-71 29t-29 71q0 42 29 71t71 29
+  {
+    Gdiplus::PointF center = svgToNorm(320, -370);
+    float dialRadius = 71.0f / 40.0f;
+    // Draw as a lighter/brighter circle for contrast
+    int r = color.GetR(), gc = color.GetG(), b = color.GetB();
+    Gdiplus::Color dialColor(color.GetA(),
+        (BYTE)std::min(255, r + 50),
+        (BYTE)std::min(255, gc + 50),
+        (BYTE)std::min(255, b + 50));
+    Gdiplus::SolidBrush dialBrush(dialColor);
+    g.FillEllipse(&dialBrush,
+        center.X - dialRadius, center.Y - dialRadius,
+        dialRadius * 2, dialRadius * 2);
+  }
+
+  g.SetSmoothingMode(oldSmoothing);
+  g.SetTransform(&oldMatrix);
 }
 
 // Load a custom icon for a specific button index
