@@ -263,6 +263,17 @@ void PlaybackStateManager::handle_infinite_playback() {
     auto pm = playlist_manager::get();
     auto pc = playback_control::get();
 
+    // Debounce: if infinite playback was triggered less than 10 seconds ago, skip.
+    // This prevents a feedback loop when the output device becomes unavailable
+    // (e.g. Bluetooth headset disconnected) — playback fails immediately after
+    // start(), triggering another EOF stop, which would re-trigger infinite playback.
+    auto now = std::chrono::steady_clock::now();
+    auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - m_last_infinite_playback_time).count();
+    if (m_last_infinite_playback_time.time_since_epoch().count() != 0 && elapsed < 10) {
+        return;
+    }
+    m_last_infinite_playback_time = now;
+
     // Don't add tracks if "stop after current" is enabled
     if (pc->get_stop_after_current()) return;
 
