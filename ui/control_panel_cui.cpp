@@ -144,16 +144,25 @@ LRESULT ControlPanelCUI::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp) {
         HBITMAP memBitmap = CreateCompatibleBitmap(hdc, rect.right, rect.bottom);
         HBITMAP oldBitmap = (HBITMAP)SelectObject(memDC, memBitmap);
         
+        // Pre-fill the off-screen bitmap with the background color using GDI.
+        // GDI+ can leave edge pixels unfilled at the top and left edges due to
+        // internal coordinate rounding, resulting in a 1px lighter border.
+        {
+            HBRUSH bgBrush = CreateSolidBrush(get_nowbar_initial_bg_color());
+            FillRect(memDC, &rect, bgBrush);
+            DeleteObject(bgBrush);
+        }
+
         if (m_core) {
             m_core->paint(memDC, rect);
         }
-        
+
         BitBlt(hdc, 0, 0, rect.right, rect.bottom, memDC, 0, 0, SRCCOPY);
-        
+
         SelectObject(memDC, oldBitmap);
         DeleteObject(memBitmap);
         DeleteDC(memDC);
-        
+
         EndPaint(wnd, &ps);
         return 0;
     }
@@ -249,8 +258,9 @@ LRESULT ControlPanelCUI::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp) {
         // Animation timer fired - trigger a repaint to continue the animation
         InvalidateRect(wnd, nullptr, FALSE);
         return 0;
+
     }
-    
+
     return DefWindowProc(wnd, msg, wp, lp);
 }
 
