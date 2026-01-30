@@ -1082,10 +1082,18 @@ void ControlPanelCore::paint(HDC hdc, const RECT &rect) {
   g.SetSmoothingMode(Gdiplus::SmoothingModeHighQuality);
   g.SetTextRenderingHint(Gdiplus::TextRenderingHintClearTypeGridFit);
 
-  // Draw background with pixel-aligned mode to avoid a 1px border artifact
-  // on the left and top edges caused by PixelOffsetModeHalf shifting coords by -0.5
+  // Draw background with aliased mode to prevent a 1px border artifact on the
+  // left and top edges. SmoothingModeHighQuality applies sub-pixel coverage to
+  // FillRectangle edges at y=0 and x=0, producing partially-filled edge pixels.
+  // SmoothingModeNone disables anti-aliasing so rectangle fills have crisp edges.
+  // PixelOffsetModeNone prevents the -0.5px coordinate shift.
+  // NearestNeighbor prevents bilinear edge sampling on cached bitmap blits.
+  g.SetSmoothingMode(Gdiplus::SmoothingModeNone);
   g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeNone);
+  g.SetInterpolationMode(Gdiplus::InterpolationModeNearestNeighbor);
   draw_background(g, rect);
+  g.SetSmoothingMode(Gdiplus::SmoothingModeHighQuality);
+  g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBilinear);
   g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHighQuality);
   if (get_nowbar_cover_artwork_visible()) {
     draw_artwork(g);
@@ -1259,8 +1267,10 @@ void ControlPanelCore::draw_background(Gdiplus::Graphics &g, const RECT &rect) {
       m_target_background_size = {(LONG)width, (LONG)height};
       
       Gdiplus::Graphics target_g(m_target_background.get());
-      target_g.SetSmoothingMode(Gdiplus::SmoothingModeHighQuality);
-      target_g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHighQuality);
+      // Use aliased mode to prevent anti-aliased edges from being baked into cache
+      target_g.SetSmoothingMode(Gdiplus::SmoothingModeNone);
+      target_g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeNone);
+      target_g.SetInterpolationMode(Gdiplus::InterpolationModeNearestNeighbor);
       
       // Draw current background content to target cache ONCE
       draw_current_bg(target_g);
@@ -1330,7 +1340,10 @@ void ControlPanelCore::draw_background(Gdiplus::Graphics &g, const RECT &rect) {
       // Render current background to cache
       {
         Gdiplus::Graphics cache_g(m_prev_background.get());
-        cache_g.SetSmoothingMode(Gdiplus::SmoothingModeHighQuality);
+        // Use aliased mode to prevent anti-aliased edges from being baked into cache
+        cache_g.SetSmoothingMode(Gdiplus::SmoothingModeNone);
+        cache_g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeNone);
+        cache_g.SetInterpolationMode(Gdiplus::InterpolationModeNearestNeighbor);
         
         Gdiplus::Rect cache_r(0, 0, width, height);
         
