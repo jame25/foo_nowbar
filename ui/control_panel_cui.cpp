@@ -224,29 +224,6 @@ LRESULT ControlPanelCUI::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp) {
         }
         return 0;
         
-    case WM_GETMINMAXINFO: {
-        if (m_core) {
-            LPMINMAXINFO mmi = (LPMINMAXINFO)lp;
-            
-            // Set minimum size
-            SIZE minSize = m_core->get_min_size();
-            mmi->ptMinTrackSize.x = minSize.cx;
-            mmi->ptMinTrackSize.y = minSize.cy;
-            
-            // Set maximum height: 1.12 inches, scaled by DPI (~38% reduction from 1.8)
-            // At 96 DPI: 1.12 * 96 = 108 pixels
-            // Keeps panel compact and horizontal-focused (matches DUI)
-            HDC hdc = GetDC(wnd);
-            if (hdc) {
-                int dpi = GetDeviceCaps(hdc, LOGPIXELSY);
-                LONG max_height = static_cast<LONG>(1.12 * dpi);
-                mmi->ptMaxTrackSize.y = max_height;
-                ReleaseDC(wnd, hdc);
-            }
-        }
-        return 0;
-    }
-        
     case WM_SETTINGCHANGE:
         // System settings changed - trigger theme update
         if (m_core) {
