@@ -130,6 +130,36 @@ static cfg_int cfg_nowbar_skip_low_rating_threshold(
     1  // Default: 1 (skip if rating <= 1)
 );
 
+static cfg_int cfg_nowbar_visualization_mode(
+    GUID{0xABCDEF5C, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xEC}},
+    0  // Default: Disabled (0=Disabled, 1=Spectrum, 2=Waveform)
+);
+
+static cfg_int cfg_nowbar_spectrum_color(
+    GUID{0xABCDEF60, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xF0}},
+    RGB(100, 180, 255)  // Default: light blue
+);
+
+static cfg_int cfg_nowbar_spectrum_width(
+    GUID{0xABCDEF61, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xF1}},
+    1  // Default: Normal (0=Thin, 1=Normal, 2=Wide)
+);
+
+static cfg_int cfg_nowbar_spectrum_shape(
+    GUID{0xABCDEF62, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xF2}},
+    0  // Default: Pill (0=Pill, 1=Rectangle)
+);
+
+static cfg_int cfg_nowbar_waveform_color(
+    GUID{0xABCDEF63, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xF3}},
+    RGB(255, 85, 0)  // Default: SoundCloud orange
+);
+
+static cfg_int cfg_nowbar_waveform_width(
+    GUID{0xABCDEF64, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xF4}},
+    1  // Default: Normal (0=Thin, 1=Normal, 2=Wide)
+);
+
 static cfg_int cfg_nowbar_custom_button_action(
     GUID{0xABCDEF0A, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0x92}},
     0  // Default: None (0=None, 1=Open URL, 2=Run Executable, 3=Foobar2k Action, 4=Open Folder)
@@ -1323,6 +1353,46 @@ bool get_nowbar_skip_low_rating_enabled() {
     return cfg_nowbar_skip_low_rating_enabled != 0;
 }
 
+int get_nowbar_visualization_mode() {
+    int mode = cfg_nowbar_visualization_mode;
+    if (mode < 0) mode = 0;
+    if (mode > 2) mode = 2;
+    return mode;
+}
+
+bool get_nowbar_spectrum_visible() {
+    return get_nowbar_visualization_mode() == 1;
+}
+
+COLORREF get_nowbar_spectrum_color() {
+    return static_cast<COLORREF>(cfg_nowbar_spectrum_color.get_value());
+}
+
+int get_nowbar_spectrum_width() {
+    int w = cfg_nowbar_spectrum_width;
+    if (w < 0) w = 0;
+    if (w > 2) w = 2;
+    return w;
+}
+
+int get_nowbar_spectrum_shape() {
+    int s = cfg_nowbar_spectrum_shape;
+    if (s < 0) s = 0;
+    if (s > 1) s = 1;
+    return s;
+}
+
+COLORREF get_nowbar_waveform_color() {
+    return static_cast<COLORREF>(cfg_nowbar_waveform_color.get_value());
+}
+
+int get_nowbar_waveform_width() {
+    int w = cfg_nowbar_waveform_width;
+    if (w < 0) w = 0;
+    if (w > 2) w = 2;
+    return w;
+}
+
 int get_nowbar_skip_low_rating_threshold() {
     int threshold = cfg_nowbar_skip_low_rating_threshold;
     if (threshold < 1) threshold = 1;
@@ -1854,6 +1924,21 @@ void nowbar_preferences::switch_tab(int tab) {
     ShowWindow(GetDlgItem(m_hwnd, IDC_SKIP_LOW_RATING_COMBO), show_general);
     ShowWindow(GetDlgItem(m_hwnd, IDC_SKIP_RATING_THRESHOLD_LABEL), show_general);
     ShowWindow(GetDlgItem(m_hwnd, IDC_SKIP_RATING_THRESHOLD_COMBO), show_general);
+    // Visualization section
+    ShowWindow(GetDlgItem(m_hwnd, IDC_VIS_GROUP), show_general);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_VIS_ENABLE_CHECK), show_general);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_VIS_SPECTRUM_RADIO), show_general);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_VIS_SPECTRUM_WIDTH_LABEL), show_general);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_VIS_SPECTRUM_WIDTH_COMBO), show_general);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_VIS_SPECTRUM_COLOR_LABEL), show_general);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_VIS_SPECTRUM_COLOR_BTN), show_general);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_VIS_SPECTRUM_SHAPE_LABEL), show_general);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_VIS_SPECTRUM_SHAPE_COMBO), show_general);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_VIS_WAVEFORM_RADIO), show_general);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_VIS_WAVEFORM_COLOR_LABEL), show_general);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_VIS_WAVEFORM_COLOR_BTN), show_general);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_VIS_WAVEFORM_WIDTH_LABEL), show_general);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_VIS_WAVEFORM_WIDTH_COMBO), show_general);
 
     // Appearance tab controls (Tab 1)
     BOOL show_appearance = (tab == 1) ? SW_SHOW : SW_HIDE;
@@ -1974,6 +2059,33 @@ void nowbar_preferences::switch_tab(int tab) {
     ShowWindow(GetDlgItem(m_hwnd, IDC_ARTIST_FONT_LABEL), show_fonts);
     ShowWindow(GetDlgItem(m_hwnd, IDC_ARTIST_FONT_DISPLAY), show_fonts);
     ShowWindow(GetDlgItem(m_hwnd, IDC_ARTIST_FONT_SELECT), show_fonts);
+}
+
+// Helper to update Visualization section enable/disable states
+static void update_vis_section_state(HWND hwnd) {
+    BOOL enabled = (IsDlgButtonChecked(hwnd, IDC_VIS_ENABLE_CHECK) == BST_CHECKED);
+    BOOL spectrum_sel = (IsDlgButtonChecked(hwnd, IDC_VIS_SPECTRUM_RADIO) == BST_CHECKED);
+    BOOL waveform_sel = (IsDlgButtonChecked(hwnd, IDC_VIS_WAVEFORM_RADIO) == BST_CHECKED);
+
+    // Radio buttons are always enabled when the checkbox is checked
+    EnableWindow(GetDlgItem(hwnd, IDC_VIS_SPECTRUM_RADIO), enabled);
+    EnableWindow(GetDlgItem(hwnd, IDC_VIS_WAVEFORM_RADIO), enabled);
+
+    // Spectrum controls: enabled only if Enable checked AND Spectrum selected
+    BOOL spec_on = enabled && spectrum_sel;
+    EnableWindow(GetDlgItem(hwnd, IDC_VIS_SPECTRUM_WIDTH_LABEL), spec_on);
+    EnableWindow(GetDlgItem(hwnd, IDC_VIS_SPECTRUM_WIDTH_COMBO), spec_on);
+    EnableWindow(GetDlgItem(hwnd, IDC_VIS_SPECTRUM_COLOR_LABEL), spec_on);
+    EnableWindow(GetDlgItem(hwnd, IDC_VIS_SPECTRUM_COLOR_BTN), spec_on);
+    EnableWindow(GetDlgItem(hwnd, IDC_VIS_SPECTRUM_SHAPE_LABEL), spec_on);
+    EnableWindow(GetDlgItem(hwnd, IDC_VIS_SPECTRUM_SHAPE_COMBO), spec_on);
+
+    // Waveform controls: enabled only if Enable checked AND Waveform selected
+    BOOL wave_on = enabled && waveform_sel;
+    EnableWindow(GetDlgItem(hwnd, IDC_VIS_WAVEFORM_COLOR_LABEL), wave_on);
+    EnableWindow(GetDlgItem(hwnd, IDC_VIS_WAVEFORM_COLOR_BTN), wave_on);
+    EnableWindow(GetDlgItem(hwnd, IDC_VIS_WAVEFORM_WIDTH_LABEL), wave_on);
+    EnableWindow(GetDlgItem(hwnd, IDC_VIS_WAVEFORM_WIDTH_COMBO), wave_on);
 }
 
 // Helper to show the Windows color picker dialog
@@ -2168,6 +2280,37 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         // Enable/disable threshold combo based on skip low rating setting
         EnableWindow(hSkipRatingThresholdCombo, cfg_nowbar_skip_low_rating_enabled != 0);
 
+        // Initialize Visualization section
+        {
+            int vis_mode = get_nowbar_visualization_mode();
+            CheckDlgButton(hwnd, IDC_VIS_ENABLE_CHECK, (vis_mode != 0) ? BST_CHECKED : BST_UNCHECKED);
+            // Default to Spectrum radio when disabled
+            CheckRadioButton(hwnd, IDC_VIS_SPECTRUM_RADIO, IDC_VIS_WAVEFORM_RADIO,
+                (vis_mode == 2) ? IDC_VIS_WAVEFORM_RADIO : IDC_VIS_SPECTRUM_RADIO);
+
+            // Populate spectrum width combo (Thin/Normal/Wide)
+            HWND hSpecWidth = GetDlgItem(hwnd, IDC_VIS_SPECTRUM_WIDTH_COMBO);
+            SendMessage(hSpecWidth, CB_ADDSTRING, 0, (LPARAM)L"Thin");
+            SendMessage(hSpecWidth, CB_ADDSTRING, 0, (LPARAM)L"Normal");
+            SendMessage(hSpecWidth, CB_ADDSTRING, 0, (LPARAM)L"Wide");
+            SendMessage(hSpecWidth, CB_SETCURSEL, cfg_nowbar_spectrum_width, 0);
+
+            // Populate spectrum shape combo (Pill-shaped/Rectangle)
+            HWND hSpecShape = GetDlgItem(hwnd, IDC_VIS_SPECTRUM_SHAPE_COMBO);
+            SendMessage(hSpecShape, CB_ADDSTRING, 0, (LPARAM)L"Pill-shaped");
+            SendMessage(hSpecShape, CB_ADDSTRING, 0, (LPARAM)L"Rectangle");
+            SendMessage(hSpecShape, CB_SETCURSEL, cfg_nowbar_spectrum_shape, 0);
+
+            // Populate waveform width combo (Thin/Normal/Wide)
+            HWND hWaveWidth = GetDlgItem(hwnd, IDC_VIS_WAVEFORM_WIDTH_COMBO);
+            SendMessage(hWaveWidth, CB_ADDSTRING, 0, (LPARAM)L"Thin");
+            SendMessage(hWaveWidth, CB_ADDSTRING, 0, (LPARAM)L"Normal");
+            SendMessage(hWaveWidth, CB_ADDSTRING, 0, (LPARAM)L"Wide");
+            SendMessage(hWaveWidth, CB_SETCURSEL, cfg_nowbar_waveform_width, 0);
+
+            update_vis_section_state(hwnd);
+        }
+
         // Initialize glass effect combobox
         HWND hGlassEffectCombo = GetDlgItem(hwnd, IDC_GLASS_EFFECT_COMBO);
         SendMessage(hGlassEffectCombo, CB_ADDSTRING, 0, (LPARAM)L"Disabled");
@@ -2275,6 +2418,9 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         case IDC_GLASS_EFFECT_COMBO:
         case IDC_MOOD_TAG_COMBO:
         case IDC_SKIP_RATING_THRESHOLD_COMBO:
+        case IDC_VIS_SPECTRUM_WIDTH_COMBO:
+        case IDC_VIS_SPECTRUM_SHAPE_COMBO:
+        case IDC_VIS_WAVEFORM_WIDTH_COMBO:
             if (HIWORD(wp) == CBN_SELCHANGE) {
                 p_this->on_changed();
             }
@@ -2286,6 +2432,37 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
                 int sel = (int)SendMessage(GetDlgItem(hwnd, IDC_SKIP_LOW_RATING_COMBO), CB_GETCURSEL, 0, 0);
                 EnableWindow(GetDlgItem(hwnd, IDC_SKIP_RATING_THRESHOLD_COMBO), sel == 1);
                 p_this->on_changed();
+            }
+            break;
+
+        case IDC_VIS_ENABLE_CHECK:
+        case IDC_VIS_SPECTRUM_RADIO:
+        case IDC_VIS_WAVEFORM_RADIO:
+            if (HIWORD(wp) == BN_CLICKED) {
+                update_vis_section_state(hwnd);
+                p_this->on_changed();
+            }
+            break;
+
+        case IDC_VIS_SPECTRUM_COLOR_BTN:
+            if (HIWORD(wp) == BN_CLICKED) {
+                COLORREF color = static_cast<COLORREF>(cfg_nowbar_spectrum_color.get_value());
+                if (show_color_picker(hwnd, color)) {
+                    cfg_nowbar_spectrum_color = color;
+                    InvalidateRect(GetDlgItem(hwnd, IDC_VIS_SPECTRUM_COLOR_BTN), nullptr, TRUE);
+                    p_this->on_changed();
+                }
+            }
+            break;
+
+        case IDC_VIS_WAVEFORM_COLOR_BTN:
+            if (HIWORD(wp) == BN_CLICKED) {
+                COLORREF color = static_cast<COLORREF>(cfg_nowbar_waveform_color.get_value());
+                if (show_color_picker(hwnd, color)) {
+                    cfg_nowbar_waveform_color = color;
+                    InvalidateRect(GetDlgItem(hwnd, IDC_VIS_WAVEFORM_COLOR_BTN), nullptr, TRUE);
+                    p_this->on_changed();
+                }
             }
             break;
 
@@ -2857,12 +3034,17 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
     case WM_DRAWITEM:
         {
             DRAWITEMSTRUCT* dis = reinterpret_cast<DRAWITEMSTRUCT*>(lp);
-            if (dis->CtlID == IDC_BUTTON_ACCENT_BTN || dis->CtlID == IDC_PROGRESS_ACCENT_BTN || dis->CtlID == IDC_VOLUME_ACCENT_BTN) {
+            if (dis->CtlID == IDC_BUTTON_ACCENT_BTN || dis->CtlID == IDC_PROGRESS_ACCENT_BTN || dis->CtlID == IDC_VOLUME_ACCENT_BTN ||
+                dis->CtlID == IDC_VIS_SPECTRUM_COLOR_BTN || dis->CtlID == IDC_VIS_WAVEFORM_COLOR_BTN) {
                 COLORREF color;
                 if (dis->CtlID == IDC_BUTTON_ACCENT_BTN) {
                     color = static_cast<COLORREF>(cfg_nowbar_button_accent_color.get_value());
                 } else if (dis->CtlID == IDC_PROGRESS_ACCENT_BTN) {
                     color = static_cast<COLORREF>(cfg_nowbar_progress_accent_color.get_value());
+                } else if (dis->CtlID == IDC_VIS_SPECTRUM_COLOR_BTN) {
+                    color = static_cast<COLORREF>(cfg_nowbar_spectrum_color.get_value());
+                } else if (dis->CtlID == IDC_VIS_WAVEFORM_COLOR_BTN) {
+                    color = static_cast<COLORREF>(cfg_nowbar_waveform_color.get_value());
                 } else {
                     color = static_cast<COLORREF>(cfg_nowbar_volume_accent_color.get_value());
                 }
@@ -2963,6 +3145,25 @@ void nowbar_preferences::apply_settings() {
         int skipRatingThresholdSel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_SKIP_RATING_THRESHOLD_COMBO), CB_GETCURSEL, 0, 0);
         cfg_nowbar_skip_low_rating_threshold = skipRatingThresholdSel + 1;  // Convert 0-based to 1-3
 
+        // Save visualization mode from checkbox + radio buttons
+        {
+            bool vis_enabled = (IsDlgButtonChecked(m_hwnd, IDC_VIS_ENABLE_CHECK) == BST_CHECKED);
+            bool waveform_sel = (IsDlgButtonChecked(m_hwnd, IDC_VIS_WAVEFORM_RADIO) == BST_CHECKED);
+            if (!vis_enabled) {
+                cfg_nowbar_visualization_mode = 0;  // Disabled
+            } else if (waveform_sel) {
+                cfg_nowbar_visualization_mode = 2;  // Waveform
+            } else {
+                cfg_nowbar_visualization_mode = 1;  // Spectrum
+            }
+
+            // Save per-visualization settings
+            cfg_nowbar_spectrum_width = (int)SendMessage(GetDlgItem(m_hwnd, IDC_VIS_SPECTRUM_WIDTH_COMBO), CB_GETCURSEL, 0, 0);
+            cfg_nowbar_spectrum_shape = (int)SendMessage(GetDlgItem(m_hwnd, IDC_VIS_SPECTRUM_SHAPE_COMBO), CB_GETCURSEL, 0, 0);
+            cfg_nowbar_waveform_width = (int)SendMessage(GetDlgItem(m_hwnd, IDC_VIS_WAVEFORM_WIDTH_COMBO), CB_GETCURSEL, 0, 0);
+            // Color buttons are saved immediately via color picker, no need to save here
+        }
+
         // Save glass effect setting (0=Disabled, 1=Enabled in combobox -> config 0=Disabled, 1=Enabled)
         int glassEffectSel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_GLASS_EFFECT_COMBO), CB_GETCURSEL, 0, 0);
         cfg_nowbar_glass_effect = (glassEffectSel == 1) ? 1 : 0;
@@ -3058,6 +3259,12 @@ void nowbar_preferences::reset_settings() {
             cfg_nowbar_mood_tag_mode = 0;  // FEEDBACK (default)
             cfg_nowbar_skip_low_rating_enabled = 0;  // Disabled (default)
             cfg_nowbar_skip_low_rating_threshold = 1;  // 1 (default)
+            cfg_nowbar_visualization_mode = 0;  // Disabled (default)
+            cfg_nowbar_spectrum_color = RGB(100, 180, 255);  // Default: light blue
+            cfg_nowbar_spectrum_width = 1;  // Default: Normal
+            cfg_nowbar_spectrum_shape = 0;  // Default: Pill
+            cfg_nowbar_waveform_color = RGB(255, 85, 0);  // Default: SoundCloud orange
+            cfg_nowbar_waveform_width = 1;  // Default: Normal
 
             // Update General tab UI
             uSetDlgItemText(m_hwnd, IDC_LINE1_FORMAT_EDIT, "%title%");
@@ -3067,6 +3274,15 @@ void nowbar_preferences::reset_settings() {
             SendMessage(GetDlgItem(m_hwnd, IDC_SKIP_LOW_RATING_COMBO), CB_SETCURSEL, 0, 0);  // Default: Disabled
             SendMessage(GetDlgItem(m_hwnd, IDC_SKIP_RATING_THRESHOLD_COMBO), CB_SETCURSEL, 0, 0);  // Default: 1
             EnableWindow(GetDlgItem(m_hwnd, IDC_SKIP_RATING_THRESHOLD_COMBO), FALSE);  // Disabled when skip is off
+            // Reset Visualization section UI
+            CheckDlgButton(m_hwnd, IDC_VIS_ENABLE_CHECK, BST_UNCHECKED);
+            CheckRadioButton(m_hwnd, IDC_VIS_SPECTRUM_RADIO, IDC_VIS_WAVEFORM_RADIO, IDC_VIS_SPECTRUM_RADIO);
+            SendMessage(GetDlgItem(m_hwnd, IDC_VIS_SPECTRUM_WIDTH_COMBO), CB_SETCURSEL, 1, 0);  // Normal
+            SendMessage(GetDlgItem(m_hwnd, IDC_VIS_SPECTRUM_SHAPE_COMBO), CB_SETCURSEL, 0, 0);  // Pill
+            SendMessage(GetDlgItem(m_hwnd, IDC_VIS_WAVEFORM_WIDTH_COMBO), CB_SETCURSEL, 1, 0);  // Normal
+            InvalidateRect(GetDlgItem(m_hwnd, IDC_VIS_SPECTRUM_COLOR_BTN), nullptr, TRUE);
+            InvalidateRect(GetDlgItem(m_hwnd, IDC_VIS_WAVEFORM_COLOR_BTN), nullptr, TRUE);
+            update_vis_section_state(m_hwnd);
         } else if (m_current_tab == 1) {
             // Reset Appearance tab settings
             cfg_nowbar_theme_mode = 0;  // Auto
