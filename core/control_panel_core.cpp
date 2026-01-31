@@ -145,6 +145,12 @@ ControlPanelCore::ControlPanelCore() {
 }
 
 ControlPanelCore::~ControlPanelCore() {
+  // Cancel any running waveform computation
+  cancel_waveform_computation();
+
+  // Release spectrum visualizer stream
+  release_vis_stream();
+
   // Destroy tooltip control
   if (m_tooltip_hwnd) {
     DestroyWindow(m_tooltip_hwnd);
@@ -263,8 +269,8 @@ SIZE ControlPanelCore::get_min_size() const {
   // - Volume bar: ~200px  
   // - MiniPlayer button: ~50px
   // - Margins and spacing: ~125px
-  // Total: ~1265px is sufficient for all elements including Super button
-  LONG min_width = 1265;
+  // Total: ~1481px to accommodate all elements including spectrum visualizer
+  LONG min_width = 1481;
   
   return {min_width, min_height};
 }
@@ -371,6 +377,53 @@ void ControlPanelCore::on_settings_changed() {
 
   // Refresh mood state in case mood tag config changed
   update_mood_state();
+
+  // Handle visualization mode setting changes
+  int settings_vis_mode = get_nowbar_visualization_mode();
+  bool spectrum_needed = (settings_vis_mode == 1) || (settings_vis_mode == 0 && get_nowbar_spectrum_visible());
+
+  if (spectrum_needed) {
+    bool is_playing_now = m_state.is_playing && !m_state.is_paused;
+    if (is_playing_now && !m_vis_stream.is_valid()) {
+      create_vis_stream();
+      m_spectrum_start_opacity = m_spectrum_opacity;
+      m_spectrum_target_opacity = 1.0f;
+      m_spectrum_fade_start_time = std::chrono::steady_clock::now();
+      m_spectrum_fade_active = true;
+      m_spectrum_animating = true;
+    }
+  } else {
+    if (m_vis_stream.is_valid() || m_spectrum_opacity > 0.0f) {
+      release_vis_stream();
+      m_spectrum_opacity = 0.0f;
+      m_spectrum_fade_active = false;
+      m_spectrum_animating = false;
+    }
+  }
+
+  // Handle waveform mode transitions
+  if (settings_vis_mode == 2) {
+    bool is_playing_now = m_state.is_playing && !m_state.is_paused;
+    if (is_playing_now && !m_waveform_valid && !m_waveform_computing.load()) {
+      start_waveform_computation();
+    }
+    // Release vis stream if not needed
+    if (m_vis_stream.is_valid()) {
+      release_vis_stream();
+      m_spectrum_opacity = 0.0f;
+      m_spectrum_fade_active = false;
+      m_spectrum_animating = false;
+    }
+  } else {
+    // Not in waveform mode - cancel computation and clear
+    if (m_waveform_computing.load() || m_waveform_valid) {
+      cancel_waveform_computation();
+      std::lock_guard<std::mutex> lock(m_waveform_mutex);
+      m_waveform_valid = false;
+      m_waveform_peaks.clear();
+      m_waveform_track_path = "";
+    }
+  }
 
   // Repaint to reflect any visual changes
   invalidate();
@@ -759,20 +812,27 @@ void ControlPanelCore::update_layout(const RECT &rect) {
       static_cast<int>(m_metrics.seekbar_height * m_size_scale);
   int total_seekbar_area = seek_gap + seekbar_height;
 
-  // Calculate how much space we need below the play button for seekbar
-  // At minimum height, we need to move controls up more to fit everything
-  int bottom_margin =
-      static_cast<int>(4 * m_dpi_scale); // Small margin at bottom
-  int available_below_center = (rect.bottom - rect.top) / 2 - bottom_margin;
-  int needed_below_center = play_button_size / 2 + total_seekbar_area;
+  // Mode 1 (Spectrum): no seekbar below buttons, so no vertical offset needed
+  int pre_vis_mode = get_nowbar_visualization_mode();
+  int vertical_offset;
+  if (pre_vis_mode == 1) {
+    vertical_offset = 0;  // Buttons centered without seekbar offset
+  } else {
+    // Calculate how much space we need below the play button for seekbar
+    // At minimum height, we need to move controls up more to fit everything
+    int bottom_margin =
+        static_cast<int>(4 * m_dpi_scale); // Small margin at bottom
+    int available_below_center = (rect.bottom - rect.top) / 2 - bottom_margin;
+    int needed_below_center = play_button_size / 2 + total_seekbar_area;
 
-  // Increase vertical offset if needed to fit seekbar within panel
-  int base_offset = h / 10; // Base 10% offset
-  int extra_offset = 0;
-  if (needed_below_center > available_below_center) {
-    extra_offset = needed_below_center - available_below_center;
+    // Increase vertical offset if needed to fit seekbar within panel
+    int base_offset = h / 10; // Base 10% offset
+    int extra_offset = 0;
+    if (needed_below_center > available_below_center) {
+      extra_offset = needed_below_center - available_below_center;
+    }
+    vertical_offset = base_offset + extra_offset;
   }
-  int vertical_offset = base_offset + extra_offset;
 
   int btn_y = y_center - button_size / 2 - vertical_offset;
   int play_y = y_center - play_button_size / 2 - vertical_offset;
@@ -852,6 +912,22 @@ void ControlPanelCore::update_layout(const RECT &rect) {
       ? m_rect_super.right + spacing
       : m_rect_repeat.right + spacing;
   int cbutton_right_edge = vol_x - spacing;
+
+  // Spectrum visualizer rect - positioned just left of custom buttons (right-aligned in gap)
+  m_rect_spectrum = {};
+  if (get_nowbar_spectrum_visible()) {
+    int spectrum_width = button_size * 2;  // 2x button width
+    int space_for_spectrum = cbutton_right_edge - min_cbutton_left;
+    if (space_for_spectrum >= spectrum_width + spacing) {
+      int spectrum_height = button_size;  // Match button height
+      int spectrum_y = right_btn_y;
+      int spectrum_x = cbutton_right_edge - spectrum_width;
+      m_rect_spectrum = {spectrum_x, spectrum_y,
+                         spectrum_x + spectrum_width, spectrum_y + spectrum_height};
+      cbutton_right_edge = spectrum_x - spacing;
+    }
+  }
+
   int available_width = cbutton_right_edge - min_cbutton_left;
   
   // Determine layout mode based on panel height (size scale)
@@ -1017,12 +1093,7 @@ void ControlPanelCore::update_layout(const RECT &rect) {
       y_center - info_height / 2; // Centered on panel, not offset with controls
   m_rect_track_info = {info_x, info_y, info_right, info_y + info_height};
 
-  // Seekbar (directly below control icons, extended to span from heart to super)
-  int seek_y = m_rect_play.bottom + seek_gap;
-
-  // Position seekbar to extend beyond heart icon (left) and super button (right)
-  // Use FULL SCALE (1.0) button positions so seekbar expands when panel shrinks
-  // This creates a wider seekbar at smaller panel heights for easier interaction
+  // Calculate full-scale button positions for seekbar/spectrum extent
   int full_button_size = static_cast<int>(m_metrics.button_size);
   int full_play_size = static_cast<int>(m_metrics.play_button_size);
   int full_spacing = static_cast<int>(m_metrics.spacing);
@@ -1031,13 +1102,9 @@ void ControlPanelCore::update_layout(const RECT &rect) {
   int full_core_start_x = rect.left + (w - full_core_width) / 2;
   full_core_start_x = std::max(full_core_start_x, min_controls_x);
 
-  // Calculate full-scale shuffle position (first button in core)
   int full_shuffle_left = full_core_start_x;
-  // Calculate full-scale heart position (to the left of shuffle)
   int full_heart_left = full_shuffle_left - full_spacing - full_button_size;
 
-  // Calculate full-scale positions for right side
-  // Traverse: shuffle, prev, play, next, [stop], repeat, [super]
   int full_x = full_core_start_x;
   full_x += full_button_size + full_spacing; // past shuffle
   full_x += full_button_size + full_spacing; // past prev
@@ -1049,23 +1116,74 @@ void ControlPanelCore::update_layout(const RECT &rect) {
   int full_repeat_right = full_x + full_button_size;
   int full_super_right = full_repeat_right + full_spacing + full_button_size;
 
-  // Left edge: use heart if visible, otherwise shuffle
   int seekbar_left = get_nowbar_mood_icon_visible() ? full_heart_left : full_shuffle_left;
-  // Right edge: use super if visible, otherwise repeat
   int seekbar_right = get_nowbar_super_icon_visible() ? full_super_right : full_repeat_right;
 
-  m_rect_seekbar = {seekbar_left,
-                    seek_y,
-                    seekbar_right,
-                    seek_y + seekbar_height};
+  int vis_mode = get_nowbar_visualization_mode();
 
-  // Time display (beside seekbar) - no longer needed below, times are drawn
-  // inline
-  int time_gap = static_cast<int>(2 * m_dpi_scale * m_size_scale);
-  m_rect_time = {m_rect_seekbar.left, m_rect_seekbar.bottom + time_gap,
-                 m_rect_seekbar.right,
-                 m_rect_seekbar.bottom +
-                     static_cast<int>(m_metrics.text_height * m_size_scale)};
+  // Clear new rects by default
+  m_rect_thin_progress = {};
+  m_rect_waveform = {};
+  m_rect_spectrum_full = {};
+
+  if (vis_mode == 1) {
+    // Mode 1 (Spectrum): thin progress bar at top, full spectrum at bottom behind buttons
+    // No seekbar in this mode
+    m_rect_seekbar = {};
+
+    // Thin progress bar: full panel width, 3px at top
+    int thin_h = static_cast<int>(3 * m_dpi_scale);
+    m_rect_thin_progress = {rect.left, rect.top, rect.right, rect.top + thin_h};
+
+    // Full spectrum area: from heart/shuffle left to super/repeat right,
+    // from play button top down to panel bottom (overlaps buttons)
+    int spectrum_left = get_nowbar_mood_icon_visible() ? m_rect_heart.left : m_rect_shuffle.left;
+    int spectrum_right = get_nowbar_super_icon_visible() ? m_rect_super.right : m_rect_repeat.right;
+    int spectrum_top = m_rect_play.top;
+    m_rect_spectrum_full = {spectrum_left, spectrum_top, spectrum_right, rect.bottom};
+
+    // Time display in top-right corner, just below thin progress bar
+    int time_height = static_cast<int>(m_metrics.text_height * m_size_scale);
+    int time_width = static_cast<int>(120 * m_dpi_scale);
+    int time_margin = static_cast<int>(8 * m_dpi_scale);
+    m_rect_time = {rect.right - time_width - time_margin,
+                   m_rect_thin_progress.bottom + static_cast<int>(2 * m_dpi_scale),
+                   rect.right - time_margin,
+                   m_rect_thin_progress.bottom + static_cast<int>(2 * m_dpi_scale) + time_height};
+
+  } else if (vis_mode == 2) {
+    // Mode 2 (Waveform): bottom-aligned, taller when waveform data is active
+    bool waveform_active;
+    {
+      std::lock_guard<std::mutex> lock(m_waveform_mutex);
+      waveform_active = m_waveform_valid && !m_waveform_peaks.empty() && !m_waveform_is_stream;
+    }
+    int waveform_height = waveform_active
+        ? static_cast<int>(m_metrics.seekbar_height * m_size_scale * 4) - 1
+        : static_cast<int>(m_metrics.seekbar_height * m_size_scale);
+    int bottom_margin = static_cast<int>(4 * m_dpi_scale);
+    int waveform_top = rect.bottom - bottom_margin - waveform_height;
+    m_rect_waveform = {seekbar_left, waveform_top, seekbar_right, rect.bottom - bottom_margin};
+    // Alias seekbar to waveform so existing SeekBar hit_test works for seeking
+    m_rect_seekbar = m_rect_waveform;
+
+    // Time display above waveform bar
+    int time_gap = static_cast<int>(2 * m_dpi_scale * m_size_scale);
+    m_rect_time = {m_rect_seekbar.left, m_rect_seekbar.top - static_cast<int>(m_metrics.text_height * m_size_scale) - time_gap,
+                   m_rect_seekbar.right,
+                   m_rect_seekbar.top - time_gap};
+
+  } else {
+    // Mode 0 (Disabled): existing behavior unchanged
+    int seek_y = m_rect_play.bottom + seek_gap;
+    m_rect_seekbar = {seekbar_left, seek_y, seekbar_right, seek_y + seekbar_height};
+
+    int time_gap = static_cast<int>(2 * m_dpi_scale * m_size_scale);
+    m_rect_time = {m_rect_seekbar.left, m_rect_seekbar.bottom + time_gap,
+                   m_rect_seekbar.right,
+                   m_rect_seekbar.bottom +
+                       static_cast<int>(m_metrics.text_height * m_size_scale)};
+  }
 }
 
 void ControlPanelCore::paint(HDC hdc, const RECT &rect) {
@@ -1099,9 +1217,26 @@ void ControlPanelCore::paint(HDC hdc, const RECT &rect) {
     draw_artwork(g);
   }
   draw_track_info(g);
-  draw_playback_buttons(g);
-  draw_seekbar(g);
-  draw_time_display(g);
+
+  int paint_vis_mode = get_nowbar_visualization_mode();
+  if (paint_vis_mode == 1) {
+    // Mode 1: spectrum behind buttons, then buttons, then thin progress bar + time
+    draw_full_spectrum(g);
+    draw_playback_buttons(g);
+    draw_thin_progress_bar(g);
+    draw_time_display_top_right(g);
+  } else if (paint_vis_mode == 2) {
+    // Mode 2: waveform behind buttons, then buttons, then normal time display
+    draw_waveform_bar(g);
+    draw_playback_buttons(g);
+    draw_time_display(g);
+  } else {
+    // Mode 0: existing order unchanged
+    draw_playback_buttons(g);
+    draw_spectrum(g);
+    draw_seekbar(g);
+    draw_time_display(g);
+  }
   draw_volume(g);
 
   // MiniPlayer button (only if visible)
@@ -1139,8 +1274,9 @@ void ControlPanelCore::paint(HDC hdc, const RECT &rect) {
   
   // Centralized animation loop: manage animation timer based on active animations
   if (get_nowbar_smooth_animations_enabled()) {
-    bool any_animation_active = m_seekbar_animating || m_hover_animating || 
-                                 m_cbutton_animating || m_bg_animating;
+    bool any_animation_active = m_seekbar_animating || m_hover_animating ||
+                                 m_cbutton_animating || m_bg_animating ||
+                                 m_spectrum_animating || m_waveform_animating;
     
     if (any_animation_active) {
       // Animations are running - request next frame
@@ -2101,6 +2237,504 @@ void ControlPanelCore::draw_time_display(Gdiplus::Graphics &g) {
                &timeBrush);
 }
 
+void ControlPanelCore::create_vis_stream() {
+  if (m_vis_stream.is_valid()) return;
+  try {
+    if (!core_api::are_services_available()) return;
+    auto vis_mgr = visualisation_manager::get();
+    visualisation_stream_v3::ptr stream;
+    vis_mgr->create_stream(stream, visualisation_manager::KStreamFlagNewFFT);
+    m_vis_stream = stream;
+  } catch (...) {}
+}
+
+void ControlPanelCore::release_vis_stream() {
+  m_vis_stream.release();
+  memset(m_spectrum_bars, 0, sizeof(m_spectrum_bars));
+}
+
+void ControlPanelCore::update_spectrum_data() {
+  if (!m_vis_stream.is_valid()) return;
+
+  double abs_time;
+  if (!m_vis_stream->get_absolute_time(abs_time)) return;
+
+  audio_chunk_impl chunk;
+  if (!m_vis_stream->get_spectrum_absolute(chunk, abs_time, SPECTRUM_FFT_SIZE)) return;
+
+  const audio_sample* data = chunk.get_data();
+  t_size sample_count = chunk.get_sample_count();
+  if (!data || sample_count == 0) return;
+
+  // Logarithmic frequency mapping: 20 bars from ~60Hz to ~16kHz
+  // FFT bin frequency = bin_index * sample_rate / fft_size
+  // We use normalized bin indices (0 to sample_count-1)
+  float freq_min = 60.0f;
+  float freq_max = 16000.0f;
+  float log_min = std::log10(freq_min);
+  float log_max = std::log10(freq_max);
+
+  // Assume 44100 Hz sample rate for bin mapping
+  float bin_freq_step = 44100.0f / (float)SPECTRUM_FFT_SIZE;
+
+  for (int i = 0; i < SPECTRUM_BAR_COUNT; i++) {
+    // Calculate frequency range for this bar
+    float f_lo = std::pow(10.0f, log_min + (log_max - log_min) * i / SPECTRUM_BAR_COUNT);
+    float f_hi = std::pow(10.0f, log_min + (log_max - log_min) * (i + 1) / SPECTRUM_BAR_COUNT);
+
+    int bin_lo = (int)(f_lo / bin_freq_step);
+    int bin_hi = (int)(f_hi / bin_freq_step);
+    if (bin_lo < 0) bin_lo = 0;
+    if (bin_hi >= (int)sample_count) bin_hi = (int)sample_count - 1;
+    if (bin_lo > bin_hi) bin_lo = bin_hi;
+
+    // Average the magnitude across bins
+    float sum = 0.0f;
+    int count = 0;
+    for (int b = bin_lo; b <= bin_hi; b++) {
+      sum += data[b];
+      count++;
+    }
+    float magnitude = (count > 0) ? sum / count : 0.0f;
+
+    // KStreamFlagNewFFT normalizes output to 0..1 range
+    // Apply sqrt for perceptual scaling (compresses dynamic range)
+    float normalized = std::sqrt(magnitude);
+    if (normalized < 0.0f) normalized = 0.0f;
+    if (normalized > 1.0f) normalized = 1.0f;
+
+    // Asymmetric smoothing: fast attack, slow decay
+    float current = m_spectrum_bars[i];
+    if (normalized > current) {
+      m_spectrum_bars[i] = current + (normalized - current) * 0.6f;  // Fast attack
+    } else {
+      m_spectrum_bars[i] = current + (normalized - current) * 0.3f;  // Slow decay
+    }
+  }
+}
+
+void ControlPanelCore::draw_spectrum(Gdiplus::Graphics& g) {
+  if (!get_nowbar_spectrum_visible()) return;
+  if (m_rect_spectrum.right <= m_rect_spectrum.left) return;
+
+  // Process fade animation
+  if (m_spectrum_fade_active) {
+    auto now = std::chrono::steady_clock::now();
+    float elapsed = std::chrono::duration<float, std::milli>(now - m_spectrum_fade_start_time).count();
+    float t = elapsed / SPECTRUM_FADE_DURATION_MS;
+    if (t >= 1.0f) {
+      t = 1.0f;
+      m_spectrum_fade_active = false;
+      m_spectrum_opacity = m_spectrum_target_opacity;
+      // Release stream after fade-out completes
+      if (m_spectrum_target_opacity == 0.0f) {
+        release_vis_stream();
+        m_spectrum_animating = false;
+      }
+    } else {
+      // Ease-out: t' = 1 - (1-t)^2
+      float ease = 1.0f - (1.0f - t) * (1.0f - t);
+      m_spectrum_opacity = m_spectrum_start_opacity + (m_spectrum_target_opacity - m_spectrum_start_opacity) * ease;
+    }
+  }
+
+  if (m_spectrum_opacity <= 0.001f) return;
+
+  // Update spectrum data from vis stream
+  update_spectrum_data();
+
+  // Keep animating while spectrum is visible (need continuous redraws for FFT data)
+  if (m_spectrum_opacity > 0.0f && m_vis_stream.is_valid()) {
+    m_spectrum_animating = true;
+    request_animation();
+  }
+
+  int area_w = m_rect_spectrum.right - m_rect_spectrum.left;
+  int area_h = m_rect_spectrum.bottom - m_rect_spectrum.top;
+  float bar_total_w = (float)area_w / SPECTRUM_BAR_COUNT;
+  float gap = std::max(1.0f, bar_total_w * 0.2f);
+  float bar_w = bar_total_w - gap;
+  if (bar_w < 1.0f) bar_w = 1.0f;
+  float min_bar_h = 2.0f * m_dpi_scale;
+  float radius = bar_w * 0.5f;
+
+  // Determine colors - always use user's spectrum color setting
+  COLORREF spec_color = get_nowbar_spectrum_color();
+  Gdiplus::Color accent(255, GetRValue(spec_color), GetGValue(spec_color), GetBValue(spec_color));
+  int alpha = (int)(192 * m_spectrum_opacity);  // 75% of 255 ~ 192
+
+  Gdiplus::SolidBrush barBrush(Gdiplus::Color(alpha, accent.GetR(), accent.GetG(), accent.GetB()));
+
+  // Get shape setting (0=Pill, 1=Rectangle)
+  int spec_shape = get_nowbar_spectrum_shape();
+
+  for (int i = 0; i < SPECTRUM_BAR_COUNT; i++) {
+    float height = m_spectrum_bars[i] * (float)area_h;
+    if (height < min_bar_h) height = min_bar_h;
+
+    float x = m_rect_spectrum.left + i * bar_total_w + gap * 0.5f;
+    float y = m_rect_spectrum.bottom - height;
+
+    if (spec_shape == 0) {
+      // Pill-shaped bar (rounded top, flat bottom)
+      Gdiplus::GraphicsPath path;
+      if (height > radius * 2.0f) {
+        path.AddArc(x, y, bar_w, radius * 2.0f, 180.0f, 180.0f);
+        path.AddLine(x + bar_w, y + radius, x + bar_w, (float)m_rect_spectrum.bottom);
+        path.AddLine(x + bar_w, (float)m_rect_spectrum.bottom, x, (float)m_rect_spectrum.bottom);
+        path.AddLine(x, (float)m_rect_spectrum.bottom, x, y + radius);
+      } else {
+        path.AddRectangle(Gdiplus::RectF(x, y, bar_w, height));
+      }
+      path.CloseFigure();
+      g.FillPath(&barBrush, &path);
+    } else {
+      // Rectangle bar
+      g.FillRectangle(&barBrush, x, y, bar_w, height);
+    }
+  }
+}
+
+void ControlPanelCore::draw_thin_progress_bar(Gdiplus::Graphics& g) {
+  if (m_rect_thin_progress.right <= m_rect_thin_progress.left) return;
+
+  bool hovered = (m_hover_region == HitRegion::ThinProgressBar);
+  bool active = hovered || (m_seeking && m_pressed_region == HitRegion::ThinProgressBar);
+
+  int w = m_rect_thin_progress.right - m_rect_thin_progress.left;
+  int base_h = m_rect_thin_progress.bottom - m_rect_thin_progress.top;
+  // Enlarge on hover/seeking: 2x height
+  int h = active ? base_h * 2 : base_h;
+  int top = m_rect_thin_progress.top;
+
+  // Background: semi-transparent dark gray
+  Gdiplus::SolidBrush bgBrush(active ? Gdiplus::Color(160, 60, 60, 60) : Gdiplus::Color(100, 60, 60, 60));
+  g.FillRectangle(&bgBrush, m_rect_thin_progress.left, top, w, h);
+
+  // Progress fill
+  double progress;
+  if (m_seeking && m_pressed_region == HitRegion::ThinProgressBar) {
+    progress = (m_state.track_length > 0)
+                   ? (m_state.playback_time / m_state.track_length)
+                   : 0.0;
+  } else {
+    progress = m_target_progress;
+  }
+  progress = std::max(0.0, std::min(1.0, progress));
+  int progress_w = static_cast<int>(w * progress);
+
+  if (progress_w > 0) {
+    COLORREF prog_accent = get_nowbar_progress_accent_color();
+    Gdiplus::SolidBrush progressBrush(
+        Gdiplus::Color(255, GetRValue(prog_accent), GetGValue(prog_accent), GetBValue(prog_accent)));
+    g.FillRectangle(&progressBrush, m_rect_thin_progress.left, top, progress_w, h);
+  }
+
+  // Seek handle (solid block at progress position on hover/seeking)
+  if (active && m_state.track_length > 0) {
+    int handle_w = static_cast<int>(8 * m_dpi_scale);
+    int handle_x = m_rect_thin_progress.left + progress_w - handle_w / 2;
+    Gdiplus::SolidBrush handleBrush(Gdiplus::Color(255, 255, 255, 255));
+    g.FillRectangle(&handleBrush, handle_x, top, handle_w, h);
+  }
+
+  // Tooltip showing time at cursor position
+  if (active && m_state.track_length > 0) {
+    double preview = m_seeking ? m_state.playback_time : m_target_progress * m_state.track_length;
+    // On hover (not seeking), compute from cursor X
+    if (hovered && !m_seeking) {
+      double pos = static_cast<double>(m_seekbar_hover_x - m_rect_thin_progress.left) / w;
+      pos = std::max(0.0, std::min(1.0, pos));
+      preview = pos * m_state.track_length;
+    }
+    std::wstring timeStr = format_time(preview);
+    Gdiplus::Font tooltipFont(L"Segoe UI", 10.0f * m_dpi_scale, Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
+    Gdiplus::RectF textBounds;
+    g.MeasureString(timeStr.c_str(), -1, &tooltipFont, Gdiplus::PointF(0, 0), &textBounds);
+    int padding_h = static_cast<int>(6 * m_dpi_scale);
+    int padding_v = static_cast<int>(3 * m_dpi_scale);
+    int tooltip_w = static_cast<int>(textBounds.Width) + padding_h * 2;
+    int tooltip_h = static_cast<int>(textBounds.Height) + padding_v * 2;
+    int cursor_x = m_seeking ? (m_rect_thin_progress.left + progress_w) : m_seekbar_hover_x;
+    int tooltip_x = cursor_x - tooltip_w / 2;
+    int tooltip_y = top + h + static_cast<int>(4 * m_dpi_scale);
+    tooltip_x = std::max((int)m_rect_thin_progress.left, std::min(tooltip_x, (int)m_rect_thin_progress.right - tooltip_w));
+    Gdiplus::Color bgColor = m_dark_mode ? Gdiplus::Color(220, 60, 60, 60) : Gdiplus::Color(220, 40, 40, 40);
+    Gdiplus::SolidBrush tooltipBgBrush(bgColor);
+    int corner = static_cast<int>(4 * m_dpi_scale);
+    Gdiplus::GraphicsPath tooltipPath;
+    tooltipPath.AddArc(tooltip_x, tooltip_y, corner * 2, corner * 2, 180, 90);
+    tooltipPath.AddArc(tooltip_x + tooltip_w - corner * 2, tooltip_y, corner * 2, corner * 2, 270, 90);
+    tooltipPath.AddArc(tooltip_x + tooltip_w - corner * 2, tooltip_y + tooltip_h - corner * 2, corner * 2, corner * 2, 0, 90);
+    tooltipPath.AddArc(tooltip_x, tooltip_y + tooltip_h - corner * 2, corner * 2, corner * 2, 90, 90);
+    tooltipPath.CloseFigure();
+    g.FillPath(&tooltipBgBrush, &tooltipPath);
+    Gdiplus::SolidBrush textBrush(Gdiplus::Color(255, 255, 255, 255));
+    Gdiplus::StringFormat sf;
+    sf.SetAlignment(Gdiplus::StringAlignmentCenter);
+    sf.SetLineAlignment(Gdiplus::StringAlignmentCenter);
+    Gdiplus::RectF textRect(static_cast<float>(tooltip_x), static_cast<float>(tooltip_y),
+                            static_cast<float>(tooltip_w), static_cast<float>(tooltip_h));
+    g.DrawString(timeStr.c_str(), -1, &tooltipFont, textRect, &sf, &textBrush);
+  }
+}
+
+void ControlPanelCore::draw_full_spectrum(Gdiplus::Graphics& g) {
+  if (m_rect_spectrum_full.right <= m_rect_spectrum_full.left) return;
+
+  // Process fade animation (same as draw_spectrum)
+  if (m_spectrum_fade_active) {
+    auto now = std::chrono::steady_clock::now();
+    float elapsed = std::chrono::duration<float, std::milli>(now - m_spectrum_fade_start_time).count();
+    float t = elapsed / SPECTRUM_FADE_DURATION_MS;
+    if (t >= 1.0f) {
+      t = 1.0f;
+      m_spectrum_fade_active = false;
+      m_spectrum_opacity = m_spectrum_target_opacity;
+      if (m_spectrum_target_opacity == 0.0f) {
+        release_vis_stream();
+        m_spectrum_animating = false;
+      }
+    } else {
+      float ease = 1.0f - (1.0f - t) * (1.0f - t);
+      m_spectrum_opacity = m_spectrum_start_opacity + (m_spectrum_target_opacity - m_spectrum_start_opacity) * ease;
+    }
+  }
+
+  if (m_spectrum_opacity <= 0.001f) return;
+
+  // Update spectrum data from vis stream
+  update_spectrum_data();
+
+  if (m_spectrum_opacity > 0.0f && m_vis_stream.is_valid()) {
+    m_spectrum_animating = true;
+    request_animation();
+  }
+
+  int area_w = m_rect_spectrum_full.right - m_rect_spectrum_full.left;
+  int area_h = m_rect_spectrum_full.bottom - m_rect_spectrum_full.top;
+
+  // Derive bar count from spectrum width setting (0=Thin->60, 1=Normal->40, 2=Wide->25)
+  int spec_width = get_nowbar_spectrum_width();
+  int bar_count = (spec_width == 0) ? 60 : (spec_width == 2) ? 25 : 40;
+  float bar_total_w = (float)area_w / bar_count;
+  float gap = std::max(1.0f, bar_total_w * 0.2f);
+  float bar_w = bar_total_w - gap;
+  if (bar_w < 1.0f) bar_w = 1.0f;
+  float min_bar_h = 2.0f * m_dpi_scale;
+  float radius = bar_w * 0.5f;
+
+  // Determine colors - always use user's spectrum color setting
+  COLORREF spec_color = get_nowbar_spectrum_color();
+  Gdiplus::Color accent(255, GetRValue(spec_color), GetGValue(spec_color), GetBValue(spec_color));
+
+  // Modulate by spectrum opacity AND hover opacity
+  int alpha = (int)(192 * m_spectrum_opacity * m_spectrum_hover_opacity);
+
+  Gdiplus::SolidBrush barBrush(Gdiplus::Color(alpha, accent.GetR(), accent.GetG(), accent.GetB()));
+
+  // Get shape setting (0=Pill, 1=Rectangle)
+  int spec_shape = get_nowbar_spectrum_shape();
+
+  // Map the SPECTRUM_BAR_COUNT (20) source bars to bar_count display bars via interpolation
+  for (int i = 0; i < bar_count; i++) {
+    // Map display bar index to source bar index
+    float src_idx = (float)i / bar_count * SPECTRUM_BAR_COUNT;
+    int lo = (int)src_idx;
+    int hi = lo + 1;
+    if (lo >= SPECTRUM_BAR_COUNT) lo = SPECTRUM_BAR_COUNT - 1;
+    if (hi >= SPECTRUM_BAR_COUNT) hi = SPECTRUM_BAR_COUNT - 1;
+    float frac = src_idx - lo;
+    float value = m_spectrum_bars[lo] * (1.0f - frac) + m_spectrum_bars[hi] * frac;
+
+    float height = value * (float)area_h;
+    if (height < min_bar_h) height = min_bar_h;
+
+    float x = m_rect_spectrum_full.left + i * bar_total_w + gap * 0.5f;
+    float y = m_rect_spectrum_full.bottom - height;
+
+    if (spec_shape == 0) {
+      // Pill-shaped bars
+      Gdiplus::GraphicsPath path;
+      if (height > radius * 2.0f) {
+        path.AddArc(x, y, bar_w, radius * 2.0f, 180.0f, 180.0f);
+        path.AddLine(x + bar_w, y + radius, x + bar_w, (float)m_rect_spectrum_full.bottom);
+        path.AddLine(x + bar_w, (float)m_rect_spectrum_full.bottom, x, (float)m_rect_spectrum_full.bottom);
+        path.AddLine(x, (float)m_rect_spectrum_full.bottom, x, y + radius);
+      } else {
+        path.AddRectangle(Gdiplus::RectF(x, y, bar_w, height));
+      }
+      path.CloseFigure();
+      g.FillPath(&barBrush, &path);
+    } else {
+      // Rectangle bars
+      g.FillRectangle(&barBrush, x, y, bar_w, height);
+    }
+  }
+}
+
+void ControlPanelCore::draw_waveform_bar(Gdiplus::Graphics& g) {
+  if (m_rect_waveform.right <= m_rect_waveform.left) return;
+
+  int w = m_rect_waveform.right - m_rect_waveform.left;
+  int h = m_rect_waveform.bottom - m_rect_waveform.top;
+  bool is_pill = (get_nowbar_bar_style() == 0);
+
+  // Progress calculation
+  double progress;
+  if (m_seeking) {
+    progress = (m_state.track_length > 0)
+                   ? (m_state.playback_time / m_state.track_length)
+                   : 0.0;
+  } else {
+    progress = m_target_progress;
+  }
+  progress = std::max(0.0, std::min(1.0, progress));
+
+  // Get colors - use waveform color setting for played segments
+  COLORREF wave_color = get_nowbar_waveform_color();
+  Gdiplus::Color accentColor(255, GetRValue(wave_color), GetGValue(wave_color), GetBValue(wave_color));
+  Gdiplus::Color dimColor(80, 140, 140, 140);
+
+  // Lock and read waveform data
+  std::vector<float> peaks;
+  bool valid;
+  bool is_stream;
+  {
+    std::lock_guard<std::mutex> lock(m_waveform_mutex);
+    peaks = m_waveform_peaks;
+    valid = m_waveform_valid;
+    is_stream = m_waveform_is_stream;
+  }
+
+  if (!valid || peaks.empty() || is_stream) {
+    // Placeholder: subtle gray background bar
+    Gdiplus::SolidBrush placeholderBrush(Gdiplus::Color(60, 140, 140, 140));
+    if (is_pill) {
+      int track_h = h;
+      int radius = track_h / 2;
+      Gdiplus::GraphicsPath trackPath;
+      int r = std::min(radius, w / 2);
+      trackPath.AddArc(m_rect_waveform.left, m_rect_waveform.top, r * 2, track_h, 90, 180);
+      trackPath.AddArc(m_rect_waveform.left + w - r * 2, m_rect_waveform.top, r * 2, track_h, 270, 180);
+      trackPath.CloseFigure();
+      g.FillPath(&placeholderBrush, &trackPath);
+    } else {
+      g.FillRectangle(&placeholderBrush, m_rect_waveform.left, m_rect_waveform.top, w, h);
+    }
+
+    // Show progress even on placeholder
+    int progress_w = static_cast<int>(w * progress);
+    if (progress_w > 0) {
+      Gdiplus::SolidBrush progressBrush(Gdiplus::Color(120, GetRValue(wave_color), GetGValue(wave_color), GetBValue(wave_color)));
+      if (is_pill && progress_w > h) {
+        int radius = h / 2;
+        Gdiplus::GraphicsPath progressPath;
+        int r = std::min(radius, progress_w / 2);
+        progressPath.AddArc(m_rect_waveform.left, m_rect_waveform.top, r * 2, h, 90, 180);
+        progressPath.AddArc(m_rect_waveform.left + progress_w - r * 2, m_rect_waveform.top, r * 2, h, 270, 180);
+        progressPath.CloseFigure();
+        g.FillPath(&progressBrush, &progressPath);
+      } else {
+        g.FillRectangle(&progressBrush, m_rect_waveform.left, m_rect_waveform.top, progress_w, h);
+      }
+    }
+    m_waveform_animating = false;
+    // Fall through to seek handle below
+  } else {
+    // Draw waveform bars (half-waveform, top half only, bottom-aligned)
+    int num_segments = (int)peaks.size();
+    float bar_total_w = (float)w / num_segments;
+    float gap = std::max(0.5f, bar_total_w * 0.15f);
+    float bar_w_f = bar_total_w - gap;
+    if (bar_w_f < 1.0f) bar_w_f = 1.0f;
+    float min_bar_h = 1.0f * m_dpi_scale;
+
+    for (int i = 0; i < num_segments; i++) {
+      float peak = peaks[i];
+      float bar_h = peak * (float)h;
+      if (bar_h < min_bar_h) bar_h = min_bar_h;
+
+      float bx = m_rect_waveform.left + i * bar_total_w + gap * 0.5f;
+      float by = m_rect_waveform.bottom - bar_h;
+
+      // Determine if this segment is played or unplayed
+      float seg_progress = (float)(i + 0.5f) / num_segments;
+      bool played = (seg_progress <= (float)progress);
+
+      Gdiplus::SolidBrush barBrush(played ? accentColor : dimColor);
+      g.FillRectangle(&barBrush, bx, by, bar_w_f, bar_h);
+    }
+    m_waveform_animating = false;
+  }
+
+  // Tooltip (reuse same logic as seekbar tooltip)
+  if ((m_hover_region == HitRegion::SeekBar || m_seeking) && m_state.track_length > 0) {
+    std::wstring timeStr = format_time(m_seeking ? m_state.playback_time : m_preview_time);
+    Gdiplus::Font tooltipFont(L"Segoe UI", 10.0f * m_dpi_scale, Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
+    Gdiplus::RectF textBounds;
+    g.MeasureString(timeStr.c_str(), -1, &tooltipFont, Gdiplus::PointF(0, 0), &textBounds);
+    int padding_h = static_cast<int>(6 * m_dpi_scale);
+    int padding_v = static_cast<int>(3 * m_dpi_scale);
+    int tooltip_w = static_cast<int>(textBounds.Width) + padding_h * 2;
+    int tooltip_h = static_cast<int>(textBounds.Height) + padding_v * 2;
+    int progress_w = static_cast<int>(w * progress);
+    int cursor_x = m_seeking ? (m_rect_waveform.left + progress_w) : m_seekbar_hover_x;
+    int tooltip_x = cursor_x - tooltip_w / 2;
+    int tooltip_y = m_rect_waveform.top - tooltip_h - static_cast<int>(6 * m_dpi_scale);
+    tooltip_x = std::max((int)m_rect_waveform.left, std::min(tooltip_x, (int)m_rect_waveform.right - tooltip_w));
+    Gdiplus::Color bgColor = m_dark_mode ? Gdiplus::Color(220, 60, 60, 60) : Gdiplus::Color(220, 40, 40, 40);
+    Gdiplus::SolidBrush bgBrush(bgColor);
+    int corner = static_cast<int>(4 * m_dpi_scale);
+    Gdiplus::GraphicsPath tooltipPath;
+    tooltipPath.AddArc(tooltip_x, tooltip_y, corner * 2, corner * 2, 180, 90);
+    tooltipPath.AddArc(tooltip_x + tooltip_w - corner * 2, tooltip_y, corner * 2, corner * 2, 270, 90);
+    tooltipPath.AddArc(tooltip_x + tooltip_w - corner * 2, tooltip_y + tooltip_h - corner * 2, corner * 2, corner * 2, 0, 90);
+    tooltipPath.AddArc(tooltip_x, tooltip_y + tooltip_h - corner * 2, corner * 2, corner * 2, 90, 90);
+    tooltipPath.CloseFigure();
+    g.FillPath(&bgBrush, &tooltipPath);
+    Gdiplus::SolidBrush textBrush(Gdiplus::Color(255, 255, 255, 255));
+    Gdiplus::StringFormat sf;
+    sf.SetAlignment(Gdiplus::StringAlignmentCenter);
+    sf.SetLineAlignment(Gdiplus::StringAlignmentCenter);
+    Gdiplus::RectF textRect(static_cast<float>(tooltip_x), static_cast<float>(tooltip_y),
+                            static_cast<float>(tooltip_w), static_cast<float>(tooltip_h));
+    g.DrawString(timeStr.c_str(), -1, &tooltipFont, textRect, &sf, &textBrush);
+  }
+}
+
+void ControlPanelCore::draw_time_display_top_right(Gdiplus::Graphics& g) {
+  if (m_rect_time.right <= m_rect_time.left) return;
+
+  // Determine colors
+  int bg_style = get_nowbar_background_style();
+  bool use_light_foreground = (bg_style == 1 && m_artwork_colors_valid) ||
+                              (bg_style == 2 && m_blurred_artwork);
+  Gdiplus::Color time_color = use_light_foreground
+      ? Gdiplus::Color(255, 200, 200, 200) : m_text_secondary_color;
+  Gdiplus::SolidBrush timeBrush(time_color);
+
+  // Format: "0:00 / 0:00"
+  std::wstring elapsed = format_time(m_state.playback_time);
+  std::wstring total = format_time(m_state.track_length);
+  std::wstring display = elapsed + L" / " + total;
+
+  float time_font_size = 9.0f * m_dpi_scale * m_size_scale;
+  Gdiplus::FontFamily fontFamily(L"Microsoft YaHei");
+  Gdiplus::Font timeFont(&fontFamily, time_font_size, Gdiplus::FontStyleRegular,
+                         Gdiplus::UnitPoint);
+
+  Gdiplus::StringFormat sf;
+  sf.SetAlignment(Gdiplus::StringAlignmentFar);  // Right-aligned
+  sf.SetLineAlignment(Gdiplus::StringAlignmentCenter);
+
+  Gdiplus::RectF timeRect(
+      (float)m_rect_time.left, (float)m_rect_time.top,
+      (float)(m_rect_time.right - m_rect_time.left),
+      (float)(m_rect_time.bottom - m_rect_time.top));
+  g.DrawString(display.c_str(), -1, &timeFont, timeRect, &sf, &timeBrush);
+}
+
 void ControlPanelCore::draw_volume(Gdiplus::Graphics &g) {
   int w = m_rect_volume.right - m_rect_volume.left;
   int h = m_rect_volume.bottom - m_rect_volume.top;
@@ -2202,6 +2836,14 @@ HitRegion ControlPanelCore::hit_test(int x, int y) const {
     return HitRegion::RepeatButton;
   if (get_nowbar_super_icon_visible() && pt_in_rect(m_rect_super, x, y))
     return HitRegion::SuperButton;
+  // Mode 1: thin progress bar at top with expanded hit area (±8px vertical)
+  if (m_rect_thin_progress.right > m_rect_thin_progress.left) {
+    int expand = static_cast<int>(8 * m_dpi_scale);
+    RECT expanded_thin = {m_rect_thin_progress.left, m_rect_thin_progress.top,
+                          m_rect_thin_progress.right, m_rect_thin_progress.bottom + expand};
+    if (pt_in_rect(expanded_thin, x, y))
+      return HitRegion::ThinProgressBar;
+  }
   if (pt_in_rect(m_rect_seekbar, x, y))
     return HitRegion::SeekBar;
   // Custom buttons #1-6 (hidden during active playback if auto-hide enabled or fading)
@@ -2246,9 +2888,13 @@ void ControlPanelCore::on_mouse_move(int x, int y) {
   HitRegion new_region = hit_test(x, y);
 
   if (m_seeking) {
-    // Calculate seek position
-    double pos = static_cast<double>(x - m_rect_seekbar.left) /
-                 (m_rect_seekbar.right - m_rect_seekbar.left);
+    // Calculate seek position using appropriate rect
+    RECT seek_rect = m_rect_seekbar;
+    if (m_pressed_region == HitRegion::ThinProgressBar) {
+      seek_rect = m_rect_thin_progress;
+    }
+    double pos = static_cast<double>(x - seek_rect.left) /
+                 (seek_rect.right - seek_rect.left);
     pos = std::max(0.0, std::min(1.0, pos));
     // Preview position (don't seek yet)
     m_state.playback_time = pos * m_state.track_length;
@@ -2282,7 +2928,38 @@ void ControlPanelCore::on_mouse_move(int x, int y) {
     m_hover_region = new_region;
     invalidate();
   }
-  
+
+  // Spectrum hover fade (Mode 1): dim spectrum when hovering over buttons
+  if (get_nowbar_visualization_mode() == 1) {
+    bool hovering_button = (new_region == HitRegion::PlayButton ||
+                            new_region == HitRegion::PrevButton ||
+                            new_region == HitRegion::NextButton ||
+                            new_region == HitRegion::ShuffleButton ||
+                            new_region == HitRegion::RepeatButton ||
+                            new_region == HitRegion::StopButton ||
+                            new_region == HitRegion::SuperButton ||
+                            new_region == HitRegion::HeartButton);
+    float target = hovering_button ? 0.3f : 1.0f;
+    if (m_spectrum_hover_opacity != target) {
+      // Simple lerp toward target
+      float delta = target - m_spectrum_hover_opacity;
+      float step = delta * 0.3f;  // Quick convergence
+      if (std::abs(delta) < 0.02f) {
+        m_spectrum_hover_opacity = target;
+      } else {
+        m_spectrum_hover_opacity += step;
+        request_animation();
+      }
+      invalidate();
+    }
+  }
+
+  // Track thin progress bar hover position for tooltip + invalidate for enlarge
+  if (new_region == HitRegion::ThinProgressBar) {
+    m_seekbar_hover_x = x;
+    invalidate();
+  }
+
   // Track seekbar hover position for tooltip
   if (new_region == HitRegion::SeekBar && m_state.track_length > 0) {
     int old_hover_x = m_seekbar_hover_x;
@@ -2362,12 +3039,18 @@ void ControlPanelCore::on_mouse_move(int x, int y) {
 }
 
 void ControlPanelCore::on_mouse_leave() {
-  
+
   if (m_hover_region != HitRegion::None) {
     m_hover_region = HitRegion::None;
     invalidate();
   }
-  
+
+  // Reset spectrum hover opacity when mouse leaves
+  if (m_spectrum_hover_opacity != 1.0f) {
+    m_spectrum_hover_opacity = 1.0f;
+    invalidate();
+  }
+
   // Hide tooltip when mouse leaves the panel
   if (m_tooltip_hwnd && m_tooltip_button_index != -1) {
     m_tooltip_button_index = -1;
@@ -2381,6 +3064,14 @@ void ControlPanelCore::on_lbutton_down(int x, int y) {
   if (m_pressed_region == HitRegion::SeekBar) {
     m_seeking = true;
     on_mouse_move(x, y);
+  } else if (m_pressed_region == HitRegion::ThinProgressBar) {
+    m_seeking = true;
+    // Calculate seek position using thin progress bar width
+    double pos = static_cast<double>(x - m_rect_thin_progress.left) /
+                 (m_rect_thin_progress.right - m_rect_thin_progress.left);
+    pos = std::max(0.0, std::min(1.0, pos));
+    m_state.playback_time = pos * m_state.track_length;
+    invalidate();
   } else if (m_pressed_region == HitRegion::VolumeSlider) {
     m_volume_dragging = true;
     on_mouse_move(x, y);
@@ -2392,9 +3083,13 @@ void ControlPanelCore::on_lbutton_up(int x, int y) {
 
   if (m_seeking) {
     m_seeking = false;
-    // Commit seek
-    double pos = static_cast<double>(x - m_rect_seekbar.left) /
-                 (m_rect_seekbar.right - m_rect_seekbar.left);
+    // Commit seek - use appropriate rect based on which region started the seek
+    RECT seek_rect = m_rect_seekbar;
+    if (m_pressed_region == HitRegion::ThinProgressBar) {
+      seek_rect = m_rect_thin_progress;
+    }
+    double pos = static_cast<double>(x - seek_rect.left) /
+                 (seek_rect.right - seek_rect.left);
     pos = std::max(0.0, std::min(1.0, pos));
     do_seek(pos * m_state.track_length);
   } else if (m_volume_dragging) {
@@ -3221,6 +3916,41 @@ void ControlPanelCore::on_playback_state_changed(const PlaybackState &state) {
     m_cbutton_fade_active = true;
   }
 
+  // Spectrum visualizer fade animation (mode 0 and mode 1 both use spectrum)
+  int vis_mode = get_nowbar_visualization_mode();
+  if (vis_mode == 0 || vis_mode == 1) {
+    bool spectrum_enabled = (vis_mode == 0) ? get_nowbar_spectrum_visible() : true;
+    if (spectrum_enabled) {
+      if (is_playing_now) {
+        create_vis_stream();
+        m_spectrum_start_opacity = m_spectrum_opacity;
+        m_spectrum_target_opacity = 1.0f;
+        m_spectrum_fade_start_time = std::chrono::steady_clock::now();
+        m_spectrum_fade_active = true;
+        m_spectrum_animating = true;
+      } else {
+        m_spectrum_start_opacity = m_spectrum_opacity;
+        m_spectrum_target_opacity = 0.0f;
+        m_spectrum_fade_start_time = std::chrono::steady_clock::now();
+        m_spectrum_fade_active = true;
+        m_spectrum_animating = true;
+      }
+    }
+  }
+
+  // Waveform: start computation on play if mode 2 and not yet computed; clear on stop
+  if (vis_mode == 2) {
+    if (is_playing_now && !m_waveform_valid && !m_waveform_computing.load()) {
+      start_waveform_computation();
+    } else if (is_stopped) {
+      cancel_waveform_computation();
+      std::lock_guard<std::mutex> lock(m_waveform_mutex);
+      m_waveform_valid = false;
+      m_waveform_peaks.clear();
+      m_waveform_track_path = "";
+    }
+  }
+
   evaluate_title_formats();
   invalidate();
 }
@@ -3252,13 +3982,23 @@ void ControlPanelCore::on_volume_changed(float volume_db) {
 void ControlPanelCore::on_track_changed() {
   // Update mood state for new track
   update_mood_state();
-  
+
   // Re-evaluate title formats for new track
   evaluate_title_formats();
-  
+
   // Reset progress animation for new track
   m_animated_progress = 0.0;
   m_target_progress = 0.0;
+
+  // Waveform: clear and recompute if mode 2
+  if (get_nowbar_visualization_mode() == 2) {
+    {
+      std::lock_guard<std::mutex> lock(m_waveform_mutex);
+      m_waveform_valid = false;
+      m_waveform_peaks.clear();
+    }
+    start_waveform_computation();
+  }
 
   // Request artwork update from UI wrapper
   if (m_artwork_request_cb) {
@@ -4598,6 +5338,154 @@ void ControlPanelCore::reload_all_custom_icons() {
     load_custom_icon(i);
   }
   invalidate();
+}
+
+void ControlPanelCore::start_waveform_computation() {
+  cancel_waveform_computation();
+
+  // Guard: skip if no current track or stream (track_length <= 0)
+  if (m_state.track_length <= 0 || !m_state.current_track.is_valid()) {
+    std::lock_guard<std::mutex> lock(m_waveform_mutex);
+    m_waveform_is_stream = (m_state.track_length <= 0 && m_state.is_playing);
+    m_waveform_valid = false;
+    m_waveform_peaks.clear();
+    return;
+  }
+
+  // Get the file path from the current track
+  pfc::string8 path;
+  try {
+    path = m_state.current_track->get_path();
+  } catch (...) {
+    return;
+  }
+
+  // Don't recompute if same track is already valid
+  if (m_waveform_valid && m_waveform_track_path == path) return;
+
+  m_waveform_cancel = false;
+  m_waveform_computing = true;
+
+  HWND hwnd = m_hwnd;
+  double track_length = m_state.track_length;
+  metadb_handle_ptr track_handle = m_state.current_track;
+
+  m_waveform_thread = std::thread([this, path, hwnd, track_length, track_handle]() {
+    try {
+      // Open the track for decoding using core SDK API (no helpers dependency)
+      abort_callback_impl abort_cb;
+      service_ptr_t<input_decoder> decoder;
+      input_entry::g_open_for_decoding(decoder, nullptr, path.c_str(), abort_cb);
+      decoder->initialize(0, input_flag_simpledecode, abort_cb);
+
+      // Derive segment count from waveform width setting (0=Thin->600, 1=Normal->400, 2=Wide->250)
+      int wave_w = get_nowbar_waveform_width();
+      int num_segments = (wave_w == 0) ? 600 : (wave_w == 2) ? 250 : WAVEFORM_SEGMENTS;
+      double segment_duration = track_length / num_segments;
+      std::vector<float> peaks(num_segments, 0.0f);
+
+      audio_chunk_impl_temporary chunk;
+      int current_segment = 0;
+      double segment_start = 0.0;
+      float segment_peak = 0.0f;
+
+      while (current_segment < num_segments) {
+        if (m_waveform_cancel.load()) return;
+
+        bool got_data = false;
+        try {
+          got_data = decoder->run(chunk, abort_cb);
+        } catch (...) {
+          break;
+        }
+
+        if (!got_data) break;
+
+        // Process samples in this chunk
+        const audio_sample* data = chunk.get_data();
+        t_size samples = chunk.get_sample_count();
+        int channels = chunk.get_channel_count();
+        int sample_rate = chunk.get_sample_rate();
+
+        if (!data || samples == 0 || channels == 0 || sample_rate == 0) continue;
+
+        double chunk_duration = (double)samples / sample_rate;
+        double chunk_end_time = segment_start + chunk_duration;
+
+        // Process all samples, assigning to appropriate segments
+        for (t_size s = 0; s < samples && current_segment < num_segments; s++) {
+          double sample_time = segment_start + (double)s / sample_rate;
+          int seg = (int)(sample_time / segment_duration);
+          if (seg >= num_segments) seg = num_segments - 1;
+          if (seg < 0) seg = 0;
+
+          // If we've moved past the current segment, save peak and advance
+          while (current_segment < seg && current_segment < num_segments) {
+            peaks[current_segment] = segment_peak;
+            current_segment++;
+            segment_peak = 0.0f;
+          }
+
+          // Find peak across all channels for this sample
+          for (int ch = 0; ch < channels; ch++) {
+            float val = std::abs(data[s * channels + ch]);
+            if (val > segment_peak) segment_peak = val;
+          }
+        }
+
+        segment_start = chunk_end_time;
+      }
+
+      // Save last segment
+      if (current_segment < num_segments) {
+        peaks[current_segment] = segment_peak;
+        current_segment++;
+      }
+      // Zero-fill remaining segments
+      for (int i = current_segment; i < num_segments; i++) {
+        peaks[i] = 0.0f;
+      }
+
+      if (m_waveform_cancel.load()) return;
+
+      // Normalize peaks to 0.0-1.0
+      float max_peak = 0.0f;
+      for (float p : peaks) {
+        if (p > max_peak) max_peak = p;
+      }
+      if (max_peak > 0.0f) {
+        for (float& p : peaks) {
+          p /= max_peak;
+        }
+      }
+
+      // Store result
+      {
+        std::lock_guard<std::mutex> lock(m_waveform_mutex);
+        m_waveform_peaks = std::move(peaks);
+        m_waveform_valid = true;
+        m_waveform_is_stream = false;
+        m_waveform_track_path = path.c_str();
+      }
+      m_waveform_computing = false;
+
+      // Trigger repaint on main thread
+      if (hwnd && ::IsWindow(hwnd)) {
+        ::InvalidateRect(hwnd, nullptr, FALSE);
+      }
+    } catch (...) {
+      m_waveform_computing = false;
+    }
+  });
+}
+
+void ControlPanelCore::cancel_waveform_computation() {
+  m_waveform_cancel = true;
+  if (m_waveform_thread.joinable()) {
+    m_waveform_thread.join();
+  }
+  m_waveform_computing = false;
+  m_waveform_cancel = false;
 }
 
 } // namespace nowbar
