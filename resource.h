@@ -149,6 +149,26 @@
 #define IDC_SKIP_RATING_THRESHOLD_LABEL 1151
 #define IDC_SKIP_RATING_THRESHOLD_COMBO 1152
 
+// Spectrum Visualizer controls (General tab) - legacy, kept for reference
+#define IDC_SPECTRUM_LABEL         1153
+#define IDC_SPECTRUM_COMBO         1154
+
+// Visualization section (General tab)
+#define IDC_VIS_GROUP                1400
+#define IDC_VIS_ENABLE_CHECK         1401
+#define IDC_VIS_SPECTRUM_RADIO       1402
+#define IDC_VIS_SPECTRUM_WIDTH_LABEL 1403
+#define IDC_VIS_SPECTRUM_WIDTH_COMBO 1404
+#define IDC_VIS_SPECTRUM_COLOR_LABEL 1405
+#define IDC_VIS_SPECTRUM_COLOR_BTN   1406
+#define IDC_VIS_SPECTRUM_SHAPE_LABEL 1407
+#define IDC_VIS_SPECTRUM_SHAPE_COMBO 1408
+#define IDC_VIS_WAVEFORM_RADIO       1409
+#define IDC_VIS_WAVEFORM_COLOR_LABEL 1410
+#define IDC_VIS_WAVEFORM_COLOR_BTN   1411
+#define IDC_VIS_WAVEFORM_WIDTH_LABEL 1412
+#define IDC_VIS_WAVEFORM_WIDTH_COMBO 1413
+
 // Profile configuration controls (Custom Button tab)
 #define IDC_PROFILE_NAME_LABEL     1370
 #define IDC_PROFILE_COMBO          1371
