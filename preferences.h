@@ -22,6 +22,13 @@ void set_nowbar_infinite_playback_enabled(bool enabled);  // Toggle infinite pla
 int get_nowbar_preview_mode();  // 0=Off, 1=35%, 2=50%, 3=60sec
 void set_nowbar_preview_mode(int mode);  // Set playback preview mode
 bool get_nowbar_skip_low_rating_enabled();  // true=Enabled, false=Disabled
+bool get_nowbar_spectrum_visible();  // true=Enabled, false=Disabled
+int get_nowbar_visualization_mode();  // 0=Disabled, 1=Spectrum, 2=Waveform
+COLORREF get_nowbar_spectrum_color();
+int get_nowbar_spectrum_width();     // 0=Thin, 1=Normal, 2=Wide
+int get_nowbar_spectrum_shape();     // 0=Pill, 1=Rectangle
+COLORREF get_nowbar_waveform_color();
+int get_nowbar_waveform_width();     // 0=Thin, 1=Normal, 2=Wide
 int get_nowbar_skip_low_rating_threshold();  // 1, 2, or 3 (skip if rating <= threshold)
 int get_nowbar_background_style();  // 0=Solid, 1=Artwork Colors, 2=Blurred Artwork
 bool get_nowbar_smooth_animations_enabled();  // true=Enabled, false=Disabled
