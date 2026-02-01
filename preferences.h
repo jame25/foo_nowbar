@@ -28,6 +28,7 @@ COLORREF get_nowbar_spectrum_color();
 int get_nowbar_spectrum_width();     // 0=Thin, 1=Normal, 2=Wide
 int get_nowbar_spectrum_shape();     // 0=Pill, 1=Rectangle
 COLORREF get_nowbar_waveform_color();
+COLORREF get_nowbar_waveform_unplayed_color();
 int get_nowbar_waveform_width();     // 0=Thin, 1=Normal, 2=Wide
 int get_nowbar_skip_low_rating_threshold();  // 1, 2, or 3 (skip if rating <= threshold)
 int get_nowbar_background_style();  // 0=Solid, 1=Artwork Colors, 2=Blurred Artwork
