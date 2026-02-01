@@ -254,7 +254,7 @@ private:
     
     // Spectrum visualizer
     static constexpr int SPECTRUM_BAR_COUNT = 20;
-    static constexpr int SPECTRUM_FFT_SIZE = 2048;
+    static constexpr int SPECTRUM_FFT_SIZE = 512;
     static constexpr float SPECTRUM_FADE_DURATION_MS = 300.0f;
     service_ptr_t<visualisation_stream_v3> m_vis_stream;
     float m_spectrum_bars[SPECTRUM_BAR_COUNT] = {};
