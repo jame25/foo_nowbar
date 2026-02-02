@@ -70,6 +70,9 @@
 #define IDC_ARTIST_FONT_LABEL      1205
 #define IDC_ARTIST_FONT_DISPLAY    1206
 #define IDC_ARTIST_FONT_SELECT     1207
+#define IDC_TIME_FONT_LABEL        1208
+#define IDC_TIME_FONT_DISPLAY      1209
+#define IDC_TIME_FONT_SELECT       1210
 
 // Custom Button tab controls
 #define IDC_CBUTTON_ENABLE_LABEL   1301
