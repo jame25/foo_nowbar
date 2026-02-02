@@ -41,6 +41,13 @@ private:
     std::unique_ptr<ControlPanelCore> m_core;
     bool m_tracking_mouse = false;
     bool m_glass_effect_active = false;  // Tracks if acrylic backdrop is currently applied
+
+    // Cached offscreen bitmap for double buffering (avoids alloc/free per frame)
+    HDC m_cache_dc = nullptr;
+    HBITMAP m_cache_bitmap = nullptr;
+    HBITMAP m_cache_old_bitmap = nullptr;
+    int m_cache_w = 0;
+    int m_cache_h = 0;
     
     // CUI colour change callback for Custom theme mode
     class ColourCallback : public cui::colours::common_callback {
