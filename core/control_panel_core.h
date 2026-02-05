@@ -101,6 +101,7 @@ public:
     
     // Artwork
     void set_artwork(album_art_data_ptr data);
+    void set_artwork_from_hbitmap(HBITMAP bitmap);  // For online artwork from foo_artwork
     void clear_artwork();
     
     // Get minimum size
@@ -143,6 +144,10 @@ public:
     // Settings change notification
     void on_settings_changed();
     static void notify_all_settings_changed();
+
+    // Online artwork notification (called when foo_artwork finds artwork)
+    static void notify_online_artwork_received();
+    void on_online_artwork_received();
     
     // Custom color scheme support (for DUI color sync)
     using ColorQueryCallback = std::function<bool(COLORREF& bg, COLORREF& text, COLORREF& highlight)>;
@@ -373,7 +378,8 @@ private:
     // Artwork
     std::unique_ptr<Gdiplus::Bitmap> m_artwork_bitmap;
     std::unique_ptr<Gdiplus::Bitmap> m_default_artwork;
-    
+    bool m_artwork_is_online = false;  // True if current artwork is from foo_artwork (online)
+
     // Colors
     Gdiplus::Color m_bg_color;
     Gdiplus::Color m_text_color;
