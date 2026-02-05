@@ -186,6 +186,7 @@
   
   <ItemGroup>
     <ClInclude Include="guids.h" />
+    <ClInclude Include="artwork_bridge.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="version.h" />
     <ClInclude Include="resource.h" />
@@ -201,6 +202,7 @@
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="component.cpp" />
+    <ClCompile Include="artwork_bridge.cpp" />
     <ClCompile Include="component_client.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
