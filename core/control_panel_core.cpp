@@ -1328,6 +1328,7 @@ void ControlPanelCore::paint_spectrum_only(HDC hdc, const RECT& panel_rect) {
   g.SetSmoothingMode(Gdiplus::SmoothingModeHighQuality);
   g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBilinear);
   g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHighQuality);
+  g.SetTextRenderingHint(Gdiplus::TextRenderingHintClearTypeGridFit);
 
   draw_full_spectrum(g);
   draw_playback_buttons(g);
@@ -2338,6 +2339,10 @@ void ControlPanelCore::update_spectrum_data() {
   // Assume 44100 Hz sample rate for bin mapping
   float bin_freq_step = 44100.0f / (float)SPECTRUM_FFT_SIZE;
 
+  // First pass: calculate overall energy for soft floor scaling
+  float total_energy = 0.0f;
+  float normalized_values[SPECTRUM_BAR_COUNT];
+
   for (int i = 0; i < SPECTRUM_BAR_COUNT; i++) {
     // Calculate frequency range for this bar
     float f_lo = std::pow(10.0f, log_min + (log_max - log_min) * i / SPECTRUM_BAR_COUNT);
@@ -2356,19 +2361,34 @@ void ControlPanelCore::update_spectrum_data() {
     }
 
     // KStreamFlagNewFFT normalizes output to 0..1 range
-    // Apply power curve for perceptual scaling; steeper than sqrt so quiet
-    // bands drop closer to zero instead of hovering at a visible floor.
+    // Apply power curve for perceptual scaling
     float normalized = std::pow(magnitude, 0.75f);
-    // Noise gate: values below threshold are silenced so bars can vanish
-    if (normalized < 0.02f) normalized = 0.0f;
     if (normalized > 1.0f) normalized = 1.0f;
+    normalized_values[i] = normalized;
+    total_energy += normalized;
+  }
 
-    // Asymmetric smoothing: responsive attack, gentle decay for natural movement
+  // Calculate energy factor for soft floor (0 during silence, 1 during music)
+  float avg_energy = total_energy / SPECTRUM_BAR_COUNT;
+  float energy_factor = std::min(1.0f, avg_energy * 4.0f);  // Ramps up quickly with any audio
+
+  // Soft floor: bars settle toward this level instead of zero during music
+  const float SPECTRUM_FLOOR = 0.25f;
+  float effective_floor = SPECTRUM_FLOOR * energy_factor;
+
+  // Second pass: apply smoothing with soft floor
+  for (int i = 0; i < SPECTRUM_BAR_COUNT; i++) {
+    float normalized = normalized_values[i];
+
+    // Noise gate: values below threshold use the floor instead
+    float target = (normalized < 0.02f) ? effective_floor : std::max(normalized, effective_floor);
+
+    // Asymmetric smoothing: snappy attack, slow decay for stable base with jumpy peaks
     float current = m_spectrum_bars[i];
-    if (normalized > current) {
-      m_spectrum_bars[i] = current + (normalized - current) * 0.5f;  // Responsive attack
+    if (target > current) {
+      m_spectrum_bars[i] = current + (target - current) * 0.7f;   // Snappy attack
     } else {
-      m_spectrum_bars[i] = current + (normalized - current) * 0.25f;  // Gentle decay
+      m_spectrum_bars[i] = current + (target - current) * 0.15f;  // Slow decay toward floor
     }
   }
 }
@@ -2594,33 +2614,15 @@ void ControlPanelCore::draw_full_spectrum(Gdiplus::Graphics& g) {
   // Determine colors - always use user's spectrum color setting
   COLORREF spec_color = get_nowbar_spectrum_color();
   Gdiplus::Color accent(255, GetRValue(spec_color), GetGValue(spec_color), GetBValue(spec_color));
-  // RGB-inverted colour for the lower half
-  BYTE inv_r = 255 - GetRValue(spec_color);
-  BYTE inv_g = 255 - GetGValue(spec_color);
-  BYTE inv_b = 255 - GetBValue(spec_color);
-
   // Modulate by spectrum opacity AND hover opacity
   int alpha = (int)(192 * m_spectrum_opacity * m_spectrum_hover_opacity);
-
-  // 3-stop gradient: top = accent (dimmed), 2/3 mark = accent (full), bottom = inverse (full)
-  int alpha_top = (int)(alpha * 0.55f);
-  int alpha_mid = alpha;
+  int alpha_top = (int)(alpha * 0.70f);  // Slight dim at top
   int alpha_bot = alpha;
 
-  Gdiplus::LinearGradientBrush gradBrush(
-      Gdiplus::PointF(0, (float)m_rect_spectrum_full.top),
-      Gdiplus::PointF(0, (float)m_rect_spectrum_full.bottom),
-      Gdiplus::Color(alpha_top, accent.GetR(), accent.GetG(), accent.GetB()),
-      Gdiplus::Color(alpha_bot, inv_r, inv_g, inv_b));
-
-  // Top 2/3 = chosen colour (dimmed to full), bottom 1/3 = inverse colour
-  Gdiplus::Color blendColors[3] = {
-      Gdiplus::Color(alpha_top, accent.GetR(), accent.GetG(), accent.GetB()),
-      Gdiplus::Color(alpha_mid, accent.GetR(), accent.GetG(), accent.GetB()),
-      Gdiplus::Color(alpha_bot, inv_r, inv_g, inv_b)
-  };
-  float blendPositions[3] = { 0.0f, 0.667f, 1.0f };
-  gradBrush.SetInterpolationColors(blendColors, blendPositions, 3);
+  // Water color is the RGB inversion of the main spectrum color
+  BYTE water_r = 255 - GetRValue(spec_color);
+  BYTE water_g = 255 - GetGValue(spec_color);
+  BYTE water_b = 255 - GetBValue(spec_color);
 
   // Get shape setting (0=Pill, 1=Rectangle)
   int spec_shape = get_nowbar_spectrum_shape();
@@ -2648,6 +2650,27 @@ void ControlPanelCore::draw_full_spectrum(Gdiplus::Graphics& g) {
     float x = m_rect_spectrum_full.left + i * bar_total_w + gap * 0.5f;
     float y = m_rect_spectrum_full.bottom - height;
 
+    // "Water rising" effect: blue portion rises with bar energy
+    // Higher energy = blue extends further up the bar (water level rises)
+    // The blend position determines where blue starts (1.0 = bottom only, 0.5 = halfway up)
+    float water_level = 1.0f - value * 0.5f;  // value 0->1 maps to blend pos 1.0->0.5
+    if (water_level < 0.5f) water_level = 0.5f;
+
+    // Create per-bar gradient brush with energy-based water level
+    Gdiplus::LinearGradientBrush barBrush(
+        Gdiplus::PointF(0, (float)m_rect_spectrum_full.top),
+        Gdiplus::PointF(0, (float)m_rect_spectrum_full.bottom),
+        Gdiplus::Color(alpha_top, accent.GetR(), accent.GetG(), accent.GetB()),
+        Gdiplus::Color(alpha_bot, water_r, water_g, water_b));
+
+    Gdiplus::Color blendColors[3] = {
+        Gdiplus::Color(alpha_top, accent.GetR(), accent.GetG(), accent.GetB()),
+        Gdiplus::Color(alpha, accent.GetR(), accent.GetG(), accent.GetB()),
+        Gdiplus::Color(alpha_bot, water_r, water_g, water_b)
+    };
+    float blendPositions[3] = { 0.0f, water_level, 1.0f };
+    barBrush.SetInterpolationColors(blendColors, blendPositions, 3);
+
     if (spec_shape == 0) {
       // Pill-shaped bars
       Gdiplus::GraphicsPath path;
@@ -2660,10 +2683,10 @@ void ControlPanelCore::draw_full_spectrum(Gdiplus::Graphics& g) {
         path.AddRectangle(Gdiplus::RectF(x, y, bar_w, height));
       }
       path.CloseFigure();
-      g.FillPath(&gradBrush, &path);
+      g.FillPath(&barBrush, &path);
     } else {
       // Rectangle bars
-      g.FillRectangle(&gradBrush, x, y, bar_w, height);
+      g.FillRectangle(&barBrush, x, y, bar_w, height);
     }
   }
 
