@@ -291,6 +291,20 @@ void ControlPanelCore::notify_all_settings_changed() {
   }
 }
 
+void ControlPanelCore::notify_online_artwork_received() {
+  std::lock_guard<std::mutex> lock(g_instances_mutex);
+  for (auto *instance : g_instances) {
+    instance->on_online_artwork_received();
+  }
+}
+
+void ControlPanelCore::on_online_artwork_received() {
+  // Request artwork update - this will check for pending online artwork
+  if (m_artwork_request_cb) {
+    m_artwork_request_cb();
+  }
+}
+
 void ControlPanelCore::apply_theme() {
   int theme_mode = get_nowbar_theme_mode();
   int bg_style = get_nowbar_background_style();
@@ -3493,7 +3507,11 @@ void ControlPanelCore::on_mouse_wheel(int delta) {
 void ControlPanelCore::on_lbutton_dblclk(int x, int y) {
   HitRegion region = hit_test(x, y);
   if (region == HitRegion::Artwork) {
-    show_picture_viewer();
+    // Only show picture viewer for local/embedded artwork
+    // Online artwork from foo_artwork isn't available to foobar2000's viewer
+    if (!m_artwork_is_online) {
+      show_picture_viewer();
+    }
   } else if (region == HitRegion::TrackInfo) {
     // Highlight the currently playing track in the playlist
     // First, clear focus to ensure on_item_focus_change fires even if already focused
@@ -4162,6 +4180,7 @@ void ControlPanelCore::on_track_changed() {
 
 void ControlPanelCore::set_artwork(album_art_data_ptr data) {
   m_needs_full_repaint = true;
+  m_artwork_is_online = false;  // Local/embedded artwork
   if (!data.is_valid() || data->get_size() == 0) {
     clear_artwork();
     return;
@@ -4205,8 +4224,45 @@ void ControlPanelCore::set_artwork(album_art_data_ptr data) {
   invalidate();
 }
 
+void ControlPanelCore::set_artwork_from_hbitmap(HBITMAP bitmap) {
+  m_needs_full_repaint = true;
+  m_artwork_is_online = true;  // Online artwork from foo_artwork
+  if (!bitmap) {
+    clear_artwork();
+    return;
+  }
+
+  // Create GDI+ bitmap from HBITMAP
+  m_artwork_bitmap.reset(Gdiplus::Bitmap::FromHBITMAP(bitmap, nullptr));
+
+  if (m_artwork_bitmap && m_artwork_bitmap->GetLastStatus() == Gdiplus::Ok) {
+    // Extract colors for dynamic background
+    extract_artwork_colors();
+
+    // Trigger background transition BEFORE invalidating cache
+    int bg_style = get_nowbar_background_style();
+    if ((bg_style == 1 || bg_style == 2) && get_nowbar_smooth_animations_enabled()) {
+      if (m_prev_background && m_bg_cache_valid) {
+        m_bg_transition_active = true;
+        m_bg_transition_start_time = std::chrono::steady_clock::now();
+      }
+    }
+
+    // Invalidate blurred artwork cache so it regenerates with new artwork
+    m_blurred_artwork.reset();
+    m_target_background.reset();
+    m_blurred_artwork_size = {0, 0};
+    m_bg_cache_valid = false;
+  } else {
+    m_artwork_bitmap.reset();
+  }
+
+  invalidate();
+}
+
 void ControlPanelCore::clear_artwork() {
   m_needs_full_repaint = true;
+  m_artwork_is_online = false;
   m_artwork_bitmap.reset();
   m_artwork_colors_valid = false;
   m_blurred_artwork.reset();
