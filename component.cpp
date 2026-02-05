@@ -3,6 +3,7 @@
 #include "guids.h"
 #include "core/playback_state.h"
 #include "core/control_panel_core.h"
+#include "artwork_bridge.h"
 
 // Module instance handle for dialog creation
 HINSTANCE g_hInstance = nullptr;
@@ -30,9 +31,15 @@ namespace {
             // Force early instantiation of PlaybackStateManager to ensure it
             // registers for playback callbacks before any playback starts
             nowbar::PlaybackStateManager::get();
+
+            // Initialize foo_artwork bridge for online artwork support
+            init_artwork_bridge();
         }
 
         void on_quit() override {
+            // Unregister foo_artwork callback before other cleanup
+            shutdown_artwork_bridge();
+
             // Clean up static objects while services are still available
             // Order matters: ControlPanelCore first (clears instances & theme callback),
             // then PlaybackStateManager (unregisters from play_callback_manager)
