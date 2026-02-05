@@ -67,6 +67,7 @@ BEGIN
     PUSHBUTTON      "", IDC_PROGRESS_ACCENT_BTN, 80, 168, 40, 14, BS_OWNERDRAW
     LTEXT           "Volume Accent:", IDC_VOLUME_ACCENT_LABEL, 16, 188, 55, 12
     PUSHBUTTON      "", IDC_VOLUME_ACCENT_BTN, 75, 186, 40, 14, BS_OWNERDRAW
+    AUTOCHECKBOX    "Online Artwork (requires foo_artwork)", IDC_ONLINE_ARTWORK_CHECK, 16, 206, 150, 12
 
     // === Icons Tab Controls (Tab 2) ===
     LTEXT           "Mood Icon:", IDC_MOOD_ICON_LABEL, 16, 26, 50, 12
