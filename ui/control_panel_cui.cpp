@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "control_panel_cui.h"
 #include "../preferences.h"
+#include "../artwork_bridge.h"
 
 // Windows 11 Build 22000+ DWM backdrop attribute (for older SDK headers)
 #ifndef DWMWA_SYSTEMBACKDROP_TYPE
@@ -83,11 +84,20 @@ void ControlPanelCUI::initialize_core(HWND wnd) {
 
 void ControlPanelCUI::update_artwork() {
     if (!m_core) return;
-    
+
+    // Check for pending online artwork from foo_artwork callback
+    if (has_pending_online_artwork()) {
+        HBITMAP bitmap = get_pending_online_artwork();
+        if (bitmap) {
+            m_core->set_artwork_from_hbitmap(bitmap);
+            return;
+        }
+    }
+
     auto pc = playback_control::get();
     metadb_handle_ptr track;
     if (pc->get_now_playing(track) && track.is_valid()) {
-        // Get album art
+        // Try local/embedded artwork first
         auto art_manager = album_art_manager_v3::get();
         try {
             auto extractor = art_manager->open(
@@ -95,7 +105,7 @@ void ControlPanelCUI::update_artwork() {
                 pfc::list_single_ref_t<GUID>(album_art_ids::cover_front),
                 fb2k::noAbort
             );
-            
+
             if (extractor.is_valid()) {
                 album_art_data_ptr data;
                 if (extractor->query(album_art_ids::cover_front, data, fb2k::noAbort)) {
@@ -104,8 +114,22 @@ void ControlPanelCUI::update_artwork() {
                 }
             }
         } catch (...) {}
+
+        // No local artwork found - try online via foo_artwork if enabled
+        if (get_nowbar_online_artwork() && is_artwork_bridge_available()) {
+            pfc::string8 artist, title;
+            service_ptr_t<titleformat_object> script_artist, script_title;
+            titleformat_compiler::get()->compile_safe(script_artist, "%artist%");
+            titleformat_compiler::get()->compile_safe(script_title, "%title%");
+            // Use playback_format_title for streams - it merges dynamic stream metadata
+            pc->playback_format_title(nullptr, artist, script_artist, nullptr, playback_control::display_level_all);
+            pc->playback_format_title(nullptr, title, script_title, nullptr, playback_control::display_level_all);
+            request_online_artwork(artist.c_str(), title.c_str());
+            // Don't clear artwork - wait for async callback from foo_artwork
+            return;
+        }
     }
-    
+
     m_core->clear_artwork();
 }
 
