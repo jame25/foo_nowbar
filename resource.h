@@ -174,6 +174,9 @@
 #define IDC_VIS_WAVEFORM_UNPLAYED_COLOR_LABEL 1414
 #define IDC_VIS_WAVEFORM_UNPLAYED_COLOR_BTN   1415
 
+// Online Artwork checkbox (Appearance tab)
+#define IDC_ONLINE_ARTWORK_CHECK       1416
+
 // Profile configuration controls (Custom Button tab)
 #define IDC_PROFILE_NAME_LABEL     1370
 #define IDC_PROFILE_COMBO          1371
