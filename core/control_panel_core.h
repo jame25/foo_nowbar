@@ -1,6 +1,7 @@
 #pragma once
 #include "pch.h"
 #include "playback_state.h"
+#include "../preferences.h"
 #include <unordered_map>
 
 namespace nowbar {
@@ -39,6 +40,7 @@ enum class HitRegion {
     PrevButton,
     PlayButton,
     StopButton,    // Optional stop button
+    StopAfterCurrentButton,  // Optional "Stop after current" toggle button
     NextButton,
     ShuffleButton,
     RepeatButton,
@@ -135,6 +137,27 @@ public:
         return true;
     }
 
+    // Waveform-only repaint: redraws waveform bar, tooltip, and time display
+    void paint_waveform_only(HDC hdc, const RECT& panel_rect);
+    const RECT& get_waveform_rect() const { return m_rect_waveform; }
+    // Clears only the rects that paint_waveform_only will redraw
+    void clear_waveform_dirty_rects(HDC hdc, COLORREF bg) const {
+        // Only clear the waveform rect, not m_rect_time — in waveform mode
+        // m_rect_time spans the full seekbar width and overlaps with playback buttons.
+        // The time area is fully repainted by draw_background() within the clip region.
+        HBRUSH brush = CreateSolidBrush(bg);
+        FillRect(hdc, &m_rect_waveform, brush);
+        DeleteObject(brush);
+    }
+    bool is_waveform_progress_only() const {
+        if (m_needs_full_repaint) return false;
+        if (m_seekbar_animating || m_hover_animating || m_cbutton_animating ||
+            m_bg_animating || m_spectrum_animating) return false;
+        // Fall back to full paint when user is interacting with the waveform bar
+        if (m_seeking || m_hover_region == HitRegion::WaveformBar) return false;
+        return true;
+    }
+
     // Animation dirty rect for partial invalidation from WM_TIMER handlers
     const RECT* get_animation_dirty_rect() const {
         return m_animation_dirty_partial ? &m_animation_dirty_rect : nullptr;
@@ -154,10 +177,15 @@ public:
     void set_color_query_callback(ColorQueryCallback callback);
     void apply_custom_colors();  // Called when theme mode is "Custom"
     
+    // Command state polling for custom buttons (public for UI wrapper timer handling)
+    static constexpr UINT_PTR COMMAND_STATE_TIMER_ID = 1002;
+    void poll_custom_button_states();  // Query command state and invalidate if changed
+    
 private:
     void update_layout(const RECT& rect);
     void invalidate();
     void invalidate_rect(const RECT& rect);  // Partial invalidation for specific regions
+    void invalidate_progress();  // Partial invalidation for progress-only updates (no full repaint)
     void update_fonts();
     void extract_artwork_colors();  // Extract dominant colors from artwork for dynamic background
     void create_blurred_artwork(int target_width, int target_height);  // Create blurred version at exact size
@@ -195,6 +223,7 @@ private:
 
     void draw_super_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color);  // Super button icon (3x3 grid of dots)
     void draw_stop_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color, bool filled = false);  // Stop icon (square)
+    void draw_stop_after_current_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color);  // Stop after current icon
     void draw_radio_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color);  // Radio icon for streams
     
     // Playback control actions
@@ -204,6 +233,7 @@ private:
     void do_shuffle_toggle();
     void do_repeat_cycle();
     void do_stop();
+    void do_stop_after_current();
     void do_seek(double position);
     void do_volume_change(float delta);
     void do_toggle_mood();
@@ -235,6 +265,7 @@ private:
     RECT m_rect_prev = {};
     RECT m_rect_play = {};
     RECT m_rect_stop = {};  // Optional stop button
+    RECT m_rect_stop_after_current = {};  // Optional "Stop after current" toggle button
     RECT m_rect_next = {};
     RECT m_rect_shuffle = {};
     RECT m_rect_repeat = {};
@@ -263,6 +294,7 @@ private:
     float m_prev_volume_db = 0.0f;  // Store previous volume for mute toggle
     bool m_miniplayer_active = false;  // MiniPlayer enabled state for icon color
     bool m_mood_active = false;  // MOOD tag state for heart icon color
+    bool m_stop_after_current_active = false;  // "Stop after current" toggle state for icon color
     
     // Native Windows tooltip control for custom buttons
     HWND m_tooltip_hwnd = nullptr;
@@ -306,12 +338,38 @@ private:
     void create_vis_stream();
     void release_vis_stream();
 
+    // Cached spectrum region background (GDI objects for fast BitBlt)
+    HDC m_spectrum_bg_hdc = nullptr;
+    HBITMAP m_spectrum_bg_hbitmap = nullptr;
+    HBITMAP m_spectrum_bg_old = nullptr;
+    int m_spectrum_bg_cache_cx = 0;
+    int m_spectrum_bg_cache_cy = 0;
+    bool m_spectrum_bg_cache_valid = false;
+    void destroy_spectrum_bg_cache();
+
+    // Spectrum bar overlay (DIBSECTION for direct pixel writes + AlphaBlend)
+    HDC m_spectrum_overlay_hdc = nullptr;
+    HBITMAP m_spectrum_overlay_hbitmap = nullptr;
+    HBITMAP m_spectrum_overlay_old = nullptr;
+    uint32_t* m_spectrum_overlay_bits = nullptr;
+    int m_spectrum_overlay_cx = 0;
+    int m_spectrum_overlay_cy = 0;
+    void destroy_spectrum_overlay();
+    void ensure_spectrum_overlay(HDC ref_dc, int w, int h);
+
+    // Cached time display bitmap (avoids ClearType DrawString every frame)
+    std::unique_ptr<Gdiplus::Bitmap> m_time_display_cache;
+    std::wstring m_time_display_cache_str;
+    int m_time_display_cache_w = 0;
+    int m_time_display_cache_h = 0;
+
     // Spectrum hover fade for mode 1
     float m_spectrum_hover_opacity = 1.0f;  // Dims when hovering buttons in mode 1
 
     // Mode 1 drawing methods
     void draw_thin_progress_bar(Gdiplus::Graphics& g);
-    void draw_full_spectrum(Gdiplus::Graphics& g);
+    void draw_full_spectrum(HDC hdc);  // Direct pixel rendering for performance
+    void draw_full_spectrum_gdiplus(Gdiplus::Graphics& g);  // GDI+ fallback (used by paint())
     void draw_time_display_top_right(Gdiplus::Graphics& g);
 
     // Mode 2: Waveform pre-computation
@@ -329,6 +387,7 @@ private:
     void draw_waveform_tooltip(Gdiplus::Graphics& g);
     void start_waveform_computation();
     void cancel_waveform_computation();
+    void update_waveform_brushes();
 
     // Waveform cache
     std::unordered_map<std::string, std::vector<float>> m_waveform_cache;
@@ -337,6 +396,11 @@ private:
     void load_waveform_cache();
     void save_waveform_entry(const char* path, const std::vector<float>& peaks);
     bool lookup_waveform_cache(const char* path, std::vector<float>& out_peaks);
+
+    // Cached waveform brushes (avoid ~400 allocations per frame)
+    std::unique_ptr<Gdiplus::SolidBrush> m_waveform_brush_accent;
+    std::unique_ptr<Gdiplus::SolidBrush> m_waveform_brush_dim;
+    bool m_waveform_brushes_dirty = true;
 
     // Smooth progress bar animation
     double m_animated_progress = 0.0;      // Current animated progress (0.0 - 1.0)
@@ -357,6 +421,7 @@ private:
     bool m_animation_requested = false;  // An animation frame is pending
     std::chrono::steady_clock::time_point m_last_invalidate_time;  // Last actual invalidation
     static constexpr float TARGET_FRAME_INTERVAL_MS = 16.6f;  // ~60 FPS target
+    static constexpr float SPECTRUM_FRAME_INTERVAL_MS = 33.3f;  // ~30 FPS for spectrum-only
     
     // Track which animation systems are active (for determining when to stop the loop)
     bool m_seekbar_animating = false;
@@ -370,6 +435,13 @@ private:
     // Timer-based animation scheduling
     static constexpr UINT_PTR ANIMATION_TIMER_ID = 1001;
     bool m_animation_timer_active = false;
+    
+    // Command state polling timer (private members - public interface above)
+    static constexpr UINT COMMAND_STATE_POLL_INTERVAL_MS = 500;
+    bool m_command_state_timer_active = false;
+    CommandState m_cbutton_states[6] = {};  // Cached command state for visible buttons
+    void start_command_state_timer();
+    void stop_command_state_timer();
     
     void request_animation(const RECT* dirty = nullptr);  // Request an animation frame (throttled)
     RECT m_animation_dirty_rect = {};   // Dirty region for partial invalidation
