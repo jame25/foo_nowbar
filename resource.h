@@ -178,6 +178,9 @@
 
 // Online Artwork checkbox (Appearance tab)
 #define IDC_ONLINE_ARTWORK_CHECK       1416
+#define IDC_FOO_ARTWORK_LINK           1417
+#define IDC_FOO_TRAYCONTROLS_LINK      1418
+#define IDC_FOO_SVG_SERVICES_LINK      1419
 
 // Profile configuration controls (Custom Button tab)
 #define IDC_PROFILE_NAME_LABEL     1370
