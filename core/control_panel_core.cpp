@@ -2873,16 +2873,7 @@ void ControlPanelCore::draw_full_spectrum(HDC hdc) {
   BYTE wg = 255 - ag;
   BYTE wb = 255 - ab;
 
-  // Pre-multiply alpha for DIBSECTION (BGRA, premultiplied)
-  uint32_t accent_pixel = ((uint32_t)alpha << 24) |
-      ((uint32_t)((ar * alpha) / 255) << 16) |
-      ((uint32_t)((ag * alpha) / 255) << 8) |
-      ((uint32_t)((ab * alpha) / 255));
-  uint32_t water_pixel = ((uint32_t)alpha << 24) |
-      ((uint32_t)((wr * alpha) / 255) << 16) |
-      ((uint32_t)((wg * alpha) / 255) << 8) |
-      ((uint32_t)((wb * alpha) / 255));
-
+  int alpha_top = alpha / 3;
   int spec_shape = get_nowbar_spectrum_shape();
   int stride = area_w;  // pixels per row (DIBSECTION is tightly packed)
 
@@ -2907,15 +2898,12 @@ void ControlPanelCore::draw_full_spectrum(HDC hdc) {
     // Water portion height
     float water_frac = value * 0.5f;
     if (water_frac > 0.5f) water_frac = 0.5f;
-    int water_h = (int)(bar_h * water_frac);
-    int accent_h = bar_h - water_h;
-    int water_top = area_h - water_h;
+    int accent_h = bar_h - (int)(bar_h * water_frac);
     int radius = (int)radius_f;
+    float water_level = (bar_h > 1) ? (float)accent_h / bar_h : 1.0f;
 
-    // Fill accent portion
-    int accent_start = by;
-    int accent_end = by + accent_h;
-    for (int row = accent_start; row < accent_end; row++) {
+    // Single pass: per-row gradient from faded accent (top) -> accent (middle) -> water (bottom)
+    for (int row = by; row < area_h; row++) {
       if (row < 0 || row >= area_h) continue;
       int left = bx;
       int right = bx + bw;
@@ -2934,20 +2922,36 @@ void ControlPanelCore::draw_full_spectrum(HDC hdc) {
         right = pr;
       }
 
+      // Compute per-row gradient color
+      float t = (bar_h > 1) ? (float)(row - by) / (float)(bar_h - 1) : 0.0f;
+      int row_a, row_r, row_g, row_b;
+      if (t <= water_level) {
+        // Accent section: alpha fades from alpha_top to full, color stays accent
+        float s = (water_level > 0.0f) ? t / water_level : 0.0f;
+        row_a = alpha_top + (int)((alpha - alpha_top) * s);
+        row_r = ar; row_g = ag; row_b = ab;
+      } else {
+        // Water section: color transitions from accent to water at full alpha
+        float s = (water_level < 1.0f) ? (t - water_level) / (1.0f - water_level) : 1.0f;
+        row_a = alpha;
+        row_r = (int)ar + (int)(((int)wr - (int)ar) * s);
+        row_g = (int)ag + (int)(((int)wg - (int)ag) * s);
+        row_b = (int)ab + (int)(((int)wb - (int)ab) * s);
+      }
+      row_a = std::max(0, std::min(255, row_a));
+      row_r = std::max(0, std::min(255, row_r));
+      row_g = std::max(0, std::min(255, row_g));
+      row_b = std::max(0, std::min(255, row_b));
+
+      // Pre-multiply alpha for DIBSECTION (BGRA, premultiplied)
+      uint32_t row_pixel = ((uint32_t)row_a << 24) |
+          ((uint32_t)((row_r * row_a) / 255) << 16) |
+          ((uint32_t)((row_g * row_a) / 255) << 8) |
+          ((uint32_t)((row_b * row_a) / 255));
+
       uint32_t* pixel = m_spectrum_overlay_bits + row * stride + left;
       for (int col = left; col < right; col++) {
-        *pixel++ = accent_pixel;
-      }
-    }
-
-    // Fill water portion
-    if (water_h >= 1) {
-      for (int row = water_top; row < area_h; row++) {
-        if (row < 0) continue;
-        uint32_t* pixel = m_spectrum_overlay_bits + row * stride + bx;
-        for (int col = 0; col < bw; col++) {
-          *pixel++ = water_pixel;
-        }
+        *pixel++ = row_pixel;
       }
     }
   }
@@ -3013,8 +3017,7 @@ void ControlPanelCore::draw_full_spectrum_gdiplus(Gdiplus::Graphics& g) {
   g.SetSmoothingMode(Gdiplus::SmoothingModeNone);
   g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeNone);
 
-  Gdiplus::SolidBrush accentBrush(Gdiplus::Color(alpha, accent_r, accent_g, accent_b));
-  Gdiplus::SolidBrush waterBrush(Gdiplus::Color(alpha, water_r, water_g, water_b));
+  int alpha_top = alpha / 3;
   Gdiplus::GraphicsPath path;
   float bottom_f = (float)m_rect_spectrum_full.bottom;
 
@@ -3034,29 +3037,36 @@ void ControlPanelCore::draw_full_spectrum_gdiplus(Gdiplus::Graphics& g) {
     float y = bottom_f - height;
     float water_frac = value * 0.5f;
     if (water_frac > 0.5f) water_frac = 0.5f;
-    float water_h = height * water_frac;
-    float accent_h = height - water_h;
-    float water_y = bottom_f - water_h;
+    float water_level = 1.0f - water_frac;
+
+    // Per-bar gradient: faded accent (top) -> accent (middle) -> water (bottom)
+    Gdiplus::LinearGradientBrush barBrush(
+        Gdiplus::PointF(x, y),
+        Gdiplus::PointF(x, bottom_f),
+        Gdiplus::Color(alpha_top, accent_r, accent_g, accent_b),
+        Gdiplus::Color(alpha, water_r, water_g, water_b));
+    Gdiplus::Color blendColors[3] = {
+        Gdiplus::Color(alpha_top, accent_r, accent_g, accent_b),
+        Gdiplus::Color(alpha, accent_r, accent_g, accent_b),
+        Gdiplus::Color(alpha, water_r, water_g, water_b)
+    };
+    float blendPositions[3] = { 0.0f, water_level, 1.0f };
+    barBrush.SetInterpolationColors(blendColors, blendPositions, 3);
 
     if (spec_shape == 0) {
       path.Reset();
-      if (accent_h > radius * 2.0f) {
+      if (height > radius * 2.0f) {
         path.AddArc(x, y, bar_w, radius * 2.0f, 180.0f, 180.0f);
-        path.AddLine(x + bar_w, y + radius, x + bar_w, water_y);
-        path.AddLine(x + bar_w, water_y, x, water_y);
-        path.AddLine(x, water_y, x, y + radius);
+        path.AddLine(x + bar_w, y + radius, x + bar_w, bottom_f);
+        path.AddLine(x + bar_w, bottom_f, x, bottom_f);
+        path.AddLine(x, bottom_f, x, y + radius);
       } else {
-        path.AddRectangle(Gdiplus::RectF(x, y, bar_w, accent_h));
+        path.AddRectangle(Gdiplus::RectF(x, y, bar_w, height));
       }
       path.CloseFigure();
-      g.FillPath(&accentBrush, &path);
-      if (water_h >= 1.0f)
-        g.FillRectangle(&waterBrush, x, water_y, bar_w, water_h);
+      g.FillPath(&barBrush, &path);
     } else {
-      if (accent_h >= 1.0f)
-        g.FillRectangle(&accentBrush, x, y, bar_w, accent_h);
-      if (water_h >= 1.0f)
-        g.FillRectangle(&waterBrush, x, water_y, bar_w, water_h);
+      g.FillRectangle(&barBrush, x, y, bar_w, height);
     }
   }
 
