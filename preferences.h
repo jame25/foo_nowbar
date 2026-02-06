@@ -14,6 +14,7 @@ int get_nowbar_bar_style();  // 0=Pill-shaped, 1=Rectangular
 bool get_nowbar_mood_icon_visible();  // true=Show, false=Hidden
 int get_nowbar_mood_tag_mode();  // 0=FEEDBACK, 1=2003_LOVED, 2=LFM_LOVED, 3=SMP_LOVED, 4=MOOD
 bool get_nowbar_stop_icon_visible();  // true=Show, false=Hidden
+bool get_nowbar_stop_after_current_icon_visible();  // true=Show, false=Hidden
 bool get_nowbar_super_icon_visible();  // true=Show, false=Hidden
 bool get_nowbar_miniplayer_icon_visible();  // true=Show, false=Hidden
 bool get_nowbar_hover_circles_enabled();  // true=Yes (show), false=No (hide)
@@ -69,6 +70,16 @@ void ensure_config_dir_exists();
 
 // Execute a foobar2000 main menu command by path
 bool execute_fb2k_action_by_path(const char* path);
+
+// Command state information for toggle-type commands
+struct CommandState {
+    bool found = false;      // Command exists in menu system
+    bool checked = false;    // Toggle is ON (flag_checked)
+    bool disabled = false;   // Command unavailable (flag_disabled)
+};
+
+// Query the state of a foobar2000 menu command without executing it
+CommandState get_fb2k_action_state_by_path(const char* path);
 
 // Get the effective background color for the current theme mode configuration
 // Can be called early before core is fully initialized
