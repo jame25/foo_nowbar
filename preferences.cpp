@@ -2276,6 +2276,7 @@ void nowbar_preferences::switch_tab(int tab) {
     ShowWindow(GetDlgItem(m_hwnd, IDC_VOLUME_ACCENT_LABEL), show_appearance);
     ShowWindow(GetDlgItem(m_hwnd, IDC_VOLUME_ACCENT_BTN), show_appearance);
     ShowWindow(GetDlgItem(m_hwnd, IDC_ONLINE_ARTWORK_CHECK), show_appearance);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_FOO_ARTWORK_LINK), show_appearance);
 
     // Icons tab controls (Tab 2)
     BOOL show_icons = (tab == 2) ? SW_SHOW : SW_HIDE;
@@ -2289,6 +2290,7 @@ void nowbar_preferences::switch_tab(int tab) {
     ShowWindow(GetDlgItem(m_hwnd, IDC_SUPER_ICON_COMBO), show_icons);
     ShowWindow(GetDlgItem(m_hwnd, IDC_MINIPLAYER_ICON_LABEL), show_icons);
     ShowWindow(GetDlgItem(m_hwnd, IDC_MINIPLAYER_ICON_COMBO), show_icons);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_FOO_TRAYCONTROLS_LINK), show_icons);
     ShowWindow(GetDlgItem(m_hwnd, IDC_HOVER_CIRCLES_LABEL), show_icons);
     ShowWindow(GetDlgItem(m_hwnd, IDC_HOVER_CIRCLES_COMBO), show_icons);
     ShowWindow(GetDlgItem(m_hwnd, IDC_ALTERNATE_ICONS_LABEL), show_icons);
@@ -2334,6 +2336,7 @@ void nowbar_preferences::switch_tab(int tab) {
     
     // Custom Button icon controls
     ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON_ICON_LABEL), show_cbutton);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_FOO_SVG_SERVICES_LINK), show_cbutton);
     ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON1_ICON), show_cbutton);
     ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON1_ICON_BROWSE), show_cbutton);
     ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON1_ICON_CLEAR), show_cbutton);
@@ -3432,6 +3435,10 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
             if (pnmhdr->idFrom == IDC_TAB_CONTROL && pnmhdr->code == TCN_SELCHANGE) {
                 int sel = TabCtrl_GetCurSel(pnmhdr->hwndFrom);
                 p_this->switch_tab(sel);
+            }
+            else if ((pnmhdr->idFrom == IDC_FOO_ARTWORK_LINK || pnmhdr->idFrom == IDC_FOO_TRAYCONTROLS_LINK || pnmhdr->idFrom == IDC_FOO_SVG_SERVICES_LINK) && (pnmhdr->code == NM_CLICK || pnmhdr->code == NM_RETURN)) {
+                NMLINK* pnmlink = reinterpret_cast<NMLINK*>(lp);
+                ShellExecuteW(nullptr, L"open", pnmlink->item.szUrl, nullptr, nullptr, SW_SHOWNORMAL);
             }
         }
         break;
