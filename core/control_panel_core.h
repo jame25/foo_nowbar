@@ -142,11 +142,9 @@ public:
     const RECT& get_waveform_rect() const { return m_rect_waveform; }
     // Clears only the rects that paint_waveform_only will redraw
     void clear_waveform_dirty_rects(HDC hdc, COLORREF bg) const {
-        // Only clear the waveform rect, not m_rect_time — in waveform mode
-        // m_rect_time spans the full seekbar width and overlaps with playback buttons.
-        // The time area is fully repainted by draw_background() within the clip region.
         HBRUSH brush = CreateSolidBrush(bg);
         FillRect(hdc, &m_rect_waveform, brush);
+        FillRect(hdc, &m_rect_time, brush);
         DeleteObject(brush);
     }
     bool is_waveform_progress_only() const {
@@ -293,6 +291,7 @@ private:
     HitRegion m_pressed_region = HitRegion::None;
     bool m_seeking = false;
     bool m_volume_dragging = false;
+    bool m_volume_wheel_active = false;  // True while mouse wheel is adjusting volume (for tooltip)
     float m_prev_volume_db = 0.0f;  // Store previous volume for mute toggle
     bool m_miniplayer_active = false;  // MiniPlayer enabled state for icon color
     bool m_mood_active = false;  // MOOD tag state for heart icon color
