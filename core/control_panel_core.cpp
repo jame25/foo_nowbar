@@ -108,26 +108,20 @@ static bool pt_in_rect(const RECT &r, int x, int y) {
   return x >= r.left && x < r.right && y >= r.top && y < r.bottom;
 }
 
-// Convert dB (-100 to 0) to perceptual slider position (0.0 to 1.0)
-// Uses square root curve so perceived loudness maps linearly to slider
-static inline float db_to_perceptual(float db) {
-    if (db <= -100.0f) return 0.0f;
+// Convert dB (-50 to 0) to slider position (0.0 to 1.0)
+// Below -50 dB maps to 0 (mute). Linear in dB so each slider increment = equal dB change.
+static inline float db_to_slider(float db) {
+    if (db <= -50.0f) return 0.0f;
     if (db >= 0.0f) return 1.0f;
-    // Convert dB to linear amplitude: 10^(dB/20)
-    float linear = std::pow(10.0f, db / 20.0f);
-    // Apply square root for perceptual mapping
-    return std::sqrt(linear);
+    return (db + 50.0f) / 50.0f;
 }
 
-// Convert perceptual slider position (0.0 to 1.0) to dB (-100 to 0)
-// Inverse of db_to_perceptual
-static inline float perceptual_to_db(float slider_pos) {
+// Convert slider position (0.0 to 1.0) to dB (-50 to 0)
+// Position 0 = mute (-100 dB). Inverse of db_to_slider.
+static inline float slider_to_db(float slider_pos) {
     if (slider_pos <= 0.0f) return -100.0f;
     if (slider_pos >= 1.0f) return 0.0f;
-    // Square the position to undo perceptual curve
-    float linear = slider_pos * slider_pos;
-    // Convert linear amplitude to dB: 20*log10(linear)
-    return 20.0f * std::log10(linear);
+    return (slider_pos * 50.0f) - 50.0f;
 }
 
 ControlPanelCore::ControlPanelCore() {
@@ -730,6 +724,7 @@ void ControlPanelCore::create_blurred_artwork(int target_width, int target_heigh
   
   // Create output bitmap at exact target size
   m_blurred_artwork.reset(new Gdiplus::Bitmap(target_width, target_height, PixelFormat32bppARGB));
+  m_blurred_artwork->SetResolution(96.0f * m_dpi_scale, 96.0f * m_dpi_scale);
   m_blurred_artwork_size = {(LONG)target_width, (LONG)target_height};
   
   // Lock output bitmap for direct write
@@ -1247,22 +1242,34 @@ void ControlPanelCore::update_layout(const RECT &rect) {
     // Alias seekbar to waveform so existing SeekBar hit_test works for seeking
     m_rect_seekbar = m_rect_waveform;
 
-    // Time display above waveform bar
-    int time_gap = static_cast<int>(2 * m_dpi_scale * m_size_scale);
-    m_rect_time = {m_rect_seekbar.left, m_rect_seekbar.top - static_cast<int>(m_metrics.text_height * m_size_scale) - time_gap,
-                   m_rect_seekbar.right,
-                   m_rect_seekbar.top - time_gap};
+    // Time display at the sides of the waveform bar (draw_time_display draws
+    // elapsed to the left and remaining to the right of m_rect_seekbar).
+    // Extend horizontally to cover both timer areas for correct clipping
+    // in the waveform fast paint path and invalidate_progress dirty rect.
+    int time_height = static_cast<int>(m_metrics.text_height * m_size_scale);
+    int seekbar_center_y = (m_rect_seekbar.top + m_rect_seekbar.bottom) / 2;
+    int timer_extent = static_cast<int>(120 * m_dpi_scale);
+    m_rect_time = {m_rect_seekbar.left - timer_extent,
+                   seekbar_center_y - time_height / 2,
+                   m_rect_seekbar.right + timer_extent,
+                   seekbar_center_y + time_height / 2};
 
   } else {
-    // Mode 0 (Disabled): existing behavior unchanged
+    // Mode 0 (Disabled): normal seekbar
     int seek_y = m_rect_play.bottom + seek_gap;
     m_rect_seekbar = {seekbar_left, seek_y, seekbar_right, seek_y + seekbar_height};
 
-    int time_gap = static_cast<int>(2 * m_dpi_scale * m_size_scale);
-    m_rect_time = {m_rect_seekbar.left, m_rect_seekbar.bottom + time_gap,
-                   m_rect_seekbar.right,
-                   m_rect_seekbar.bottom +
-                       static_cast<int>(m_metrics.text_height * m_size_scale)};
+    // Time display at the sides of the seekbar (draw_time_display draws
+    // elapsed to the left and remaining to the right of m_rect_seekbar).
+    // Extend horizontally to cover both timer areas so invalidate_progress
+    // correctly invalidates where the time text is actually drawn.
+    int time_height = static_cast<int>(m_metrics.text_height * m_size_scale);
+    int seekbar_center_y = (m_rect_seekbar.top + m_rect_seekbar.bottom) / 2;
+    int timer_extent = static_cast<int>(120 * m_dpi_scale);
+    m_rect_time = {m_rect_seekbar.left - timer_extent,
+                   seekbar_center_y - time_height / 2,
+                   m_rect_seekbar.right + timer_extent,
+                   seekbar_center_y + time_height / 2};
   }
 }
 
@@ -1484,6 +1491,12 @@ void ControlPanelCore::paint_spectrum_only(HDC hdc, const RECT& panel_rect) {
   g2.SetTextRenderingHint(Gdiplus::TextRenderingHintClearTypeGridFit);
   draw_thin_progress_bar(g2);
   draw_time_display_top_right(g2);
+
+  // Draw tooltips last so they render on top of all other elements
+  // (matches full paint path — without this, the background BitBlt above
+  // erases any tooltip drawn by a previous full paint, causing flicker)
+  draw_seekbar_tooltip(g2);
+  draw_volume_tooltip(g2);
 }
 
 void ControlPanelCore::paint_waveform_only(HDC hdc, const RECT& panel_rect) {
@@ -1611,7 +1624,7 @@ void ControlPanelCore::draw_background(Gdiplus::Graphics &g, const RECT &rect) {
       }
       
       if (m_blurred_artwork) {
-        target.DrawImage(m_blurred_artwork.get(), draw_x, draw_y);
+        target.DrawImage(m_blurred_artwork.get(), draw_x, draw_y, width, height);
       }
       
       BYTE overlay_alpha = m_dark_mode ? 140 : 180;
@@ -1640,6 +1653,7 @@ void ControlPanelCore::draw_background(Gdiplus::Graphics &g, const RECT &rect) {
     
     if (target_needs_update) {
       m_target_background.reset(new Gdiplus::Bitmap(width, height, PixelFormat32bppARGB));
+      m_target_background->SetResolution(96.0f * m_dpi_scale, 96.0f * m_dpi_scale);
       m_target_background_size = {(LONG)width, (LONG)height};
       
       Gdiplus::Graphics target_g(m_target_background.get());
@@ -1710,6 +1724,7 @@ void ControlPanelCore::draw_background(Gdiplus::Graphics &g, const RECT &rect) {
       // Create or resize cache bitmap if needed
       if (size_mismatch) {
         m_prev_background.reset(new Gdiplus::Bitmap(width, height, PixelFormat32bppARGB));
+        m_prev_background->SetResolution(96.0f * m_dpi_scale, 96.0f * m_dpi_scale);
         m_prev_background_size = {(LONG)width, (LONG)height};
       }
       
@@ -3338,12 +3353,7 @@ void ControlPanelCore::draw_volume(Gdiplus::Graphics &g) {
       ? Gdiplus::Color(40, 255, 255, 255) : m_button_hover_color;
 
   // Determine volume level based on bar position: 0=mute, 1=low, 2=full
-  // Volume bar: -100dB=0%, 0dB=100%
-  float level = (m_state.volume_db + 100.0f) / 100.0f; // 0.0 to 1.0
-  if (level < 0)
-    level = 0;
-  if (level > 1)
-    level = 1;
+  float level = db_to_slider(m_state.volume_db); // 0.0 to 1.0
 
   int vol_level = 2; // full (>50%)
   if (level <= 0)
@@ -3404,7 +3414,7 @@ void ControlPanelCore::draw_volume(Gdiplus::Graphics &g) {
   }
 
   // Level - use perceptual mapping so slider reflects perceived loudness
-  float bar_level = db_to_perceptual(m_state.volume_db);
+  float bar_level = db_to_slider(m_state.volume_db);
   int level_w = static_cast<int>(bar_w * bar_level);
 
   if (level_w > 0) {
@@ -3430,8 +3440,7 @@ void ControlPanelCore::draw_volume(Gdiplus::Graphics &g) {
 }
 
 void ControlPanelCore::draw_volume_tooltip(Gdiplus::Graphics &g) {
-  bool vol_bar_hovered = (m_hover_region == HitRegion::VolumeSlider) || m_volume_dragging;
-  if (!vol_bar_hovered)
+  if (!m_volume_wheel_active)
     return;
 
   // Recompute bar geometry (same as draw_volume)
@@ -3444,7 +3453,7 @@ void ControlPanelCore::draw_volume_tooltip(Gdiplus::Graphics &g) {
   int bar_h = static_cast<int>(m_metrics.seekbar_height * m_size_scale);
   int bar_y = m_rect_volume.top + (h - bar_h) / 2;
 
-  float bar_level = db_to_perceptual(m_state.volume_db);
+  float bar_level = db_to_slider(m_state.volume_db);
   int level_w = static_cast<int>(bar_w * bar_level);
 
   // Calculate dB at cursor position for hover, or use current volume for drag
@@ -3457,7 +3466,7 @@ void ControlPanelCore::draw_volume_tooltip(Gdiplus::Graphics &g) {
     cursor_x = m_volume_hover_x;
     double pos = static_cast<double>(cursor_x - bar_x) / bar_w;
     pos = std::max(0.0, std::min(1.0, pos));
-    tooltip_db = perceptual_to_db(static_cast<float>(pos));
+    tooltip_db = slider_to_db(static_cast<float>(pos));
   }
 
   // Format dB string
@@ -3578,6 +3587,7 @@ HitRegion ControlPanelCore::hit_test(int x, int y) const {
 }
 
 void ControlPanelCore::on_mouse_move(int x, int y) {
+  m_volume_wheel_active = false;
   HitRegion new_region = hit_test(x, y);
 
   if (m_seeking) {
@@ -3605,7 +3615,7 @@ void ControlPanelCore::on_mouse_move(int x, int y) {
     int bar_w = (m_rect_volume.right - m_rect_volume.left) - bar_offset;
     double level = static_cast<double>(x - bar_x) / bar_w;
     level = std::max(0.0, std::min(1.0, level));
-    float db = perceptual_to_db(static_cast<float>(level));
+    float db = slider_to_db(static_cast<float>(level));
     playback_control::get()->set_volume(db);
     // Update local state for immediate visual feedback
     m_state.volume_db = db;
@@ -3740,6 +3750,7 @@ void ControlPanelCore::on_mouse_move(int x, int y) {
 }
 
 void ControlPanelCore::on_mouse_leave() {
+  m_volume_wheel_active = false;
 
   if (m_hover_region != HitRegion::None) {
     m_hover_region = HitRegion::None;
@@ -4041,14 +4052,30 @@ void ControlPanelCore::on_lbutton_up(int x, int y) {
 
 void ControlPanelCore::on_mouse_wheel(int delta) {
   // Adjust volume with mouse wheel
+  m_volume_wheel_active = true;
   auto pc = playback_control::get();
   // delta is typically 120 per notch, positive = scroll up = volume up
   float volume_step = 2.5f; // dB per scroll notch
   float volume_change = (delta > 0) ? volume_step : -volume_step;
-  float new_volume = m_state.volume_db + volume_change;
-  // Clamp to valid range (-100 to 0 dB)
-  new_volume = std::max(-100.0f, std::min(0.0f, new_volume));
+  // When muted, scroll up should go to -50 dB (lowest non-mute value)
+  float base = (m_state.volume_db <= -100.0f && delta > 0) ? -50.0f : m_state.volume_db;
+  float new_volume = base + volume_change;
+  // Clamp to -50 dB minimum; below -50 snaps to mute (-100 dB)
+  if (new_volume < -50.0f)
+    new_volume = -100.0f;
+  else if (new_volume > 0.0f)
+    new_volume = 0.0f;
   pc->set_volume(new_volume);
+  // Update local state for immediate visual feedback (same as drag handler)
+  m_state.volume_db = new_volume;
+  // Update hover X to match new volume position so tooltip shows current dB
+  int icon_size = static_cast<int>(23 * m_dpi_scale * m_size_scale);
+  int bar_offset = icon_size + static_cast<int>(12 * m_dpi_scale * m_size_scale);
+  int bar_x = m_rect_volume.left + bar_offset;
+  int bar_w = (m_rect_volume.right - m_rect_volume.left) - bar_offset;
+  float bar_level = db_to_slider(new_volume);
+  m_volume_hover_x = bar_x + static_cast<int>(bar_w * bar_level);
+  invalidate();
 }
 
 void ControlPanelCore::on_lbutton_dblclk(int x, int y) {
@@ -6221,9 +6248,7 @@ void ControlPanelCore::start_waveform_computation() {
       m_waveform_valid = true;
       m_waveform_is_stream = false;
       m_waveform_track_path = path.c_str();
-      if (m_hwnd && ::IsWindow(m_hwnd)) {
-        ::InvalidateRect(m_hwnd, nullptr, FALSE);
-      }
+      invalidate();
       return;
     }
   }
@@ -6334,7 +6359,8 @@ void ControlPanelCore::start_waveform_computation() {
       }
       m_waveform_computing = false;
 
-      // Trigger repaint on main thread
+      // Trigger full repaint on main thread (layout changes with waveform data)
+      m_needs_full_repaint = true;
       if (hwnd && ::IsWindow(hwnd)) {
         ::InvalidateRect(hwnd, nullptr, FALSE);
       }
