@@ -175,12 +175,30 @@
 #define IDC_VIS_WAVEFORM_WIDTH_COMBO 1413
 #define IDC_VIS_WAVEFORM_UNPLAYED_COLOR_LABEL 1414
 #define IDC_VIS_WAVEFORM_UNPLAYED_COLOR_BTN   1415
+#define IDC_VIS_60FPS_CHECK                   1420
 
 // Online Artwork checkbox (Appearance tab)
 #define IDC_ONLINE_ARTWORK_CHECK       1416
 #define IDC_FOO_ARTWORK_LINK           1417
 #define IDC_FOO_TRAYCONTROLS_LINK      1418
 #define IDC_FOO_SVG_SERVICES_LINK      1419
+
+// Color custom-enable checkboxes (Fonts & Colors tab)
+#define IDC_COLORS_GROUP               1500
+#define IDC_CUSTOM_BUTTON_ACCENT_CHECK 1501
+#define IDC_CUSTOM_PLAY_ACCENT_CHECK   1502
+#define IDC_CUSTOM_PROGRESS_ACCENT_CHECK 1503
+#define IDC_CUSTOM_VOLUME_ACCENT_CHECK 1504
+#define IDC_CUSTOM_HOVER_COLOR_CHECK   1505
+#define IDC_CUSTOM_SPECTRUM_COLOR_CHECK 1506
+#define IDC_CUSTOM_WAVEFORM_COLOR_CHECK 1507
+#define IDC_CUSTOM_WAVEFORM_UNPLAYED_CHECK 1508
+
+// New color picker buttons
+#define IDC_PLAY_ACCENT_LABEL          1509
+#define IDC_PLAY_ACCENT_BTN            1510
+#define IDC_HOVER_COLOR_LABEL          1511
+#define IDC_HOVER_COLOR_BTN            1512
 
 // Profile configuration controls (Custom Button tab)
 #define IDC_PROFILE_NAME_LABEL     1370
