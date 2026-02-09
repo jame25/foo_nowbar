@@ -510,8 +510,8 @@ void ControlPanelCore::apply_custom_colors() {
     return;
   }
   
-  COLORREF bg, text, highlight;
-  if (m_color_query_cb(bg, text, highlight)) {
+  COLORREF bg, text, highlight, selection;
+  if (m_color_query_cb(bg, text, highlight, selection)) {
 
     // Determine if this is a dark or light theme based on background luminance
     // Using relative luminance formula: 0.299*R + 0.587*G + 0.114*B
@@ -532,7 +532,12 @@ void ControlPanelCore::apply_custom_colors() {
     
     // Accent color from highlight
     m_accent_color = Gdiplus::Color(255, GetRValue(highlight), GetGValue(highlight), GetBValue(highlight));
-    
+
+    // Cache theme colors for preference fallback
+    m_theme_highlight = highlight;
+    m_theme_selection = selection;
+    m_theme_text = text;
+
     // Hover color - semi-transparent version of text color
     m_button_hover_color = Gdiplus::Color(40, GetRValue(text), GetGValue(text), GetBValue(text));
     
@@ -1339,11 +1344,19 @@ void ControlPanelCore::paint(HDC hdc, const RECT &rect) {
     int bg_style = get_nowbar_background_style();
     bool use_light_foreground = (bg_style == 1 && m_artwork_colors_valid) || 
                                 (bg_style == 2 && m_blurred_artwork);
-    Gdiplus::Color mp_hover_color = use_light_foreground 
-        ? Gdiplus::Color(40, 255, 255, 255) : m_button_hover_color;
+    Gdiplus::Color mp_hover_color;
+    if (use_light_foreground) {
+        mp_hover_color = Gdiplus::Color(40, 255, 255, 255);
+    } else if (get_nowbar_custom_hover_color_enabled()) {
+        COLORREF hc = get_nowbar_hover_color();
+        mp_hover_color = Gdiplus::Color(40, GetRValue(hc), GetGValue(hc), GetBValue(hc));
+    } else {
+        mp_hover_color = Gdiplus::Color(40, GetRValue(m_theme_selection), GetGValue(m_theme_selection), GetBValue(m_theme_selection));
+    }
     Gdiplus::Color mp_secondary_color = use_light_foreground 
         ? Gdiplus::Color(255, 200, 200, 200) : m_text_secondary_color;
-    COLORREF mp_btn_accent = get_nowbar_button_accent_color();
+    COLORREF mp_btn_accent = get_nowbar_custom_button_accent_enabled()
+        ? get_nowbar_button_accent_color() : m_theme_highlight;
     Gdiplus::Color mp_accent_override(255, GetRValue(mp_btn_accent), GetGValue(mp_btn_accent), GetBValue(mp_btn_accent));
     
     if (mp_hovered && get_nowbar_hover_circles_enabled()) {
@@ -1923,12 +1936,19 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
       : m_text_secondary_color;
 
   // Get custom button accent color from preferences
-  COLORREF btn_accent = get_nowbar_button_accent_color();
+  COLORREF btn_accent = get_nowbar_custom_button_accent_enabled()
+      ? get_nowbar_button_accent_color() : m_theme_highlight;
   Gdiplus::Color custom_accent(255, GetRValue(btn_accent), GetGValue(btn_accent), GetBValue(btn_accent));
   Gdiplus::Color icon_accent_color = custom_accent;
-  Gdiplus::Color icon_hover_color = use_light_foreground
-      ? Gdiplus::Color(40, 255, 255, 255)   // White hover for dark backgrounds
-      : m_button_hover_color;
+  Gdiplus::Color icon_hover_color;
+  if (use_light_foreground) {
+      icon_hover_color = Gdiplus::Color(40, 255, 255, 255);
+  } else if (get_nowbar_custom_hover_color_enabled()) {
+      COLORREF hc = get_nowbar_hover_color();
+      icon_hover_color = Gdiplus::Color(40, GetRValue(hc), GetGValue(hc), GetBValue(hc));
+  } else {
+      icon_hover_color = Gdiplus::Color(40, GetRValue(m_theme_selection), GetGValue(m_theme_selection), GetBValue(m_theme_selection));
+  }
   
   // Heart button (mood toggle) - only if visible
   if (get_nowbar_mood_icon_visible()) {
@@ -2029,8 +2049,11 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
     }
   } else {
     // Default icons: white/light background circle
-    Gdiplus::Color bgColor = (play_hovered && show_hover) ? Gdiplus::Color(255, 255, 255, 255)
-                                          : Gdiplus::Color(255, 230, 230, 230);
+    COLORREF play_accent = get_nowbar_custom_play_accent_enabled()
+        ? get_nowbar_play_accent_color() : m_theme_highlight;
+    Gdiplus::Color bgColor = (play_hovered && show_hover)
+        ? Gdiplus::Color(255, 255, 255, 255)
+        : Gdiplus::Color(255, GetRValue(play_accent), GetGValue(play_accent), GetBValue(play_accent));
     Gdiplus::SolidBrush bgBrush(bgColor);
     g.FillEllipse(&bgBrush, playRect.left, playRect.top, play_rect_w, play_rect_h);
 
@@ -2428,7 +2451,8 @@ void ControlPanelCore::draw_seekbar(Gdiplus::Graphics &g) {
 
   if (progress_w > 0) {
     // Get custom progress accent color from preferences
-    COLORREF prog_accent = get_nowbar_progress_accent_color();
+    COLORREF prog_accent = get_nowbar_custom_progress_accent_enabled()
+        ? get_nowbar_progress_accent_color() : m_theme_highlight;
     Gdiplus::SolidBrush progressBrush(
         Gdiplus::Color(255, GetRValue(prog_accent), GetGValue(prog_accent), GetBValue(prog_accent)));
     if (is_pill && progress_w > radius * 2) {
@@ -2455,7 +2479,7 @@ void ControlPanelCore::draw_seekbar(Gdiplus::Graphics &g) {
 
   // Seek handle (only on hover)
   if (m_hover_region == HitRegion::SeekBar || m_seeking) {
-    int handle_size = static_cast<int>(14 * m_dpi_scale * m_size_scale);
+    int handle_size = track_h * 2;
     int handle_x = m_rect_seekbar.left + progress_w - handle_size / 2;
     int handle_y = m_rect_seekbar.top + (h - handle_size) / 2;
     Gdiplus::SolidBrush handleBrush(Gdiplus::Color(255, 255, 255, 255));
@@ -2736,7 +2760,8 @@ void ControlPanelCore::draw_spectrum(Gdiplus::Graphics& g) {
   float radius = bar_w * 0.5f;
 
   // Determine colors - always use user's spectrum color setting
-  COLORREF spec_color = get_nowbar_spectrum_color();
+  COLORREF spec_color = get_nowbar_custom_spectrum_color_enabled()
+      ? get_nowbar_spectrum_color() : m_theme_highlight;
   Gdiplus::Color accent(255, GetRValue(spec_color), GetGValue(spec_color), GetBValue(spec_color));
   int alpha = (int)(192 * m_spectrum_opacity);  // 75% of 255 ~ 192
 
@@ -2810,7 +2835,8 @@ void ControlPanelCore::draw_thin_progress_bar(Gdiplus::Graphics& g) {
   int progress_w = static_cast<int>(w * progress);
 
   if (progress_w > 0) {
-    COLORREF prog_accent = get_nowbar_progress_accent_color();
+    COLORREF prog_accent = get_nowbar_custom_progress_accent_enabled()
+        ? get_nowbar_progress_accent_color() : m_theme_highlight;
     Gdiplus::SolidBrush progressBrush(
         Gdiplus::Color(255, GetRValue(prog_accent), GetGValue(prog_accent), GetBValue(prog_accent)));
     g.FillRectangle(&progressBrush, m_rect_thin_progress.left, top, progress_w, h);
@@ -2917,7 +2943,8 @@ void ControlPanelCore::draw_full_spectrum(HDC hdc) {
   if (bar_w_f < 1.0f) bar_w_f = 1.0f;
   float radius_f = bar_w_f * 0.5f;
 
-  COLORREF spec_color = get_nowbar_spectrum_color();
+  COLORREF spec_color = get_nowbar_custom_spectrum_color_enabled()
+      ? get_nowbar_spectrum_color() : m_theme_highlight;
   int alpha = (int)(192 * m_spectrum_opacity * m_spectrum_hover_opacity);
   if (alpha > 255) alpha = 255;
   BYTE ar = GetRValue(spec_color);
@@ -3060,7 +3087,8 @@ void ControlPanelCore::draw_full_spectrum_gdiplus(Gdiplus::Graphics& g) {
   if (bar_w < 1.0f) bar_w = 1.0f;
   float radius = bar_w * 0.5f;
 
-  COLORREF spec_color = get_nowbar_spectrum_color();
+  COLORREF spec_color = get_nowbar_custom_spectrum_color_enabled()
+      ? get_nowbar_spectrum_color() : m_theme_highlight;
   int alpha = (int)(192 * m_spectrum_opacity * m_spectrum_hover_opacity);
   BYTE accent_r = GetRValue(spec_color), accent_g = GetGValue(spec_color), accent_b = GetBValue(spec_color);
   BYTE water_r = 255 - accent_r, water_g = 255 - accent_g, water_b = 255 - accent_b;
@@ -3129,8 +3157,10 @@ void ControlPanelCore::draw_full_spectrum_gdiplus(Gdiplus::Graphics& g) {
 }
 
 void ControlPanelCore::update_waveform_brushes() {
-    COLORREF wave_color = get_nowbar_waveform_color();
-    COLORREF unplayed_color = get_nowbar_waveform_unplayed_color();
+    COLORREF wave_color = get_nowbar_custom_waveform_color_enabled()
+        ? get_nowbar_waveform_color() : m_theme_highlight;
+    COLORREF unplayed_color = get_nowbar_custom_waveform_unplayed_enabled()
+        ? get_nowbar_waveform_unplayed_color() : m_theme_text;
     m_waveform_brush_accent = std::make_unique<Gdiplus::SolidBrush>(
         Gdiplus::Color(255, GetRValue(wave_color), GetGValue(wave_color), GetBValue(wave_color)));
     m_waveform_brush_dim = std::make_unique<Gdiplus::SolidBrush>(
@@ -3162,7 +3192,8 @@ void ControlPanelCore::draw_waveform_bar(Gdiplus::Graphics& g) {
   }
 
   // Keep color values for placeholder rendering (not a hot path)
-  COLORREF wave_color = get_nowbar_waveform_color();
+  COLORREF wave_color = get_nowbar_custom_waveform_color_enabled()
+      ? get_nowbar_waveform_color() : m_theme_highlight;
 
   // Lock and read waveform data
   std::vector<float> peaks;
@@ -3349,8 +3380,15 @@ void ControlPanelCore::draw_volume(Gdiplus::Graphics &g) {
                               (bg_style == 2 && m_blurred_artwork);
   Gdiplus::Color volume_icon_color = use_light_foreground
       ? Gdiplus::Color(255, 200, 200, 200) : m_text_secondary_color;
-  Gdiplus::Color vol_hover_color = use_light_foreground
-      ? Gdiplus::Color(40, 255, 255, 255) : m_button_hover_color;
+  Gdiplus::Color vol_hover_color;
+  if (use_light_foreground) {
+      vol_hover_color = Gdiplus::Color(40, 255, 255, 255);
+  } else if (get_nowbar_custom_hover_color_enabled()) {
+      COLORREF hc = get_nowbar_hover_color();
+      vol_hover_color = Gdiplus::Color(40, GetRValue(hc), GetGValue(hc), GetBValue(hc));
+  } else {
+      vol_hover_color = Gdiplus::Color(40, GetRValue(m_theme_selection), GetGValue(m_theme_selection), GetBValue(m_theme_selection));
+  }
 
   // Determine volume level based on bar position: 0=mute, 1=low, 2=full
   float level = db_to_slider(m_state.volume_db); // 0.0 to 1.0
@@ -3419,7 +3457,8 @@ void ControlPanelCore::draw_volume(Gdiplus::Graphics &g) {
 
   if (level_w > 0) {
     // Get custom volume accent color from preferences
-    COLORREF vol_accent = get_nowbar_volume_accent_color();
+    COLORREF vol_accent = get_nowbar_custom_volume_accent_enabled()
+        ? get_nowbar_volume_accent_color() : m_theme_highlight;
     Gdiplus::SolidBrush levelBrush(
         Gdiplus::Color(255, GetRValue(vol_accent), GetGValue(vol_accent), GetBValue(vol_accent)));
     if (is_pill && level_w > radius * 2) {
@@ -3435,6 +3474,15 @@ void ControlPanelCore::draw_volume(Gdiplus::Graphics &g) {
     } else {
       g.FillRectangle(&levelBrush, bar_x, bar_y, level_w, bar_h);
     }
+  }
+
+  // Volume handle dot (only on hover or drag)
+  if (m_hover_region == HitRegion::VolumeSlider || m_volume_dragging) {
+    int handle_size = bar_h * 2;
+    int handle_x = bar_x + level_w - handle_size / 2;
+    int handle_y = m_rect_volume.top + (h - handle_size) / 2;
+    Gdiplus::SolidBrush handleBrush(Gdiplus::Color(255, 255, 255, 255));
+    g.FillEllipse(&handleBrush, handle_x, handle_y, handle_size, handle_size);
   }
 
 }
@@ -4917,12 +4965,14 @@ void ControlPanelCore::request_animation(const RECT* dirty) {
     m_animation_dirty_partial = false;
   }
 
-  // Use 30 FPS when only spectrum is animating (no other animations active)
+  // Use 30 FPS when only spectrum is animating (no other animations active),
+  // unless 60fps mode is enabled in preferences
   bool spectrum_only = m_spectrum_animating && !m_seekbar_animating &&
                        !m_hover_animating && !m_cbutton_animating &&
                        !m_bg_animating && !m_waveform_animating;
-  float target_interval = spectrum_only ? SPECTRUM_FRAME_INTERVAL_MS : TARGET_FRAME_INTERVAL_MS;
-  UINT max_delay = spectrum_only ? 34 : 17;
+  bool use_30fps = spectrum_only && !get_nowbar_vis_60fps();
+  float target_interval = use_30fps ? SPECTRUM_FRAME_INTERVAL_MS : TARGET_FRAME_INTERVAL_MS;
+  UINT max_delay = use_30fps ? 34 : 17;
 
   auto now = std::chrono::steady_clock::now();
   float elapsed_ms = std::chrono::duration<float, std::milli>(now - m_last_invalidate_time).count();
