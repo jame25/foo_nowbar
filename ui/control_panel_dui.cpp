@@ -226,13 +226,13 @@ LRESULT ControlPanelDUI::handle_message(UINT msg, WPARAM wp, LPARAM lp) {
         });
         
         // Set color query callback for Custom theme mode (DUI color scheme sync)
-        m_core->set_color_query_callback([this](COLORREF& bg, COLORREF& text, COLORREF& highlight) -> bool {
+        m_core->set_color_query_callback([this](COLORREF& bg, COLORREF& text, COLORREF& highlight, COLORREF& selection) -> bool {
             if (!m_callback.is_valid()) return false;
             try {
-                // Use query_std_color which provides fallback to system colors when not user-overridden
                 bg = m_callback->query_std_color(ui_color_background);
                 text = m_callback->query_std_color(ui_color_text);
-                highlight = m_callback->query_std_color(ui_color_selection);
+                highlight = m_callback->query_std_color(ui_color_highlight);
+                selection = m_callback->query_std_color(ui_color_selection);
                 return true;
             } catch (...) {
                 return false;
