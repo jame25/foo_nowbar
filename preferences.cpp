@@ -120,6 +120,52 @@ static cfg_int cfg_nowbar_volume_accent_color(
     RGB(140, 140, 140)  // Default: Gray (matches current volume bar color)
 );
 
+// Play/Pause button accent color
+static cfg_int cfg_nowbar_play_accent_color(
+    GUID{0xABCDEFA0, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xA0}},
+    RGB(100, 180, 255)  // Default: same as button accent
+);
+
+// Button hover color
+static cfg_int cfg_nowbar_hover_color(
+    GUID{0xABCDEFA1, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xA1}},
+    RGB(255, 255, 255)  // Default: white (40 alpha applied at render time)
+);
+
+// Custom color enable flags (0=use theme, 1=use custom)
+static cfg_int cfg_custom_button_accent_enabled(
+    GUID{0xABCDEFB0, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xB0}},
+    0  // Default: use theme color
+);
+static cfg_int cfg_custom_play_accent_enabled(
+    GUID{0xABCDEFB1, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xB1}},
+    0  // Default: use theme color
+);
+static cfg_int cfg_custom_progress_accent_enabled(
+    GUID{0xABCDEFB2, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xB2}},
+    0  // Default: use theme color
+);
+static cfg_int cfg_custom_volume_accent_enabled(
+    GUID{0xABCDEFB3, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xB3}},
+    0  // Default: use theme color
+);
+static cfg_int cfg_custom_hover_color_enabled(
+    GUID{0xABCDEFB4, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xB4}},
+    0  // Default: use theme color (Selection)
+);
+static cfg_int cfg_custom_spectrum_color_enabled(
+    GUID{0xABCDEFB5, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xB5}},
+    0  // Default: use theme color
+);
+static cfg_int cfg_custom_waveform_color_enabled(
+    GUID{0xABCDEFB6, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xB6}},
+    0  // Default: use theme color
+);
+static cfg_int cfg_custom_waveform_unplayed_enabled(
+    GUID{0xABCDEFB7, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xB7}},
+    0  // Default: use theme color (Text)
+);
+
 static cfg_int cfg_nowbar_infinite_playback(
     GUID{0xABCDEF58, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xE8}},
     0  // Default: Disabled
@@ -158,6 +204,11 @@ static cfg_int cfg_nowbar_spectrum_width(
 static cfg_int cfg_nowbar_spectrum_shape(
     GUID{0xABCDEF83, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0x83}},
     0  // Default: Pill (0=Pill, 1=Rectangle)
+);
+
+static cfg_int cfg_nowbar_vis_60fps(
+    GUID{0xABCDEF84, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0x84}},
+    0  // Default: Disabled (0=30fps spectrum, 1=60fps spectrum)
 );
 
 static cfg_int cfg_nowbar_waveform_color(
@@ -1421,6 +1472,10 @@ int get_nowbar_spectrum_shape() {
     return s;
 }
 
+bool get_nowbar_vis_60fps() {
+    return cfg_nowbar_vis_60fps != 0;
+}
+
 COLORREF get_nowbar_waveform_color() {
     return static_cast<COLORREF>(cfg_nowbar_waveform_color.get_value());
 }
@@ -1464,6 +1519,39 @@ COLORREF get_nowbar_progress_accent_color() {
 
 COLORREF get_nowbar_volume_accent_color() {
     return static_cast<COLORREF>(cfg_nowbar_volume_accent_color.get_value());
+}
+
+COLORREF get_nowbar_play_accent_color() {
+    return static_cast<COLORREF>(cfg_nowbar_play_accent_color.get_value());
+}
+
+COLORREF get_nowbar_hover_color() {
+    return static_cast<COLORREF>(cfg_nowbar_hover_color.get_value());
+}
+
+bool get_nowbar_custom_button_accent_enabled() {
+    return cfg_custom_button_accent_enabled != 0;
+}
+bool get_nowbar_custom_play_accent_enabled() {
+    return cfg_custom_play_accent_enabled != 0;
+}
+bool get_nowbar_custom_progress_accent_enabled() {
+    return cfg_custom_progress_accent_enabled != 0;
+}
+bool get_nowbar_custom_volume_accent_enabled() {
+    return cfg_custom_volume_accent_enabled != 0;
+}
+bool get_nowbar_custom_hover_color_enabled() {
+    return cfg_custom_hover_color_enabled != 0;
+}
+bool get_nowbar_custom_spectrum_color_enabled() {
+    return cfg_custom_spectrum_color_enabled != 0;
+}
+bool get_nowbar_custom_waveform_color_enabled() {
+    return cfg_custom_waveform_color_enabled != 0;
+}
+bool get_nowbar_custom_waveform_unplayed_enabled() {
+    return cfg_custom_waveform_unplayed_enabled != 0;
 }
 
 bool get_nowbar_custom_button_visible() {
@@ -2211,7 +2299,7 @@ void nowbar_preferences::init_tab_control() {
     tie.pszText = (LPWSTR)L"Custom Button";
     TabCtrl_InsertItem(hTab, 3, &tie);
 
-    tie.pszText = (LPWSTR)L"Fonts";
+    tie.pszText = (LPWSTR)L"Fonts && Colors";
     TabCtrl_InsertItem(hTab, 4, &tie);
 }
 
@@ -2238,20 +2326,15 @@ void nowbar_preferences::switch_tab(int tab) {
     // Visualization section
     ShowWindow(GetDlgItem(m_hwnd, IDC_VIS_GROUP), show_general);
     ShowWindow(GetDlgItem(m_hwnd, IDC_VIS_ENABLE_CHECK), show_general);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_VIS_60FPS_CHECK), show_general);
     ShowWindow(GetDlgItem(m_hwnd, IDC_VIS_SPECTRUM_RADIO), show_general);
     ShowWindow(GetDlgItem(m_hwnd, IDC_VIS_SPECTRUM_WIDTH_LABEL), show_general);
     ShowWindow(GetDlgItem(m_hwnd, IDC_VIS_SPECTRUM_WIDTH_COMBO), show_general);
-    ShowWindow(GetDlgItem(m_hwnd, IDC_VIS_SPECTRUM_COLOR_LABEL), show_general);
-    ShowWindow(GetDlgItem(m_hwnd, IDC_VIS_SPECTRUM_COLOR_BTN), show_general);
     ShowWindow(GetDlgItem(m_hwnd, IDC_VIS_SPECTRUM_SHAPE_LABEL), show_general);
     ShowWindow(GetDlgItem(m_hwnd, IDC_VIS_SPECTRUM_SHAPE_COMBO), show_general);
     ShowWindow(GetDlgItem(m_hwnd, IDC_VIS_WAVEFORM_RADIO), show_general);
-    ShowWindow(GetDlgItem(m_hwnd, IDC_VIS_WAVEFORM_COLOR_LABEL), show_general);
-    ShowWindow(GetDlgItem(m_hwnd, IDC_VIS_WAVEFORM_COLOR_BTN), show_general);
     ShowWindow(GetDlgItem(m_hwnd, IDC_VIS_WAVEFORM_WIDTH_LABEL), show_general);
     ShowWindow(GetDlgItem(m_hwnd, IDC_VIS_WAVEFORM_WIDTH_COMBO), show_general);
-    ShowWindow(GetDlgItem(m_hwnd, IDC_VIS_WAVEFORM_UNPLAYED_COLOR_LABEL), show_general);
-    ShowWindow(GetDlgItem(m_hwnd, IDC_VIS_WAVEFORM_UNPLAYED_COLOR_BTN), show_general);
 
     // Appearance tab controls (Tab 1)
     BOOL show_appearance = (tab == 1) ? SW_SHOW : SW_HIDE;
@@ -2269,12 +2352,6 @@ void nowbar_preferences::switch_tab(int tab) {
     ShowWindow(GetDlgItem(m_hwnd, IDC_GLASS_EFFECT_COMBO), show_appearance);
     ShowWindow(GetDlgItem(m_hwnd, IDC_SMOOTH_ANIMATIONS_LABEL), show_appearance);
     ShowWindow(GetDlgItem(m_hwnd, IDC_SMOOTH_ANIMATIONS_COMBO), show_appearance);
-    ShowWindow(GetDlgItem(m_hwnd, IDC_BUTTON_ACCENT_LABEL), show_appearance);
-    ShowWindow(GetDlgItem(m_hwnd, IDC_BUTTON_ACCENT_BTN), show_appearance);
-    ShowWindow(GetDlgItem(m_hwnd, IDC_PROGRESS_ACCENT_LABEL), show_appearance);
-    ShowWindow(GetDlgItem(m_hwnd, IDC_PROGRESS_ACCENT_BTN), show_appearance);
-    ShowWindow(GetDlgItem(m_hwnd, IDC_VOLUME_ACCENT_LABEL), show_appearance);
-    ShowWindow(GetDlgItem(m_hwnd, IDC_VOLUME_ACCENT_BTN), show_appearance);
     ShowWindow(GetDlgItem(m_hwnd, IDC_ONLINE_ARTWORK_CHECK), show_appearance);
     ShowWindow(GetDlgItem(m_hwnd, IDC_FOO_ARTWORK_LINK), show_appearance);
 
@@ -2371,7 +2448,7 @@ void nowbar_preferences::switch_tab(int tab) {
     ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON5_LABEL), show_cbutton);
     ShowWindow(GetDlgItem(m_hwnd, IDC_CBUTTON6_LABEL), show_cbutton);
     
-    // Fonts tab controls (Tab 4)
+    // Fonts & Colors tab controls (Tab 4)
     BOOL show_fonts = (tab == 4) ? SW_SHOW : SW_HIDE;
     ShowWindow(GetDlgItem(m_hwnd, IDC_FONTS_GROUP), show_fonts);
     ShowWindow(GetDlgItem(m_hwnd, IDC_TRACK_FONT_LABEL), show_fonts);
@@ -2383,6 +2460,24 @@ void nowbar_preferences::switch_tab(int tab) {
     ShowWindow(GetDlgItem(m_hwnd, IDC_TIME_FONT_LABEL), show_fonts);
     ShowWindow(GetDlgItem(m_hwnd, IDC_TIME_FONT_DISPLAY), show_fonts);
     ShowWindow(GetDlgItem(m_hwnd, IDC_TIME_FONT_SELECT), show_fonts);
+    // Color Settings controls
+    ShowWindow(GetDlgItem(m_hwnd, IDC_COLORS_GROUP), show_fonts);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CUSTOM_BUTTON_ACCENT_CHECK), show_fonts);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_BUTTON_ACCENT_BTN), show_fonts);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CUSTOM_PLAY_ACCENT_CHECK), show_fonts);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_PLAY_ACCENT_BTN), show_fonts);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CUSTOM_PROGRESS_ACCENT_CHECK), show_fonts);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_PROGRESS_ACCENT_BTN), show_fonts);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CUSTOM_VOLUME_ACCENT_CHECK), show_fonts);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_VOLUME_ACCENT_BTN), show_fonts);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CUSTOM_HOVER_COLOR_CHECK), show_fonts);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_HOVER_COLOR_BTN), show_fonts);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CUSTOM_SPECTRUM_COLOR_CHECK), show_fonts);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_VIS_SPECTRUM_COLOR_BTN), show_fonts);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CUSTOM_WAVEFORM_COLOR_CHECK), show_fonts);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_VIS_WAVEFORM_COLOR_BTN), show_fonts);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CUSTOM_WAVEFORM_UNPLAYED_CHECK), show_fonts);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_VIS_WAVEFORM_UNPLAYED_COLOR_BTN), show_fonts);
 }
 
 // Helper to update Visualization section enable/disable states
@@ -2391,27 +2486,42 @@ static void update_vis_section_state(HWND hwnd) {
     BOOL spectrum_sel = (IsDlgButtonChecked(hwnd, IDC_VIS_SPECTRUM_RADIO) == BST_CHECKED);
     BOOL waveform_sel = (IsDlgButtonChecked(hwnd, IDC_VIS_WAVEFORM_RADIO) == BST_CHECKED);
 
-    // Radio buttons are always enabled when the checkbox is checked
+    // Radio buttons and 60fps are enabled when the checkbox is checked
     EnableWindow(GetDlgItem(hwnd, IDC_VIS_SPECTRUM_RADIO), enabled);
     EnableWindow(GetDlgItem(hwnd, IDC_VIS_WAVEFORM_RADIO), enabled);
+    EnableWindow(GetDlgItem(hwnd, IDC_VIS_60FPS_CHECK), enabled);
 
     // Spectrum controls: enabled only if Enable checked AND Spectrum selected
     BOOL spec_on = enabled && spectrum_sel;
     EnableWindow(GetDlgItem(hwnd, IDC_VIS_SPECTRUM_WIDTH_LABEL), spec_on);
     EnableWindow(GetDlgItem(hwnd, IDC_VIS_SPECTRUM_WIDTH_COMBO), spec_on);
-    EnableWindow(GetDlgItem(hwnd, IDC_VIS_SPECTRUM_COLOR_LABEL), spec_on);
-    EnableWindow(GetDlgItem(hwnd, IDC_VIS_SPECTRUM_COLOR_BTN), spec_on);
     EnableWindow(GetDlgItem(hwnd, IDC_VIS_SPECTRUM_SHAPE_LABEL), spec_on);
     EnableWindow(GetDlgItem(hwnd, IDC_VIS_SPECTRUM_SHAPE_COMBO), spec_on);
 
     // Waveform controls: enabled only if Enable checked AND Waveform selected
     BOOL wave_on = enabled && waveform_sel;
-    EnableWindow(GetDlgItem(hwnd, IDC_VIS_WAVEFORM_COLOR_LABEL), wave_on);
-    EnableWindow(GetDlgItem(hwnd, IDC_VIS_WAVEFORM_COLOR_BTN), wave_on);
     EnableWindow(GetDlgItem(hwnd, IDC_VIS_WAVEFORM_WIDTH_LABEL), wave_on);
     EnableWindow(GetDlgItem(hwnd, IDC_VIS_WAVEFORM_WIDTH_COMBO), wave_on);
-    EnableWindow(GetDlgItem(hwnd, IDC_VIS_WAVEFORM_UNPLAYED_COLOR_LABEL), wave_on);
-    EnableWindow(GetDlgItem(hwnd, IDC_VIS_WAVEFORM_UNPLAYED_COLOR_BTN), wave_on);
+}
+
+// Helper to enable/disable color buttons based on checkbox state
+static void update_color_buttons_state(HWND hwnd) {
+    EnableWindow(GetDlgItem(hwnd, IDC_BUTTON_ACCENT_BTN),
+        IsDlgButtonChecked(hwnd, IDC_CUSTOM_BUTTON_ACCENT_CHECK) == BST_CHECKED);
+    EnableWindow(GetDlgItem(hwnd, IDC_PLAY_ACCENT_BTN),
+        IsDlgButtonChecked(hwnd, IDC_CUSTOM_PLAY_ACCENT_CHECK) == BST_CHECKED);
+    EnableWindow(GetDlgItem(hwnd, IDC_PROGRESS_ACCENT_BTN),
+        IsDlgButtonChecked(hwnd, IDC_CUSTOM_PROGRESS_ACCENT_CHECK) == BST_CHECKED);
+    EnableWindow(GetDlgItem(hwnd, IDC_VOLUME_ACCENT_BTN),
+        IsDlgButtonChecked(hwnd, IDC_CUSTOM_VOLUME_ACCENT_CHECK) == BST_CHECKED);
+    EnableWindow(GetDlgItem(hwnd, IDC_HOVER_COLOR_BTN),
+        IsDlgButtonChecked(hwnd, IDC_CUSTOM_HOVER_COLOR_CHECK) == BST_CHECKED);
+    EnableWindow(GetDlgItem(hwnd, IDC_VIS_SPECTRUM_COLOR_BTN),
+        IsDlgButtonChecked(hwnd, IDC_CUSTOM_SPECTRUM_COLOR_CHECK) == BST_CHECKED);
+    EnableWindow(GetDlgItem(hwnd, IDC_VIS_WAVEFORM_COLOR_BTN),
+        IsDlgButtonChecked(hwnd, IDC_CUSTOM_WAVEFORM_COLOR_CHECK) == BST_CHECKED);
+    EnableWindow(GetDlgItem(hwnd, IDC_VIS_WAVEFORM_UNPLAYED_COLOR_BTN),
+        IsDlgButtonChecked(hwnd, IDC_CUSTOM_WAVEFORM_UNPLAYED_CHECK) == BST_CHECKED);
 }
 
 // Hook procedure to ensure color picker dialog appears on top
@@ -2632,6 +2742,7 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         {
             int vis_mode = get_nowbar_visualization_mode();
             CheckDlgButton(hwnd, IDC_VIS_ENABLE_CHECK, (vis_mode != 0) ? BST_CHECKED : BST_UNCHECKED);
+            CheckDlgButton(hwnd, IDC_VIS_60FPS_CHECK, cfg_nowbar_vis_60fps ? BST_CHECKED : BST_UNCHECKED);
             // Default to Spectrum radio when disabled
             CheckRadioButton(hwnd, IDC_VIS_SPECTRUM_RADIO, IDC_VIS_WAVEFORM_RADIO,
                 (vis_mode == 2) ? IDC_VIS_WAVEFORM_RADIO : IDC_VIS_SPECTRUM_RADIO);
@@ -2667,6 +2778,17 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
 
         // Initialize font displays
         p_this->update_font_displays();
+
+        // Initialize color custom checkboxes
+        CheckDlgButton(hwnd, IDC_CUSTOM_BUTTON_ACCENT_CHECK, cfg_custom_button_accent_enabled ? BST_CHECKED : BST_UNCHECKED);
+        CheckDlgButton(hwnd, IDC_CUSTOM_PLAY_ACCENT_CHECK, cfg_custom_play_accent_enabled ? BST_CHECKED : BST_UNCHECKED);
+        CheckDlgButton(hwnd, IDC_CUSTOM_PROGRESS_ACCENT_CHECK, cfg_custom_progress_accent_enabled ? BST_CHECKED : BST_UNCHECKED);
+        CheckDlgButton(hwnd, IDC_CUSTOM_VOLUME_ACCENT_CHECK, cfg_custom_volume_accent_enabled ? BST_CHECKED : BST_UNCHECKED);
+        CheckDlgButton(hwnd, IDC_CUSTOM_HOVER_COLOR_CHECK, cfg_custom_hover_color_enabled ? BST_CHECKED : BST_UNCHECKED);
+        CheckDlgButton(hwnd, IDC_CUSTOM_SPECTRUM_COLOR_CHECK, cfg_custom_spectrum_color_enabled ? BST_CHECKED : BST_UNCHECKED);
+        CheckDlgButton(hwnd, IDC_CUSTOM_WAVEFORM_COLOR_CHECK, cfg_custom_waveform_color_enabled ? BST_CHECKED : BST_UNCHECKED);
+        CheckDlgButton(hwnd, IDC_CUSTOM_WAVEFORM_UNPLAYED_CHECK, cfg_custom_waveform_unplayed_enabled ? BST_CHECKED : BST_UNCHECKED);
+        update_color_buttons_state(hwnd);
 
         // Initialize Profile combobox for Custom Button tab
         {
@@ -2789,6 +2911,12 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         case IDC_VIS_WAVEFORM_RADIO:
             if (HIWORD(wp) == BN_CLICKED) {
                 update_vis_section_state(hwnd);
+                p_this->on_changed();
+            }
+            break;
+
+        case IDC_VIS_60FPS_CHECK:
+            if (HIWORD(wp) == BN_CLICKED) {
                 p_this->on_changed();
             }
             break;
@@ -3397,19 +3525,62 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
                 }
             }
             break;
+
+        case IDC_PLAY_ACCENT_BTN:
+            if (HIWORD(wp) == BN_CLICKED) {
+                COLORREF color = static_cast<COLORREF>(cfg_nowbar_play_accent_color.get_value());
+                if (show_color_picker(hwnd, color)) {
+                    cfg_nowbar_play_accent_color = color;
+                    InvalidateRect(GetDlgItem(hwnd, IDC_PLAY_ACCENT_BTN), nullptr, TRUE);
+                    p_this->on_changed();
+                }
+            }
+            break;
+
+        case IDC_HOVER_COLOR_BTN:
+            if (HIWORD(wp) == BN_CLICKED) {
+                COLORREF color = static_cast<COLORREF>(cfg_nowbar_hover_color.get_value());
+                if (show_color_picker(hwnd, color)) {
+                    cfg_nowbar_hover_color = color;
+                    InvalidateRect(GetDlgItem(hwnd, IDC_HOVER_COLOR_BTN), nullptr, TRUE);
+                    p_this->on_changed();
+                }
+            }
+            break;
+
+        case IDC_CUSTOM_BUTTON_ACCENT_CHECK:
+        case IDC_CUSTOM_PLAY_ACCENT_CHECK:
+        case IDC_CUSTOM_PROGRESS_ACCENT_CHECK:
+        case IDC_CUSTOM_VOLUME_ACCENT_CHECK:
+        case IDC_CUSTOM_HOVER_COLOR_CHECK:
+        case IDC_CUSTOM_SPECTRUM_COLOR_CHECK:
+        case IDC_CUSTOM_WAVEFORM_COLOR_CHECK:
+        case IDC_CUSTOM_WAVEFORM_UNPLAYED_CHECK:
+            if (HIWORD(wp) == BN_CLICKED) {
+                update_color_buttons_state(hwnd);
+                p_this->on_changed();
+            }
+            break;
         }
         break;
 
     case WM_DRAWITEM:
         {
             DRAWITEMSTRUCT* dis = reinterpret_cast<DRAWITEMSTRUCT*>(lp);
-            if (dis->CtlID == IDC_BUTTON_ACCENT_BTN || dis->CtlID == IDC_PROGRESS_ACCENT_BTN || dis->CtlID == IDC_VOLUME_ACCENT_BTN ||
-                dis->CtlID == IDC_VIS_SPECTRUM_COLOR_BTN || dis->CtlID == IDC_VIS_WAVEFORM_COLOR_BTN || dis->CtlID == IDC_VIS_WAVEFORM_UNPLAYED_COLOR_BTN) {
+            if (dis->CtlID == IDC_BUTTON_ACCENT_BTN || dis->CtlID == IDC_PROGRESS_ACCENT_BTN ||
+                dis->CtlID == IDC_VOLUME_ACCENT_BTN || dis->CtlID == IDC_PLAY_ACCENT_BTN ||
+                dis->CtlID == IDC_HOVER_COLOR_BTN ||
+                dis->CtlID == IDC_VIS_SPECTRUM_COLOR_BTN || dis->CtlID == IDC_VIS_WAVEFORM_COLOR_BTN ||
+                dis->CtlID == IDC_VIS_WAVEFORM_UNPLAYED_COLOR_BTN) {
                 COLORREF color;
                 if (dis->CtlID == IDC_BUTTON_ACCENT_BTN) {
                     color = static_cast<COLORREF>(cfg_nowbar_button_accent_color.get_value());
                 } else if (dis->CtlID == IDC_PROGRESS_ACCENT_BTN) {
                     color = static_cast<COLORREF>(cfg_nowbar_progress_accent_color.get_value());
+                } else if (dis->CtlID == IDC_PLAY_ACCENT_BTN) {
+                    color = static_cast<COLORREF>(cfg_nowbar_play_accent_color.get_value());
+                } else if (dis->CtlID == IDC_HOVER_COLOR_BTN) {
+                    color = static_cast<COLORREF>(cfg_nowbar_hover_color.get_value());
                 } else if (dis->CtlID == IDC_VIS_SPECTRUM_COLOR_BTN) {
                     color = static_cast<COLORREF>(cfg_nowbar_spectrum_color.get_value());
                 } else if (dis->CtlID == IDC_VIS_WAVEFORM_COLOR_BTN) {
@@ -3543,8 +3714,19 @@ void nowbar_preferences::apply_settings() {
             cfg_nowbar_spectrum_width = (int)SendMessage(GetDlgItem(m_hwnd, IDC_VIS_SPECTRUM_WIDTH_COMBO), CB_GETCURSEL, 0, 0);
             cfg_nowbar_spectrum_shape = (int)SendMessage(GetDlgItem(m_hwnd, IDC_VIS_SPECTRUM_SHAPE_COMBO), CB_GETCURSEL, 0, 0);
             cfg_nowbar_waveform_width = (int)SendMessage(GetDlgItem(m_hwnd, IDC_VIS_WAVEFORM_WIDTH_COMBO), CB_GETCURSEL, 0, 0);
+            cfg_nowbar_vis_60fps = (IsDlgButtonChecked(m_hwnd, IDC_VIS_60FPS_CHECK) == BST_CHECKED) ? 1 : 0;
             // Color buttons are saved immediately via color picker, no need to save here
         }
+
+        // Save color custom enable flags
+        cfg_custom_button_accent_enabled = (IsDlgButtonChecked(m_hwnd, IDC_CUSTOM_BUTTON_ACCENT_CHECK) == BST_CHECKED) ? 1 : 0;
+        cfg_custom_play_accent_enabled = (IsDlgButtonChecked(m_hwnd, IDC_CUSTOM_PLAY_ACCENT_CHECK) == BST_CHECKED) ? 1 : 0;
+        cfg_custom_progress_accent_enabled = (IsDlgButtonChecked(m_hwnd, IDC_CUSTOM_PROGRESS_ACCENT_CHECK) == BST_CHECKED) ? 1 : 0;
+        cfg_custom_volume_accent_enabled = (IsDlgButtonChecked(m_hwnd, IDC_CUSTOM_VOLUME_ACCENT_CHECK) == BST_CHECKED) ? 1 : 0;
+        cfg_custom_hover_color_enabled = (IsDlgButtonChecked(m_hwnd, IDC_CUSTOM_HOVER_COLOR_CHECK) == BST_CHECKED) ? 1 : 0;
+        cfg_custom_spectrum_color_enabled = (IsDlgButtonChecked(m_hwnd, IDC_CUSTOM_SPECTRUM_COLOR_CHECK) == BST_CHECKED) ? 1 : 0;
+        cfg_custom_waveform_color_enabled = (IsDlgButtonChecked(m_hwnd, IDC_CUSTOM_WAVEFORM_COLOR_CHECK) == BST_CHECKED) ? 1 : 0;
+        cfg_custom_waveform_unplayed_enabled = (IsDlgButtonChecked(m_hwnd, IDC_CUSTOM_WAVEFORM_UNPLAYED_CHECK) == BST_CHECKED) ? 1 : 0;
 
         // Save glass effect setting (0=Disabled, 1=Enabled in combobox -> config 0=Disabled, 1=Enabled)
         int glassEffectSel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_GLASS_EFFECT_COMBO), CB_GETCURSEL, 0, 0);
@@ -3641,12 +3823,10 @@ void nowbar_preferences::reset_settings() {
             cfg_nowbar_skip_low_rating_enabled = 0;  // Disabled (default)
             cfg_nowbar_skip_low_rating_threshold = 1;  // 1 (default)
             cfg_nowbar_visualization_mode = 0;  // Disabled (default)
-            cfg_nowbar_spectrum_color = RGB(100, 180, 255);  // Default: light blue
             cfg_nowbar_spectrum_width = 1;  // Default: Normal
             cfg_nowbar_spectrum_shape = 0;  // Default: Pill
-            cfg_nowbar_waveform_color = RGB(255, 85, 0);  // Default: SoundCloud orange
-            cfg_nowbar_waveform_unplayed_color = RGB(60, 60, 60);  // Default: dim gray (fully opaque)
             cfg_nowbar_waveform_width = 1;  // Default: Normal
+            cfg_nowbar_vis_60fps = 0;  // Default: Disabled
 
             // Update General tab UI
             uSetDlgItemText(m_hwnd, IDC_LINE1_FORMAT_EDIT, "%title%");
@@ -3657,13 +3837,11 @@ void nowbar_preferences::reset_settings() {
             EnableWindow(GetDlgItem(m_hwnd, IDC_SKIP_RATING_THRESHOLD_COMBO), FALSE);  // Disabled when skip is off
             // Reset Visualization section UI
             CheckDlgButton(m_hwnd, IDC_VIS_ENABLE_CHECK, BST_UNCHECKED);
+            CheckDlgButton(m_hwnd, IDC_VIS_60FPS_CHECK, BST_UNCHECKED);
             CheckRadioButton(m_hwnd, IDC_VIS_SPECTRUM_RADIO, IDC_VIS_WAVEFORM_RADIO, IDC_VIS_SPECTRUM_RADIO);
             SendMessage(GetDlgItem(m_hwnd, IDC_VIS_SPECTRUM_WIDTH_COMBO), CB_SETCURSEL, 1, 0);  // Normal
             SendMessage(GetDlgItem(m_hwnd, IDC_VIS_SPECTRUM_SHAPE_COMBO), CB_SETCURSEL, 0, 0);  // Pill
             SendMessage(GetDlgItem(m_hwnd, IDC_VIS_WAVEFORM_WIDTH_COMBO), CB_SETCURSEL, 1, 0);  // Normal
-            InvalidateRect(GetDlgItem(m_hwnd, IDC_VIS_SPECTRUM_COLOR_BTN), nullptr, TRUE);
-            InvalidateRect(GetDlgItem(m_hwnd, IDC_VIS_WAVEFORM_COLOR_BTN), nullptr, TRUE);
-            InvalidateRect(GetDlgItem(m_hwnd, IDC_VIS_WAVEFORM_UNPLAYED_COLOR_BTN), nullptr, TRUE);
             update_vis_section_state(m_hwnd);
         } else if (m_current_tab == 1) {
             // Reset Appearance tab settings
@@ -3674,9 +3852,6 @@ void nowbar_preferences::reset_settings() {
             cfg_nowbar_bar_style = 0;  // Pill-shaped
             cfg_nowbar_glass_effect = 0;  // Disabled
             cfg_nowbar_smooth_animations = 0;  // Disabled (default for performance)
-            cfg_nowbar_button_accent_color = RGB(100, 180, 255);  // Default: Light blue
-            cfg_nowbar_progress_accent_color = RGB(140, 140, 140);  // Default: Gray
-            cfg_nowbar_volume_accent_color = RGB(140, 140, 140);  // Default: Gray
             cfg_nowbar_online_artwork = 0;  // Default: Disabled
 
             // Update Appearance tab UI
@@ -3687,9 +3862,6 @@ void nowbar_preferences::reset_settings() {
             SendMessage(GetDlgItem(m_hwnd, IDC_BAR_STYLE_COMBO), CB_SETCURSEL, 0, 0);
             SendMessage(GetDlgItem(m_hwnd, IDC_GLASS_EFFECT_COMBO), CB_SETCURSEL, 0, 0);  // Default: Disabled
             SendMessage(GetDlgItem(m_hwnd, IDC_SMOOTH_ANIMATIONS_COMBO), CB_SETCURSEL, 1, 0);  // Default: Disabled (index 1)
-            InvalidateRect(GetDlgItem(m_hwnd, IDC_BUTTON_ACCENT_BTN), nullptr, TRUE);
-            InvalidateRect(GetDlgItem(m_hwnd, IDC_PROGRESS_ACCENT_BTN), nullptr, TRUE);
-            InvalidateRect(GetDlgItem(m_hwnd, IDC_VOLUME_ACCENT_BTN), nullptr, TRUE);
             CheckDlgButton(m_hwnd, IDC_ONLINE_ARTWORK_CHECK, BST_UNCHECKED);
             update_cover_margin_state(m_hwnd);  // Re-enable Cover Margin (Cover Artwork is Yes)
         } else if (m_current_tab == 2) {
@@ -3754,9 +3926,50 @@ void nowbar_preferences::reset_settings() {
             SetDlgItemTextW(m_hwnd, IDC_CBUTTON6_PATH, L"");
             update_all_cbutton_path_states(m_hwnd);
         } else if (m_current_tab == 4) {
-            // Reset Fonts tab settings
+            // Reset Fonts & Colors tab settings
             reset_nowbar_fonts();
             update_font_displays();
+
+            // Reset all color custom flags to theme defaults
+            cfg_custom_button_accent_enabled = 0;
+            cfg_custom_play_accent_enabled = 0;
+            cfg_custom_progress_accent_enabled = 0;
+            cfg_custom_volume_accent_enabled = 0;
+            cfg_custom_hover_color_enabled = 0;
+            cfg_custom_spectrum_color_enabled = 0;
+            cfg_custom_waveform_color_enabled = 0;
+            cfg_custom_waveform_unplayed_enabled = 0;
+
+            // Reset custom colors to defaults
+            cfg_nowbar_button_accent_color = RGB(100, 180, 255);
+            cfg_nowbar_play_accent_color = RGB(100, 180, 255);
+            cfg_nowbar_progress_accent_color = RGB(140, 140, 140);
+            cfg_nowbar_volume_accent_color = RGB(140, 140, 140);
+            cfg_nowbar_hover_color = RGB(255, 255, 255);
+            cfg_nowbar_spectrum_color = RGB(100, 180, 255);
+            cfg_nowbar_waveform_color = RGB(255, 85, 0);
+            cfg_nowbar_waveform_unplayed_color = RGB(60, 60, 60);
+
+            // Update UI
+            CheckDlgButton(m_hwnd, IDC_CUSTOM_BUTTON_ACCENT_CHECK, BST_UNCHECKED);
+            CheckDlgButton(m_hwnd, IDC_CUSTOM_PLAY_ACCENT_CHECK, BST_UNCHECKED);
+            CheckDlgButton(m_hwnd, IDC_CUSTOM_PROGRESS_ACCENT_CHECK, BST_UNCHECKED);
+            CheckDlgButton(m_hwnd, IDC_CUSTOM_VOLUME_ACCENT_CHECK, BST_UNCHECKED);
+            CheckDlgButton(m_hwnd, IDC_CUSTOM_HOVER_COLOR_CHECK, BST_UNCHECKED);
+            CheckDlgButton(m_hwnd, IDC_CUSTOM_SPECTRUM_COLOR_CHECK, BST_UNCHECKED);
+            CheckDlgButton(m_hwnd, IDC_CUSTOM_WAVEFORM_COLOR_CHECK, BST_UNCHECKED);
+            CheckDlgButton(m_hwnd, IDC_CUSTOM_WAVEFORM_UNPLAYED_CHECK, BST_UNCHECKED);
+            update_color_buttons_state(m_hwnd);
+
+            // Repaint color buttons
+            InvalidateRect(GetDlgItem(m_hwnd, IDC_BUTTON_ACCENT_BTN), nullptr, TRUE);
+            InvalidateRect(GetDlgItem(m_hwnd, IDC_PLAY_ACCENT_BTN), nullptr, TRUE);
+            InvalidateRect(GetDlgItem(m_hwnd, IDC_PROGRESS_ACCENT_BTN), nullptr, TRUE);
+            InvalidateRect(GetDlgItem(m_hwnd, IDC_VOLUME_ACCENT_BTN), nullptr, TRUE);
+            InvalidateRect(GetDlgItem(m_hwnd, IDC_HOVER_COLOR_BTN), nullptr, TRUE);
+            InvalidateRect(GetDlgItem(m_hwnd, IDC_VIS_SPECTRUM_COLOR_BTN), nullptr, TRUE);
+            InvalidateRect(GetDlgItem(m_hwnd, IDC_VIS_WAVEFORM_COLOR_BTN), nullptr, TRUE);
+            InvalidateRect(GetDlgItem(m_hwnd, IDC_VIS_WAVEFORM_UNPLAYED_COLOR_BTN), nullptr, TRUE);
         }
         
         // Notify panels
