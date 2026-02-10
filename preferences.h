@@ -19,6 +19,7 @@ bool get_nowbar_super_icon_visible();  // true=Show, false=Hidden
 bool get_nowbar_miniplayer_icon_visible();  // true=Show, false=Hidden
 bool get_nowbar_hover_circles_enabled();  // true=Yes (show), false=No (hide)
 bool get_nowbar_alternate_icons_enabled();  // true=Enabled, false=Disabled
+int get_nowbar_play_icon_style();  // 0=Normal, 1=Inverted
 bool get_nowbar_cbutton_autohide();  // true=Yes (auto-hide), false=No
 bool get_nowbar_glass_effect_enabled();  // true=Enabled, false=Disabled (Windows 11 only)
 bool get_nowbar_infinite_playback_enabled();  // true=Enabled, false=Disabled
@@ -51,6 +52,10 @@ bool get_nowbar_custom_hover_color_enabled();
 bool get_nowbar_custom_spectrum_color_enabled();
 bool get_nowbar_custom_waveform_color_enabled();
 bool get_nowbar_custom_waveform_unplayed_enabled();
+COLORREF get_nowbar_progress_track_color();
+bool get_nowbar_custom_progress_track_enabled();
+COLORREF get_nowbar_volume_track_color();
+bool get_nowbar_custom_volume_track_enabled();
 bool get_nowbar_online_artwork();  // true=Enabled, false=Disabled (requires foo_artwork)
 bool get_nowbar_custom_button_visible();  // true=Show, false=Hidden
 int get_nowbar_custom_button_action();  // 0=None, 1=Open URL, 2=Run Executable, 3=Foobar2k Action, 4=Open Folder
