@@ -200,6 +200,16 @@
 #define IDC_HOVER_COLOR_LABEL          1511
 #define IDC_HOVER_COLOR_BTN            1512
 
+// Progress/Volume track color controls (Fonts & Colors tab)
+#define IDC_CUSTOM_PROGRESS_TRACK_CHECK  1513
+#define IDC_PROGRESS_TRACK_BTN           1514
+#define IDC_CUSTOM_VOLUME_TRACK_CHECK    1515
+#define IDC_VOLUME_TRACK_BTN             1516
+
+// Play icon style controls (Icons tab)
+#define IDC_PLAY_ICON_STYLE_LABEL        1517
+#define IDC_PLAY_ICON_STYLE_COMBO        1518
+
 // Profile configuration controls (Custom Button tab)
 #define IDC_PROFILE_NAME_LABEL     1370
 #define IDC_PROFILE_COMBO          1371
