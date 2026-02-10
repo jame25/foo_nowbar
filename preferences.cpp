@@ -85,6 +85,11 @@ static cfg_int cfg_nowbar_alternate_icons(
     0  // Default: Disabled
 );
 
+static cfg_int cfg_nowbar_play_icon_style(
+    GUID{0xABCDEFBA, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xBA}},
+    0  // Default: Normal (0=Normal, 1=Inverted)
+);
+
 static cfg_int cfg_nowbar_cbutton_autohide(
     GUID{0xABCDEF1E, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xAE}},
     0  // Default: No (don't auto-hide)
@@ -165,6 +170,14 @@ static cfg_int cfg_custom_waveform_unplayed_enabled(
     GUID{0xABCDEFB7, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xB7}},
     0  // Default: use theme color (Text)
 );
+static cfg_int cfg_custom_progress_track_enabled(
+    GUID{0xABCDEFB8, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xB8}},
+    0  // Default: use theme color (Text)
+);
+static cfg_int cfg_custom_volume_track_enabled(
+    GUID{0xABCDEFB9, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xB9}},
+    0  // Default: use theme color (Text)
+);
 
 static cfg_int cfg_nowbar_infinite_playback(
     GUID{0xABCDEF58, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xE8}},
@@ -224,6 +237,16 @@ static cfg_int cfg_nowbar_waveform_width(
 static cfg_int cfg_nowbar_waveform_unplayed_color(
     GUID{0xABCDEF66, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xF6}},
     RGB(60, 60, 60)  // Default: dim gray (fully opaque)
+);
+
+static cfg_int cfg_nowbar_progress_track_color(
+    GUID{0xABCDEF67, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xF7}},
+    RGB(60, 60, 60)  // Default: dark grey
+);
+
+static cfg_int cfg_nowbar_volume_track_color(
+    GUID{0xABCDEF68, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xF8}},
+    RGB(60, 60, 60)  // Default: dark grey
 );
 
 static cfg_int cfg_nowbar_custom_button_action(
@@ -1410,6 +1433,13 @@ bool get_nowbar_alternate_icons_enabled() {
     return cfg_nowbar_alternate_icons != 0;
 }
 
+int get_nowbar_play_icon_style() {
+    int style = cfg_nowbar_play_icon_style;
+    if (style < 0) style = 0;
+    if (style > 1) style = 1;
+    return style;  // 0=Normal, 1=Inverted
+}
+
 bool get_nowbar_cbutton_autohide() {
     return cfg_nowbar_cbutton_autohide != 0;
 }
@@ -1552,6 +1582,18 @@ bool get_nowbar_custom_waveform_color_enabled() {
 }
 bool get_nowbar_custom_waveform_unplayed_enabled() {
     return cfg_custom_waveform_unplayed_enabled != 0;
+}
+COLORREF get_nowbar_progress_track_color() {
+    return static_cast<COLORREF>(cfg_nowbar_progress_track_color.get_value());
+}
+bool get_nowbar_custom_progress_track_enabled() {
+    return cfg_custom_progress_track_enabled != 0;
+}
+COLORREF get_nowbar_volume_track_color() {
+    return static_cast<COLORREF>(cfg_nowbar_volume_track_color.get_value());
+}
+bool get_nowbar_custom_volume_track_enabled() {
+    return cfg_custom_volume_track_enabled != 0;
 }
 
 bool get_nowbar_custom_button_visible() {
@@ -2372,6 +2414,8 @@ void nowbar_preferences::switch_tab(int tab) {
     ShowWindow(GetDlgItem(m_hwnd, IDC_HOVER_CIRCLES_COMBO), show_icons);
     ShowWindow(GetDlgItem(m_hwnd, IDC_ALTERNATE_ICONS_LABEL), show_icons);
     ShowWindow(GetDlgItem(m_hwnd, IDC_ALTERNATE_ICONS_COMBO), show_icons);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_PLAY_ICON_STYLE_LABEL), show_icons);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_PLAY_ICON_STYLE_COMBO), show_icons);
     ShowWindow(GetDlgItem(m_hwnd, IDC_AUTOHIDE_CBUTTONS_LABEL), show_icons);
     ShowWindow(GetDlgItem(m_hwnd, IDC_AUTOHIDE_CBUTTONS_COMBO), show_icons);
 
@@ -2478,6 +2522,10 @@ void nowbar_preferences::switch_tab(int tab) {
     ShowWindow(GetDlgItem(m_hwnd, IDC_VIS_WAVEFORM_COLOR_BTN), show_fonts);
     ShowWindow(GetDlgItem(m_hwnd, IDC_CUSTOM_WAVEFORM_UNPLAYED_CHECK), show_fonts);
     ShowWindow(GetDlgItem(m_hwnd, IDC_VIS_WAVEFORM_UNPLAYED_COLOR_BTN), show_fonts);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CUSTOM_PROGRESS_TRACK_CHECK), show_fonts);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_PROGRESS_TRACK_BTN), show_fonts);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_CUSTOM_VOLUME_TRACK_CHECK), show_fonts);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_VOLUME_TRACK_BTN), show_fonts);
 }
 
 // Helper to update Visualization section enable/disable states
@@ -2522,6 +2570,10 @@ static void update_color_buttons_state(HWND hwnd) {
         IsDlgButtonChecked(hwnd, IDC_CUSTOM_WAVEFORM_COLOR_CHECK) == BST_CHECKED);
     EnableWindow(GetDlgItem(hwnd, IDC_VIS_WAVEFORM_UNPLAYED_COLOR_BTN),
         IsDlgButtonChecked(hwnd, IDC_CUSTOM_WAVEFORM_UNPLAYED_CHECK) == BST_CHECKED);
+    EnableWindow(GetDlgItem(hwnd, IDC_PROGRESS_TRACK_BTN),
+        IsDlgButtonChecked(hwnd, IDC_CUSTOM_PROGRESS_TRACK_CHECK) == BST_CHECKED);
+    EnableWindow(GetDlgItem(hwnd, IDC_VOLUME_TRACK_BTN),
+        IsDlgButtonChecked(hwnd, IDC_CUSTOM_VOLUME_TRACK_CHECK) == BST_CHECKED);
 }
 
 // Hook procedure to ensure color picker dialog appears on top
@@ -2708,6 +2760,12 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         SendMessage(hAlternateIconsCombo, CB_ADDSTRING, 0, (LPARAM)L"Disabled");
         SendMessage(hAlternateIconsCombo, CB_SETCURSEL, cfg_nowbar_alternate_icons ? 0 : 1, 0);
 
+        // Initialize play icon style combobox
+        HWND hPlayIconStyleCombo = GetDlgItem(hwnd, IDC_PLAY_ICON_STYLE_COMBO);
+        SendMessage(hPlayIconStyleCombo, CB_ADDSTRING, 0, (LPARAM)L"Normal");
+        SendMessage(hPlayIconStyleCombo, CB_ADDSTRING, 0, (LPARAM)L"Inverted");
+        SendMessage(hPlayIconStyleCombo, CB_SETCURSEL, cfg_nowbar_play_icon_style, 0);
+
         // Initialize auto-hide C-buttons combobox
         HWND hAutohideCbuttonsCombo = GetDlgItem(hwnd, IDC_AUTOHIDE_CBUTTONS_COMBO);
         SendMessage(hAutohideCbuttonsCombo, CB_ADDSTRING, 0, (LPARAM)L"Yes");
@@ -2788,6 +2846,8 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         CheckDlgButton(hwnd, IDC_CUSTOM_SPECTRUM_COLOR_CHECK, cfg_custom_spectrum_color_enabled ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(hwnd, IDC_CUSTOM_WAVEFORM_COLOR_CHECK, cfg_custom_waveform_color_enabled ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(hwnd, IDC_CUSTOM_WAVEFORM_UNPLAYED_CHECK, cfg_custom_waveform_unplayed_enabled ? BST_CHECKED : BST_UNCHECKED);
+        CheckDlgButton(hwnd, IDC_CUSTOM_PROGRESS_TRACK_CHECK, cfg_custom_progress_track_enabled ? BST_CHECKED : BST_UNCHECKED);
+        CheckDlgButton(hwnd, IDC_CUSTOM_VOLUME_TRACK_CHECK, cfg_custom_volume_track_enabled ? BST_CHECKED : BST_UNCHECKED);
         update_color_buttons_state(hwnd);
 
         // Initialize Profile combobox for Custom Button tab
@@ -2885,6 +2945,7 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         case IDC_MINIPLAYER_ICON_COMBO:
         case IDC_HOVER_CIRCLES_COMBO:
         case IDC_ALTERNATE_ICONS_COMBO:
+        case IDC_PLAY_ICON_STYLE_COMBO:
         case IDC_AUTOHIDE_CBUTTONS_COMBO:
         case IDC_GLASS_EFFECT_COMBO:
         case IDC_MOOD_TAG_COMBO:
@@ -2949,6 +3010,28 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
                 if (show_color_picker(hwnd, color)) {
                     cfg_nowbar_waveform_unplayed_color = color;
                     InvalidateRect(GetDlgItem(hwnd, IDC_VIS_WAVEFORM_UNPLAYED_COLOR_BTN), nullptr, TRUE);
+                    p_this->on_changed();
+                }
+            }
+            break;
+
+        case IDC_PROGRESS_TRACK_BTN:
+            if (HIWORD(wp) == BN_CLICKED) {
+                COLORREF color = static_cast<COLORREF>(cfg_nowbar_progress_track_color.get_value());
+                if (show_color_picker(hwnd, color)) {
+                    cfg_nowbar_progress_track_color = color;
+                    InvalidateRect(GetDlgItem(hwnd, IDC_PROGRESS_TRACK_BTN), nullptr, TRUE);
+                    p_this->on_changed();
+                }
+            }
+            break;
+
+        case IDC_VOLUME_TRACK_BTN:
+            if (HIWORD(wp) == BN_CLICKED) {
+                COLORREF color = static_cast<COLORREF>(cfg_nowbar_volume_track_color.get_value());
+                if (show_color_picker(hwnd, color)) {
+                    cfg_nowbar_volume_track_color = color;
+                    InvalidateRect(GetDlgItem(hwnd, IDC_VOLUME_TRACK_BTN), nullptr, TRUE);
                     p_this->on_changed();
                 }
             }
@@ -3556,6 +3639,8 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         case IDC_CUSTOM_SPECTRUM_COLOR_CHECK:
         case IDC_CUSTOM_WAVEFORM_COLOR_CHECK:
         case IDC_CUSTOM_WAVEFORM_UNPLAYED_CHECK:
+        case IDC_CUSTOM_PROGRESS_TRACK_CHECK:
+        case IDC_CUSTOM_VOLUME_TRACK_CHECK:
             if (HIWORD(wp) == BN_CLICKED) {
                 update_color_buttons_state(hwnd);
                 p_this->on_changed();
@@ -3571,7 +3656,8 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
                 dis->CtlID == IDC_VOLUME_ACCENT_BTN || dis->CtlID == IDC_PLAY_ACCENT_BTN ||
                 dis->CtlID == IDC_HOVER_COLOR_BTN ||
                 dis->CtlID == IDC_VIS_SPECTRUM_COLOR_BTN || dis->CtlID == IDC_VIS_WAVEFORM_COLOR_BTN ||
-                dis->CtlID == IDC_VIS_WAVEFORM_UNPLAYED_COLOR_BTN) {
+                dis->CtlID == IDC_VIS_WAVEFORM_UNPLAYED_COLOR_BTN ||
+                dis->CtlID == IDC_PROGRESS_TRACK_BTN || dis->CtlID == IDC_VOLUME_TRACK_BTN) {
                 COLORREF color;
                 if (dis->CtlID == IDC_BUTTON_ACCENT_BTN) {
                     color = static_cast<COLORREF>(cfg_nowbar_button_accent_color.get_value());
@@ -3587,6 +3673,10 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
                     color = static_cast<COLORREF>(cfg_nowbar_waveform_color.get_value());
                 } else if (dis->CtlID == IDC_VIS_WAVEFORM_UNPLAYED_COLOR_BTN) {
                     color = static_cast<COLORREF>(cfg_nowbar_waveform_unplayed_color.get_value());
+                } else if (dis->CtlID == IDC_PROGRESS_TRACK_BTN) {
+                    color = static_cast<COLORREF>(cfg_nowbar_progress_track_color.get_value());
+                } else if (dis->CtlID == IDC_VOLUME_TRACK_BTN) {
+                    color = static_cast<COLORREF>(cfg_nowbar_volume_track_color.get_value());
                 } else {
                     color = static_cast<COLORREF>(cfg_nowbar_volume_accent_color.get_value());
                 }
@@ -3685,6 +3775,9 @@ void nowbar_preferences::apply_settings() {
         int alternateIconsSel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_ALTERNATE_ICONS_COMBO), CB_GETCURSEL, 0, 0);
         cfg_nowbar_alternate_icons = (alternateIconsSel == 0) ? 1 : 0;
 
+        // Save play icon style setting (0=Dark, 1=Light)
+        cfg_nowbar_play_icon_style = (int)SendMessage(GetDlgItem(m_hwnd, IDC_PLAY_ICON_STYLE_COMBO), CB_GETCURSEL, 0, 0);
+
         // Save auto-hide C-buttons setting (0=Yes, 1=No in combobox -> config 1=Yes, 0=No)
         int autohideCbuttonsSel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_AUTOHIDE_CBUTTONS_COMBO), CB_GETCURSEL, 0, 0);
         cfg_nowbar_cbutton_autohide = (autohideCbuttonsSel == 0) ? 1 : 0;
@@ -3727,6 +3820,8 @@ void nowbar_preferences::apply_settings() {
         cfg_custom_spectrum_color_enabled = (IsDlgButtonChecked(m_hwnd, IDC_CUSTOM_SPECTRUM_COLOR_CHECK) == BST_CHECKED) ? 1 : 0;
         cfg_custom_waveform_color_enabled = (IsDlgButtonChecked(m_hwnd, IDC_CUSTOM_WAVEFORM_COLOR_CHECK) == BST_CHECKED) ? 1 : 0;
         cfg_custom_waveform_unplayed_enabled = (IsDlgButtonChecked(m_hwnd, IDC_CUSTOM_WAVEFORM_UNPLAYED_CHECK) == BST_CHECKED) ? 1 : 0;
+        cfg_custom_progress_track_enabled = (IsDlgButtonChecked(m_hwnd, IDC_CUSTOM_PROGRESS_TRACK_CHECK) == BST_CHECKED) ? 1 : 0;
+        cfg_custom_volume_track_enabled = (IsDlgButtonChecked(m_hwnd, IDC_CUSTOM_VOLUME_TRACK_CHECK) == BST_CHECKED) ? 1 : 0;
 
         // Save glass effect setting (0=Disabled, 1=Enabled in combobox -> config 0=Disabled, 1=Enabled)
         int glassEffectSel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_GLASS_EFFECT_COMBO), CB_GETCURSEL, 0, 0);
@@ -3873,6 +3968,7 @@ void nowbar_preferences::reset_settings() {
             cfg_nowbar_miniplayer_icon_visible = 1;  // Show (visible)
             cfg_nowbar_hover_circles = 1;  // Show (default)
             cfg_nowbar_alternate_icons = 0;  // Disabled
+            cfg_nowbar_play_icon_style = 0;  // Dark (default)
             cfg_nowbar_cbutton_autohide = 0;  // No (default)
 
             // Update Icons tab UI
@@ -3883,6 +3979,7 @@ void nowbar_preferences::reset_settings() {
             SendMessage(GetDlgItem(m_hwnd, IDC_MINIPLAYER_ICON_COMBO), CB_SETCURSEL, 0, 0);
             SendMessage(GetDlgItem(m_hwnd, IDC_HOVER_CIRCLES_COMBO), CB_SETCURSEL, 0, 0);  // Default: Show
             SendMessage(GetDlgItem(m_hwnd, IDC_ALTERNATE_ICONS_COMBO), CB_SETCURSEL, 1, 0);  // Default: Disabled
+            SendMessage(GetDlgItem(m_hwnd, IDC_PLAY_ICON_STYLE_COMBO), CB_SETCURSEL, 0, 0);  // Default: Normal
             SendMessage(GetDlgItem(m_hwnd, IDC_AUTOHIDE_CBUTTONS_COMBO), CB_SETCURSEL, 1, 0);  // Default: No
         } else if (m_current_tab == 3) {
             // Reset Custom Button tab settings
@@ -3939,6 +4036,8 @@ void nowbar_preferences::reset_settings() {
             cfg_custom_spectrum_color_enabled = 0;
             cfg_custom_waveform_color_enabled = 0;
             cfg_custom_waveform_unplayed_enabled = 0;
+            cfg_custom_progress_track_enabled = 0;
+            cfg_custom_volume_track_enabled = 0;
 
             // Reset custom colors to defaults
             cfg_nowbar_button_accent_color = RGB(100, 180, 255);
@@ -3949,6 +4048,8 @@ void nowbar_preferences::reset_settings() {
             cfg_nowbar_spectrum_color = RGB(100, 180, 255);
             cfg_nowbar_waveform_color = RGB(255, 85, 0);
             cfg_nowbar_waveform_unplayed_color = RGB(60, 60, 60);
+            cfg_nowbar_progress_track_color = RGB(60, 60, 60);
+            cfg_nowbar_volume_track_color = RGB(60, 60, 60);
 
             // Update UI
             CheckDlgButton(m_hwnd, IDC_CUSTOM_BUTTON_ACCENT_CHECK, BST_UNCHECKED);
@@ -3959,6 +4060,8 @@ void nowbar_preferences::reset_settings() {
             CheckDlgButton(m_hwnd, IDC_CUSTOM_SPECTRUM_COLOR_CHECK, BST_UNCHECKED);
             CheckDlgButton(m_hwnd, IDC_CUSTOM_WAVEFORM_COLOR_CHECK, BST_UNCHECKED);
             CheckDlgButton(m_hwnd, IDC_CUSTOM_WAVEFORM_UNPLAYED_CHECK, BST_UNCHECKED);
+            CheckDlgButton(m_hwnd, IDC_CUSTOM_PROGRESS_TRACK_CHECK, BST_UNCHECKED);
+            CheckDlgButton(m_hwnd, IDC_CUSTOM_VOLUME_TRACK_CHECK, BST_UNCHECKED);
             update_color_buttons_state(m_hwnd);
 
             // Repaint color buttons
@@ -3970,6 +4073,8 @@ void nowbar_preferences::reset_settings() {
             InvalidateRect(GetDlgItem(m_hwnd, IDC_VIS_SPECTRUM_COLOR_BTN), nullptr, TRUE);
             InvalidateRect(GetDlgItem(m_hwnd, IDC_VIS_WAVEFORM_COLOR_BTN), nullptr, TRUE);
             InvalidateRect(GetDlgItem(m_hwnd, IDC_VIS_WAVEFORM_UNPLAYED_COLOR_BTN), nullptr, TRUE);
+            InvalidateRect(GetDlgItem(m_hwnd, IDC_PROGRESS_TRACK_BTN), nullptr, TRUE);
+            InvalidateRect(GetDlgItem(m_hwnd, IDC_VOLUME_TRACK_BTN), nullptr, TRUE);
         }
         
         // Notify panels
