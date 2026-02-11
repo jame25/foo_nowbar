@@ -45,6 +45,11 @@ static cfg_int cfg_nowbar_mood_icon_visible(
     1  // Default: Show (visible)
 );
 
+static cfg_int cfg_nowbar_rating_visible(
+    GUID{0xABCDEFA2, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xA2}},
+    0  // Default: Hidden
+);
+
 static cfg_int cfg_nowbar_mood_tag_mode(
     GUID{0xABCDEF57, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xE7}},
     0  // Default: 0=FEEDBACK, 1=2003_LOVED, 2=LFM_LOVED, 3=SMP_LOVED, 4=MOOD
@@ -1405,6 +1410,10 @@ bool get_nowbar_mood_icon_visible() {
     return cfg_nowbar_mood_icon_visible != 0;
 }
 
+bool get_nowbar_rating_visible() {
+    return cfg_nowbar_rating_visible != 0;
+}
+
 int get_nowbar_mood_tag_mode() {
     return cfg_nowbar_mood_tag_mode;
 }
@@ -2416,6 +2425,8 @@ void nowbar_preferences::switch_tab(int tab) {
     ShowWindow(GetDlgItem(m_hwnd, IDC_ALTERNATE_ICONS_COMBO), show_icons);
     ShowWindow(GetDlgItem(m_hwnd, IDC_PLAY_ICON_STYLE_LABEL), show_icons);
     ShowWindow(GetDlgItem(m_hwnd, IDC_PLAY_ICON_STYLE_COMBO), show_icons);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_RATING_STARS_LABEL), show_icons);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_RATING_STARS_COMBO), show_icons);
     ShowWindow(GetDlgItem(m_hwnd, IDC_AUTOHIDE_CBUTTONS_LABEL), show_icons);
     ShowWindow(GetDlgItem(m_hwnd, IDC_AUTOHIDE_CBUTTONS_COMBO), show_icons);
 
@@ -2723,7 +2734,13 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         SendMessage(hMoodIconCombo, CB_ADDSTRING, 0, (LPARAM)L"Show");
         SendMessage(hMoodIconCombo, CB_ADDSTRING, 0, (LPARAM)L"Hidden");
         SendMessage(hMoodIconCombo, CB_SETCURSEL, cfg_nowbar_mood_icon_visible ? 0 : 1, 0);
-        
+
+        // Initialize rating stars visibility combobox
+        HWND hRatingStarsCombo = GetDlgItem(hwnd, IDC_RATING_STARS_COMBO);
+        SendMessage(hRatingStarsCombo, CB_ADDSTRING, 0, (LPARAM)L"Show");
+        SendMessage(hRatingStarsCombo, CB_ADDSTRING, 0, (LPARAM)L"Hidden");
+        SendMessage(hRatingStarsCombo, CB_SETCURSEL, cfg_nowbar_rating_visible ? 0 : 1, 0);
+
         // Initialize stop icon visibility combobox
         HWND hStopIconCombo = GetDlgItem(hwnd, IDC_STOP_ICON_COMBO);
         SendMessage(hStopIconCombo, CB_ADDSTRING, 0, (LPARAM)L"Show");
@@ -2946,6 +2963,7 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         case IDC_HOVER_CIRCLES_COMBO:
         case IDC_ALTERNATE_ICONS_COMBO:
         case IDC_PLAY_ICON_STYLE_COMBO:
+        case IDC_RATING_STARS_COMBO:
         case IDC_AUTOHIDE_CBUTTONS_COMBO:
         case IDC_GLASS_EFFECT_COMBO:
         case IDC_MOOD_TAG_COMBO:
@@ -3750,7 +3768,11 @@ void nowbar_preferences::apply_settings() {
         // Save mood icon visibility (0=Show, 1=Hidden in combobox -> config 1=Show, 0=Hidden)
         int moodIconSel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_MOOD_ICON_COMBO), CB_GETCURSEL, 0, 0);
         cfg_nowbar_mood_icon_visible = (moodIconSel == 0) ? 1 : 0;
-        
+
+        // Save rating stars visibility
+        int ratingStarsSel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_RATING_STARS_COMBO), CB_GETCURSEL, 0, 0);
+        cfg_nowbar_rating_visible = (ratingStarsSel == 0) ? 1 : 0;
+
         // Save stop icon visibility (0=Show, 1=Hidden in combobox -> config 1=Show, 0=Hidden)
         int stopIconSel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_STOP_ICON_COMBO), CB_GETCURSEL, 0, 0);
         cfg_nowbar_stop_icon_visible = (stopIconSel == 0) ? 1 : 0;
@@ -3962,6 +3984,7 @@ void nowbar_preferences::reset_settings() {
         } else if (m_current_tab == 2) {
             // Reset Icons tab settings
             cfg_nowbar_mood_icon_visible = 1;  // Show (visible)
+            cfg_nowbar_rating_visible = 1;  // Show (default)
             cfg_nowbar_stop_icon_visible = 0;  // Hidden (default)
             cfg_nowbar_stop_after_current_icon_visible = 0;  // Hidden (default)
             cfg_nowbar_super_icon_visible = 1;  // Show (default)
@@ -3973,6 +3996,7 @@ void nowbar_preferences::reset_settings() {
 
             // Update Icons tab UI
             SendMessage(GetDlgItem(m_hwnd, IDC_MOOD_ICON_COMBO), CB_SETCURSEL, 0, 0);
+            SendMessage(GetDlgItem(m_hwnd, IDC_RATING_STARS_COMBO), CB_SETCURSEL, 0, 0);
             SendMessage(GetDlgItem(m_hwnd, IDC_STOP_ICON_COMBO), CB_SETCURSEL, 1, 0);  // Default: Hidden
             SendMessage(GetDlgItem(m_hwnd, IDC_STOP_AFTER_CURRENT_COMBO), CB_SETCURSEL, 1, 0);  // Default: Hidden
             SendMessage(GetDlgItem(m_hwnd, IDC_SUPER_ICON_COMBO), CB_SETCURSEL, 0, 0);  // Default: Show
