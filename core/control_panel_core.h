@@ -37,6 +37,7 @@ enum class HitRegion {
     Artwork,
     TrackInfo,
     HeartButton,   // Mood/favorite toggle
+    RatingArea,    // 5-star rating element
     PrevButton,
     PlayButton,
     StopButton,    // Optional stop button
@@ -212,6 +213,8 @@ private:
     void draw_prev_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color);
     void draw_next_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color);
     void draw_heart_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color);
+    void draw_star_filled_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color);
+    void draw_star_outline_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color);
     void draw_miniplayer_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color);
     void draw_volume_icon(Gdiplus::Graphics& g, int x, int y, int size, const Gdiplus::Color& color, int level);  // level: 0=mute, 1=low, 2=full
     void draw_custom_icon(Gdiplus::Graphics& g, const RECT& rect, const Gdiplus::Color& color);  // Button #1 icon (dots grid)
@@ -238,6 +241,9 @@ private:
     void do_seek(double position);
     void do_volume_change(float delta);
     void do_toggle_mood();
+    void do_set_rating(int star);
+    void update_rating_state();
+    metadb_handle_ptr get_rating_track();  // Get focused playlist item, or now-playing as fallback
 
     void update_mood_state();
     void show_picture_viewer();
@@ -263,6 +269,8 @@ private:
     RECT m_rect_artwork = {};
     RECT m_rect_track_info = {};
     RECT m_rect_heart = {};
+    RECT m_rect_rating = {};       // Overall rating area bounds
+    RECT m_rect_stars[5] = {};     // Individual star hit targets
     RECT m_rect_prev = {};
     RECT m_rect_play = {};
     RECT m_rect_stop = {};  // Optional stop button
@@ -296,6 +304,12 @@ private:
     float m_prev_volume_db = 0.0f;  // Store previous volume for mute toggle
     bool m_miniplayer_active = false;  // MiniPlayer enabled state for icon color
     bool m_mood_active = false;  // MOOD tag state for heart icon color
+    int m_rating_value = 0;        // Current track rating (0=unrated, 1-5)
+    int m_rating_hover_star = 0;   // Which star is hovered (0=none, 1-5)
+
+    // Playlist focus tracking for rating display
+    class PlaylistFocusCallback;
+    std::unique_ptr<PlaylistFocusCallback> m_playlist_focus_callback;
     bool m_stop_after_current_active = false;  // "Stop after current" toggle state for icon color
     
     // Native Windows tooltip control for custom buttons
