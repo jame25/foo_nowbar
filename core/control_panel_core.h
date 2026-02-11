@@ -198,6 +198,7 @@ private:
     void draw_volume(Gdiplus::Graphics& g);
     void draw_volume_tooltip(Gdiplus::Graphics& g);
     void draw_time_display(Gdiplus::Graphics& g);
+    void draw_miniplayer_button(Gdiplus::Graphics& g);
     
     // Button rendering
     void draw_button(Gdiplus::Graphics& g, const RECT& rect, const wchar_t* icon, bool hovered, bool active);
@@ -467,6 +468,7 @@ private:
     COLORREF m_theme_highlight = RGB(0, 120, 215);  // DUI Highlight / CUI selection_bg
     COLORREF m_theme_selection = RGB(0, 120, 215);   // DUI Selection / CUI selection_bg
     COLORREF m_theme_text = RGB(255, 255, 255);       // DUI Text / CUI text
+    COLORREF m_track_color = RGB(255, 255, 255);      // Bar track (unfilled) color
 
     // Artwork-extracted colors for dynamic background
     Gdiplus::Color m_artwork_color_primary;
