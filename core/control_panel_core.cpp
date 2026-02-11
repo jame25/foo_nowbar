@@ -128,10 +128,36 @@ static inline float slider_to_db(float slider_pos) {
     return static_cast<float>(volume);
 }
 
+// Playlist focus callback - updates rating display when focused track changes
+class ControlPanelCore::PlaylistFocusCallback : public playlist_callback_impl_base {
+public:
+  PlaylistFocusCallback(ControlPanelCore* owner)
+      : playlist_callback_impl_base(
+            playlist_callback::flag_on_item_focus_change |
+            playlist_callback::flag_on_playlist_activate)
+      , m_owner(owner) {}
+
+  void on_item_focus_change(t_size, t_size, t_size) override {
+    m_owner->update_rating_state();
+    m_owner->invalidate();
+  }
+
+  void on_playlist_activate(t_size, t_size) override {
+    m_owner->update_rating_state();
+    m_owner->invalidate();
+  }
+
+private:
+  ControlPanelCore* m_owner;
+};
+
 ControlPanelCore::ControlPanelCore() {
   // Register for playback callbacks
   PlaybackStateManager::get().register_callback(this);
   m_state = PlaybackStateManager::get().get_state();
+
+  // Register for playlist focus changes (rating display)
+  m_playlist_focus_callback = std::make_unique<PlaylistFocusCallback>(this);
 
   // Register for theme change notifications
   register_instance(this);
@@ -146,6 +172,9 @@ ControlPanelCore::ControlPanelCore() {
 }
 
 ControlPanelCore::~ControlPanelCore() {
+  // Destroy playlist callback before services are gone
+  m_playlist_focus_callback.reset();
+
   // Stop command state polling timer
   stop_command_state_timer();
   
@@ -1012,6 +1041,41 @@ void ControlPanelCore::update_layout(const RECT &rect) {
     m_rect_heart = {heart_x, btn_y, heart_x + button_size, btn_y + button_size};
   } else {
     m_rect_heart = {}; // Clear rect when hidden
+  }
+
+  // Rating stars - positioned to the left of heart (or shuffle if heart hidden)
+  if (get_nowbar_rating_visible()) {
+    int star_size = static_cast<int>(button_size * 0.55f);
+    int star_gap = static_cast<int>(2 * m_dpi_scale);
+    int total_rating_width = star_size * 5 + star_gap * 4;
+
+    // Position to the left of heart icon, or shuffle if heart is hidden
+    int rating_right;
+    if (get_nowbar_mood_icon_visible() && m_rect_heart.right > m_rect_heart.left) {
+      rating_right = m_rect_heart.left - spacing;
+    } else {
+      rating_right = m_rect_shuffle.left - spacing;
+    }
+    int rating_x = rating_right - total_rating_width;
+
+    // Clamp to artwork right edge
+    int min_rating_x = get_nowbar_cover_artwork_visible()
+        ? m_rect_artwork.right + spacing
+        : rect.left + spacing;
+    rating_x = std::max(rating_x, min_rating_x);
+
+    m_rect_rating = {rating_x, btn_y, rating_x + total_rating_width, btn_y + button_size};
+
+    // Compute individual star rects
+    for (int i = 0; i < 5; i++) {
+      int sx = rating_x + i * (star_size + star_gap);
+      // Vertically center star within the button_size row
+      int star_y = btn_y + (button_size - star_size) / 2;
+      m_rect_stars[i] = {sx, star_y, sx + star_size, star_y + star_size};
+    }
+  } else {
+    m_rect_rating = {};
+    for (int i = 0; i < 5; i++) m_rect_stars[i] = {};
   }
 
   // Custom buttons #1-6 - arranged in two rows to the LEFT of volume bar
@@ -1966,6 +2030,42 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
     draw_heart_icon(g, heartIconRect, heartColor);
   }
 
+  // Rating stars - 5 clickable stars
+  if (get_nowbar_rating_visible()) {
+    // Gold color for rated/hovered stars
+    Gdiplus::Color ratingAccentColor(255, 255, 193, 7);  // Material Design Amber
+
+    for (int i = 0; i < 5; i++) {
+      int star_num = i + 1;  // 1-based star number
+      RECT star_rect = m_rect_stars[i];
+      if (star_rect.right <= star_rect.left) continue;
+
+      // Determine which visual state this star is in
+      bool is_filled;
+      Gdiplus::Color star_color;
+
+      if (m_rating_hover_star > 0) {
+        // Hover preview: fill stars 1..hover_star in accent, rest as outline
+        is_filled = (star_num <= m_rating_hover_star);
+        star_color = is_filled ? ratingAccentColor : icon_secondary_color;
+      } else if (m_rating_value > 0) {
+        // Rated: fill stars 1..rating in accent, rest as outline
+        is_filled = (star_num <= m_rating_value);
+        star_color = is_filled ? ratingAccentColor : icon_secondary_color;
+      } else {
+        // Unrated: all 5 filled in secondary color
+        is_filled = true;
+        star_color = icon_secondary_color;
+      }
+
+      if (is_filled) {
+        draw_star_filled_icon(g, star_rect, star_color);
+      } else {
+        draw_star_outline_icon(g, star_rect, star_color);
+      }
+    }
+  }
+
   // Shuffle button
   bool shuffle_active = (m_state.playback_order == 4); // Shuffle tracks
   bool shuffle_hovered = (m_hover_region == HitRegion::ShuffleButton);
@@ -2444,7 +2544,7 @@ void ControlPanelCore::draw_seekbar(Gdiplus::Graphics &g) {
     r = r * (255 - ov) / 255 + 15;
     g = g * (255 - ov) / 255 + 15;
     b = b * (255 - ov) / 255 + 15;
-    trackColor = Gdiplus::Color(255, min(r, 255), min(g, 255), min(b, 255));
+    trackColor = Gdiplus::Color(255, std::min(r, 255), std::min(g, 255), std::min(b, 255));
   } else {
     // Solid background: use theme-appropriate track color
     trackColor = Gdiplus::Color(255, GetRValue(m_track_color),
@@ -2915,7 +3015,7 @@ void ControlPanelCore::draw_thin_progress_bar(Gdiplus::Graphics& g) {
     r = r * (255 - ov) / 255 + 15;
     g = g * (255 - ov) / 255 + 15;
     b = b * (255 - ov) / 255 + 15;
-    bgColor = Gdiplus::Color(alpha, min(r, 255), min(g, 255), min(b, 255));
+    bgColor = Gdiplus::Color(alpha, std::min(r, 255), std::min(g, 255), std::min(b, 255));
   } else {
     // Solid background: use theme-appropriate track color
     bgColor = Gdiplus::Color(alpha, GetRValue(m_track_color),
@@ -3564,7 +3664,7 @@ void ControlPanelCore::draw_volume(Gdiplus::Graphics &g) {
     r = r * (255 - ov) / 255 + 15;
     g = g * (255 - ov) / 255 + 15;
     b = b * (255 - ov) / 255 + 15;
-    trackColor = Gdiplus::Color(255, min(r, 255), min(g, 255), min(b, 255));
+    trackColor = Gdiplus::Color(255, std::min(r, 255), std::min(g, 255), std::min(b, 255));
   } else {
     // Solid background: use theme-appropriate track color
     trackColor = Gdiplus::Color(255, GetRValue(m_track_color),
@@ -3712,6 +3812,8 @@ HitRegion ControlPanelCore::hit_test(int x, int y) const {
     return HitRegion::PrevButton;
   if (pt_in_rect(m_rect_next, x, y))
     return HitRegion::NextButton;
+  if (get_nowbar_rating_visible() && pt_in_rect(m_rect_rating, x, y))
+    return HitRegion::RatingArea;
   if (get_nowbar_mood_icon_visible() && pt_in_rect(m_rect_heart, x, y))
     return HitRegion::HeartButton;
   if (pt_in_rect(m_rect_shuffle, x, y))
@@ -3816,6 +3918,31 @@ void ControlPanelCore::on_mouse_move(int x, int y) {
     invalidate();
   }
 
+  // Track which rating star the cursor is over
+  if (new_region == HitRegion::RatingArea) {
+    int new_hover_star = 0;
+    for (int i = 0; i < 5; i++) {
+      if (pt_in_rect(m_rect_stars[i], x, y)) {
+        new_hover_star = i + 1;
+        break;
+      }
+    }
+    // Also check gaps between stars - assign to nearest star
+    if (new_hover_star == 0 && m_rect_rating.right > m_rect_rating.left) {
+      float frac = static_cast<float>(x - m_rect_rating.left) / (m_rect_rating.right - m_rect_rating.left);
+      new_hover_star = std::min(5, std::max(1, static_cast<int>(frac * 5.0f) + 1));
+    }
+    if (new_hover_star != m_rating_hover_star) {
+      m_rating_hover_star = new_hover_star;
+      m_needs_full_repaint = true;
+      invalidate();
+    }
+  } else if (m_rating_hover_star != 0) {
+    m_rating_hover_star = 0;
+    m_needs_full_repaint = true;
+    invalidate();
+  }
+
   // Spectrum hover fade (Mode 1): dim spectrum when hovering over buttons
   if (get_nowbar_visualization_mode() == 1) {
     bool hovering_button = (new_region == HitRegion::PlayButton ||
@@ -3825,7 +3952,8 @@ void ControlPanelCore::on_mouse_move(int x, int y) {
                             new_region == HitRegion::RepeatButton ||
                             new_region == HitRegion::StopButton ||
                             new_region == HitRegion::SuperButton ||
-                            new_region == HitRegion::HeartButton);
+                            new_region == HitRegion::HeartButton ||
+                            new_region == HitRegion::RatingArea);
     float target = hovering_button ? 0.3f : 1.0f;
     if (m_spectrum_hover_opacity != target) {
       // Simple lerp toward target
@@ -3933,6 +4061,7 @@ void ControlPanelCore::on_mouse_move(int x, int y) {
 
 void ControlPanelCore::on_mouse_leave() {
   m_volume_wheel_active = false;
+  m_rating_hover_star = 0;
 
   if (m_hover_region != HitRegion::None) {
     m_hover_region = HitRegion::None;
@@ -4009,6 +4138,25 @@ void ControlPanelCore::on_lbutton_up(int x, int y) {
     case HitRegion::HeartButton:
       do_toggle_mood();
       break;
+    case HitRegion::RatingArea: {
+      // Determine which star was clicked
+      int clicked_star = 0;
+      for (int i = 0; i < 5; i++) {
+        if (pt_in_rect(m_rect_stars[i], x, y)) {
+          clicked_star = i + 1;
+          break;
+        }
+      }
+      // Fallback: use position within rating area
+      if (clicked_star == 0 && m_rect_rating.right > m_rect_rating.left) {
+        float frac = static_cast<float>(x - m_rect_rating.left) / (m_rect_rating.right - m_rect_rating.left);
+        clicked_star = std::min(5, std::max(1, static_cast<int>(frac * 5.0f) + 1));
+      }
+      if (clicked_star > 0) {
+        do_set_rating(clicked_star);
+      }
+      break;
+    }
     case HitRegion::ShuffleButton:
       do_shuffle_toggle();
       break;
@@ -4689,6 +4837,71 @@ private:
   pfc::string8 m_value;
 };
 
+void ControlPanelCore::do_set_rating(int star) {
+  // If clicking the same star that's already set, clear the rating
+  int new_rating = (star == m_rating_value) ? 0 : star;
+
+  metadb_handle_ptr track = get_rating_track();
+  if (!track.is_valid()) return;
+
+  // Build target command path for foo_playcount's context menu
+  // e.g. "Playback Statistics/Rating/3" or "Playback Statistics/Rating/<not set>"
+  pfc::string8 target_path("Playback Statistics/Rating/");
+  if (new_rating >= 1 && new_rating <= 5) {
+    char buf[2] = { (char)('0' + new_rating), 0 };
+    target_path += buf;
+  } else {
+    target_path += "<not set>";
+  }
+
+  // Execute via context menu on the target track
+  metadb_handle_list tracks;
+  tracks.add_item(track);
+
+  contextmenu_manager::ptr cm;
+  contextmenu_manager::g_create(cm);
+  cm->init_context(tracks, contextmenu_manager::flag_show_shortcuts);
+
+  contextmenu_node* root = cm->get_root();
+  if (!root) return;
+
+  // Recursive traversal matching the proven pattern in execute_fb2k_action_by_path
+  std::function<bool(contextmenu_node*, pfc::string8)> search_and_execute;
+  search_and_execute = [&](contextmenu_node* node, pfc::string8 parent_path) -> bool {
+    if (!node) return false;
+    t_size child_count = node->get_num_children();
+    for (t_size i = 0; i < child_count; i++) {
+      contextmenu_node* child = node->get_child(i);
+      if (!child) continue;
+
+      const char* child_name = child->get_name();
+      if (!child_name) continue;
+      if (child->get_type() == contextmenu_item_node::type_separator) continue;
+
+      pfc::string8 full_path;
+      if (!parent_path.is_empty()) {
+        full_path << parent_path << "/";
+      }
+      full_path << child_name;
+
+      if (child->get_type() == contextmenu_item_node::type_command) {
+        if (stricmp_utf8(full_path.c_str(), target_path.c_str()) == 0) {
+          child->execute();
+          return true;
+        }
+      } else if (child->get_type() == contextmenu_item_node::type_group) {
+        if (search_and_execute(child, full_path)) return true;
+      }
+    }
+    return false;
+  };
+
+  if (search_and_execute(root, "")) {
+    m_rating_value = new_rating;
+    invalidate();
+  }
+}
+
 void ControlPanelCore::do_toggle_mood() {
   auto pc = playback_control::get();
   metadb_handle_ptr track;
@@ -4812,6 +5025,54 @@ void ControlPanelCore::update_mood_state() {
   }
 }
 
+metadb_handle_ptr ControlPanelCore::get_rating_track() {
+  // Prefer the focused playlist item so rating reflects selection
+  auto pm = playlist_manager::get();
+  t_size active = pm->get_active_playlist();
+  if (active != pfc_infinite) {
+    t_size focus = pm->playlist_get_focus_item(active);
+    if (focus != pfc_infinite) {
+      metadb_handle_ptr track;
+      if (pm->playlist_get_item_handle(track, active, focus)) {
+        return track;
+      }
+    }
+  }
+  // Fall back to now-playing
+  auto pc = playback_control::get();
+  metadb_handle_ptr track;
+  if (pc->get_now_playing(track) && track.is_valid()) {
+    return track;
+  }
+  return metadb_handle_ptr();
+}
+
+void ControlPanelCore::update_rating_state() {
+  metadb_handle_ptr track = get_rating_track();
+  if (!track.is_valid()) {
+    m_rating_value = 0;
+    return;
+  }
+
+  // Evaluate %rating% using title formatting (same as check_and_skip_low_rating)
+  try {
+    static_api_ptr_t<titleformat_compiler> compiler;
+    titleformat_object::ptr format;
+    if (compiler->compile(format, "%rating%")) {
+      pfc::string8 rating_str;
+      track->format_title(nullptr, rating_str, format, nullptr);
+      if (!rating_str.is_empty()) {
+        int rating = atoi(rating_str.c_str());
+        m_rating_value = (rating >= 1 && rating <= 5) ? rating : 0;
+      } else {
+        m_rating_value = 0;
+      }
+    }
+  } catch (...) {
+    m_rating_value = 0;
+  }
+}
+
 void ControlPanelCore::on_playback_state_changed(const PlaybackState &state) {
   bool was_playing = m_state.is_playing || m_state.is_paused;
   m_state = state;
@@ -4832,6 +5093,9 @@ void ControlPanelCore::on_playback_state_changed(const PlaybackState &state) {
 
     // Reset stop-after-current state (SDK clears it when playback stops)
     m_stop_after_current_active = false;
+
+    // Reset rating when not playing
+    m_rating_value = 0;
   }
 
   // Reapply theme when transitioning between stopped and playing/paused
@@ -4914,6 +5178,9 @@ void ControlPanelCore::on_track_changed() {
 
   // Update mood state for new track
   update_mood_state();
+
+  // Update rating state for new track
+  update_rating_state();
 
   // Update stop-after-current state (may have been toggled externally)
   if (get_nowbar_stop_after_current_icon_visible()) {
@@ -5440,6 +5707,96 @@ void ControlPanelCore::draw_heart_icon(Gdiplus::Graphics &g, const RECT &rect,
                  svgToNorm(760, -300),
                  svgToNorm(bottomX, bottomY) // Back to bottom
   );
+  path.CloseFigure();
+
+  g.FillPath(&brush, &path);
+  g.SetTransform(&oldMatrix);
+}
+
+void ControlPanelCore::draw_star_filled_icon(Gdiplus::Graphics& g, const RECT& rect,
+                                              const Gdiplus::Color& color) {
+  float iconSize = static_cast<float>(std::min(rect.right - rect.left,
+                                               rect.bottom - rect.top));
+  float cx = (rect.left + rect.right) / 2.0f;
+  float cy = (rect.top + rect.bottom) / 2.0f;
+  float scale = iconSize / 24.0f;
+
+  Gdiplus::Matrix oldMatrix;
+  g.GetTransform(&oldMatrix);
+
+  Gdiplus::Matrix matrix;
+  matrix.Translate(cx - 12 * scale, cy - 12 * scale);
+  matrix.Scale(scale, scale);
+  g.SetTransform(&matrix);
+
+  Gdiplus::SolidBrush brush(color);
+  Gdiplus::GraphicsPath path;
+
+  // Outer star path: M233-120 l65-281 L80-590 l288-25 112-265 112 265 288 25 -218 189 65 281 -247-149 -247 149Z
+  path.StartFigure();
+  path.AddLine(svgToNorm(233, -120), svgToNorm(298, -401));   // l65-281
+  path.AddLine(svgToNorm(298, -401), svgToNorm(80, -590));    // L80-590
+  path.AddLine(svgToNorm(80, -590), svgToNorm(368, -615));    // l288-25
+  path.AddLine(svgToNorm(368, -615), svgToNorm(480, -880));   // l112-265
+  path.AddLine(svgToNorm(480, -880), svgToNorm(592, -615));   // l112 265
+  path.AddLine(svgToNorm(592, -615), svgToNorm(880, -590));   // l288 25
+  path.AddLine(svgToNorm(880, -590), svgToNorm(662, -401));   // l-218 189
+  path.AddLine(svgToNorm(662, -401), svgToNorm(727, -120));   // l65 281
+  path.AddLine(svgToNorm(727, -120), svgToNorm(480, -269));   // l-247-149
+  path.AddLine(svgToNorm(480, -269), svgToNorm(233, -120));   // l-247 149
+  path.CloseFigure();
+
+  g.FillPath(&brush, &path);
+  g.SetTransform(&oldMatrix);
+}
+
+void ControlPanelCore::draw_star_outline_icon(Gdiplus::Graphics& g, const RECT& rect,
+                                               const Gdiplus::Color& color) {
+  float iconSize = static_cast<float>(std::min(rect.right - rect.left,
+                                               rect.bottom - rect.top));
+  float cx = (rect.left + rect.right) / 2.0f;
+  float cy = (rect.top + rect.bottom) / 2.0f;
+  float scale = iconSize / 24.0f;
+
+  Gdiplus::Matrix oldMatrix;
+  g.GetTransform(&oldMatrix);
+
+  Gdiplus::Matrix matrix;
+  matrix.Translate(cx - 12 * scale, cy - 12 * scale);
+  matrix.Scale(scale, scale);
+  g.SetTransform(&matrix);
+
+  Gdiplus::SolidBrush brush(color);
+  Gdiplus::GraphicsPath path;
+  path.SetFillMode(Gdiplus::FillModeAlternate);
+
+  // Outer star (same as filled)
+  path.StartFigure();
+  path.AddLine(svgToNorm(233, -120), svgToNorm(298, -401));
+  path.AddLine(svgToNorm(298, -401), svgToNorm(80, -590));
+  path.AddLine(svgToNorm(80, -590), svgToNorm(368, -615));
+  path.AddLine(svgToNorm(368, -615), svgToNorm(480, -880));
+  path.AddLine(svgToNorm(480, -880), svgToNorm(592, -615));
+  path.AddLine(svgToNorm(592, -615), svgToNorm(880, -590));
+  path.AddLine(svgToNorm(880, -590), svgToNorm(662, -401));
+  path.AddLine(svgToNorm(662, -401), svgToNorm(727, -120));
+  path.AddLine(svgToNorm(727, -120), svgToNorm(480, -269));
+  path.AddLine(svgToNorm(480, -269), svgToNorm(233, -120));
+  path.CloseFigure();
+
+  // Inner cutout (creates outline effect via alternate fill mode)
+  // Computed from SVG relative path: m354-287 126-76 126 77 -33-144 111-96 -146-13 -58-136 -58 135 -146 13 111 97 -33 143Z
+  path.StartFigure();
+  path.AddLine(svgToNorm(354, -287), svgToNorm(480, -363));
+  path.AddLine(svgToNorm(480, -363), svgToNorm(606, -286));
+  path.AddLine(svgToNorm(606, -286), svgToNorm(573, -430));
+  path.AddLine(svgToNorm(573, -430), svgToNorm(684, -526));
+  path.AddLine(svgToNorm(684, -526), svgToNorm(538, -539));
+  path.AddLine(svgToNorm(538, -539), svgToNorm(480, -675));
+  path.AddLine(svgToNorm(480, -675), svgToNorm(422, -540));
+  path.AddLine(svgToNorm(422, -540), svgToNorm(276, -527));
+  path.AddLine(svgToNorm(276, -527), svgToNorm(387, -430));
+  path.AddLine(svgToNorm(387, -430), svgToNorm(354, -287));
   path.CloseFigure();
 
   g.FillPath(&brush, &path);
