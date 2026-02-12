@@ -33,6 +33,9 @@ int get_nowbar_visualization_mode();  // 0=Disabled, 1=Spectrum, 2=Waveform
 COLORREF get_nowbar_spectrum_color();
 int get_nowbar_spectrum_width();     // 0=Thin, 1=Normal, 2=Wide
 int get_nowbar_spectrum_shape();     // 0=Pill, 1=Rectangle
+int get_nowbar_spectrum_opacity();       // 0-100
+int get_nowbar_spectrum_gradient_mode(); // 0=Solid, 1=Gradient
+COLORREF get_nowbar_spectrum_color2();   // Gradient bottom color
 bool get_nowbar_vis_60fps();
 COLORREF get_nowbar_waveform_color();
 COLORREF get_nowbar_waveform_unplayed_color();
