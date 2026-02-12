@@ -341,11 +341,11 @@ private:
     static constexpr float CBUTTON_FADE_DURATION_MS = 300.0f;  // Fade duration in milliseconds
     
     // Spectrum visualizer
-    static constexpr int SPECTRUM_BAR_COUNT = 20;
     static constexpr int SPECTRUM_FFT_SIZE = 512;
     static constexpr float SPECTRUM_FADE_DURATION_MS = 300.0f;
     service_ptr_t<visualisation_stream_v3> m_vis_stream;
-    float m_spectrum_bars[SPECTRUM_BAR_COUNT] = {};
+    std::vector<float> m_spectrum_bars;
+    int m_spectrum_bar_count = 0;  // current bar count based on panel width
     float m_spectrum_opacity = 0.0f;
     float m_spectrum_target_opacity = 0.0f;
     float m_spectrum_start_opacity = 0.0f;
@@ -354,6 +354,7 @@ private:
 
     void draw_spectrum(Gdiplus::Graphics& g);
     void update_spectrum_data();
+    int compute_spectrum_bar_count(int area_w) const;
     void create_vis_stream();
     void release_vis_stream();
 
