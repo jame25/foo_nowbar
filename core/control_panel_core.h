@@ -345,6 +345,8 @@ private:
     static constexpr float SPECTRUM_FADE_DURATION_MS = 300.0f;
     service_ptr_t<visualisation_stream_v3> m_vis_stream;
     std::vector<float> m_spectrum_bars;
+    std::vector<float> m_spectrum_peaks;          // peak heights (0.0-1.0)
+    std::vector<float> m_spectrum_peak_velocity;  // gravity velocity per peak
     int m_spectrum_bar_count = 0;  // current bar count based on panel width
     float m_spectrum_opacity = 0.0f;
     float m_spectrum_target_opacity = 0.0f;
