@@ -214,6 +214,13 @@
 #define IDC_RATING_STARS_LABEL           1519
 #define IDC_RATING_STARS_COMBO           1520
 
+// Spectrum opacity and gradient controls (Fonts & Colors tab)
+#define IDC_SPECTRUM_OPACITY_LABEL         1521
+#define IDC_SPECTRUM_OPACITY_SLIDER        1522
+#define IDC_SPECTRUM_OPACITY_VALUE         1523
+#define IDC_SPECTRUM_GRADIENT_CHECK        1524
+#define IDC_SPECTRUM_COLOR2_BTN            1525
+
 // Profile configuration controls (Custom Button tab)
 #define IDC_PROFILE_NAME_LABEL     1370
 #define IDC_PROFILE_COMBO          1371
