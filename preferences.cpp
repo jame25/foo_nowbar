@@ -224,6 +224,21 @@ static cfg_int cfg_nowbar_spectrum_shape(
     0  // Default: Pill (0=Pill, 1=Rectangle)
 );
 
+static cfg_int cfg_nowbar_spectrum_opacity(
+    GUID{0xABCDEF87, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0x87}},
+    75  // Default: 75% opacity
+);
+
+static cfg_int cfg_nowbar_spectrum_gradient_mode(
+    GUID{0xABCDEF88, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0x88}},
+    0  // Default: Solid (0=Solid, 1=Gradient)
+);
+
+static cfg_int cfg_nowbar_spectrum_color2(
+    GUID{0xABCDEF89, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0x89}},
+    RGB(30, 80, 160)  // Default: darker blue (gradient bottom)
+);
+
 static cfg_int cfg_nowbar_vis_60fps(
     GUID{0xABCDEF84, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0x84}},
     0  // Default: Disabled (0=30fps spectrum, 1=60fps spectrum)
@@ -1511,6 +1526,24 @@ int get_nowbar_spectrum_shape() {
     return s;
 }
 
+int get_nowbar_spectrum_opacity() {
+    int o = cfg_nowbar_spectrum_opacity;
+    if (o < 0) o = 0;
+    if (o > 100) o = 100;
+    return o;
+}
+
+int get_nowbar_spectrum_gradient_mode() {
+    int m = cfg_nowbar_spectrum_gradient_mode;
+    if (m < 0) m = 0;
+    if (m > 1) m = 1;
+    return m;
+}
+
+COLORREF get_nowbar_spectrum_color2() {
+    return static_cast<COLORREF>(cfg_nowbar_spectrum_color2.get_value());
+}
+
 bool get_nowbar_vis_60fps() {
     return cfg_nowbar_vis_60fps != 0;
 }
@@ -2529,6 +2562,11 @@ void nowbar_preferences::switch_tab(int tab) {
     ShowWindow(GetDlgItem(m_hwnd, IDC_HOVER_COLOR_BTN), show_fonts);
     ShowWindow(GetDlgItem(m_hwnd, IDC_CUSTOM_SPECTRUM_COLOR_CHECK), show_fonts);
     ShowWindow(GetDlgItem(m_hwnd, IDC_VIS_SPECTRUM_COLOR_BTN), show_fonts);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_SPECTRUM_OPACITY_LABEL), show_fonts);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_SPECTRUM_OPACITY_SLIDER), show_fonts);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_SPECTRUM_OPACITY_VALUE), show_fonts);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_SPECTRUM_GRADIENT_CHECK), show_fonts);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_SPECTRUM_COLOR2_BTN), show_fonts);
     ShowWindow(GetDlgItem(m_hwnd, IDC_CUSTOM_WAVEFORM_COLOR_CHECK), show_fonts);
     ShowWindow(GetDlgItem(m_hwnd, IDC_VIS_WAVEFORM_COLOR_BTN), show_fonts);
     ShowWindow(GetDlgItem(m_hwnd, IDC_CUSTOM_WAVEFORM_UNPLAYED_CHECK), show_fonts);
@@ -2575,8 +2613,14 @@ static void update_color_buttons_state(HWND hwnd) {
         IsDlgButtonChecked(hwnd, IDC_CUSTOM_VOLUME_ACCENT_CHECK) == BST_CHECKED);
     EnableWindow(GetDlgItem(hwnd, IDC_HOVER_COLOR_BTN),
         IsDlgButtonChecked(hwnd, IDC_CUSTOM_HOVER_COLOR_CHECK) == BST_CHECKED);
-    EnableWindow(GetDlgItem(hwnd, IDC_VIS_SPECTRUM_COLOR_BTN),
-        IsDlgButtonChecked(hwnd, IDC_CUSTOM_SPECTRUM_COLOR_CHECK) == BST_CHECKED);
+    BOOL spectrum_custom = (IsDlgButtonChecked(hwnd, IDC_CUSTOM_SPECTRUM_COLOR_CHECK) == BST_CHECKED);
+    EnableWindow(GetDlgItem(hwnd, IDC_VIS_SPECTRUM_COLOR_BTN), spectrum_custom);
+    EnableWindow(GetDlgItem(hwnd, IDC_SPECTRUM_OPACITY_LABEL), spectrum_custom);
+    EnableWindow(GetDlgItem(hwnd, IDC_SPECTRUM_OPACITY_SLIDER), spectrum_custom);
+    EnableWindow(GetDlgItem(hwnd, IDC_SPECTRUM_OPACITY_VALUE), spectrum_custom);
+    EnableWindow(GetDlgItem(hwnd, IDC_SPECTRUM_GRADIENT_CHECK), spectrum_custom);
+    BOOL gradient_checked = (IsDlgButtonChecked(hwnd, IDC_SPECTRUM_GRADIENT_CHECK) == BST_CHECKED);
+    EnableWindow(GetDlgItem(hwnd, IDC_SPECTRUM_COLOR2_BTN), spectrum_custom && gradient_checked);
     EnableWindow(GetDlgItem(hwnd, IDC_VIS_WAVEFORM_COLOR_BTN),
         IsDlgButtonChecked(hwnd, IDC_CUSTOM_WAVEFORM_COLOR_CHECK) == BST_CHECKED);
     EnableWindow(GetDlgItem(hwnd, IDC_VIS_WAVEFORM_UNPLAYED_COLOR_BTN),
@@ -2835,6 +2879,19 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
             SendMessage(hSpecShape, CB_ADDSTRING, 0, (LPARAM)L"Rectangle");
             SendMessage(hSpecShape, CB_SETCURSEL, cfg_nowbar_spectrum_shape, 0);
 
+            // Initialize spectrum opacity slider (0-100)
+            HWND hOpacitySlider = GetDlgItem(hwnd, IDC_SPECTRUM_OPACITY_SLIDER);
+            SendMessage(hOpacitySlider, TBM_SETRANGE, TRUE, MAKELPARAM(0, 100));
+            SendMessage(hOpacitySlider, TBM_SETPOS, TRUE, cfg_nowbar_spectrum_opacity);
+            {
+                wchar_t buf[8];
+                wsprintfW(buf, L"%d%%", (int)cfg_nowbar_spectrum_opacity);
+                SetDlgItemTextW(hwnd, IDC_SPECTRUM_OPACITY_VALUE, buf);
+            }
+
+            // Initialize gradient checkbox
+            CheckDlgButton(hwnd, IDC_SPECTRUM_GRADIENT_CHECK, cfg_nowbar_spectrum_gradient_mode ? BST_CHECKED : BST_UNCHECKED);
+
             // Populate waveform width combo (Thin/Normal/Wide)
             HWND hWaveWidth = GetDlgItem(hwnd, IDC_VIS_WAVEFORM_WIDTH_COMBO);
             SendMessage(hWaveWidth, CB_ADDSTRING, 0, (LPARAM)L"Thin");
@@ -3050,6 +3107,17 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
                 if (show_color_picker(hwnd, color)) {
                     cfg_nowbar_volume_track_color = color;
                     InvalidateRect(GetDlgItem(hwnd, IDC_VOLUME_TRACK_BTN), nullptr, TRUE);
+                    p_this->on_changed();
+                }
+            }
+            break;
+
+        case IDC_SPECTRUM_COLOR2_BTN:
+            if (HIWORD(wp) == BN_CLICKED) {
+                COLORREF color = static_cast<COLORREF>(cfg_nowbar_spectrum_color2.get_value());
+                if (show_color_picker(hwnd, color)) {
+                    cfg_nowbar_spectrum_color2 = color;
+                    InvalidateRect(GetDlgItem(hwnd, IDC_SPECTRUM_COLOR2_BTN), nullptr, TRUE);
                     p_this->on_changed();
                 }
             }
@@ -3655,6 +3723,7 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         case IDC_CUSTOM_VOLUME_ACCENT_CHECK:
         case IDC_CUSTOM_HOVER_COLOR_CHECK:
         case IDC_CUSTOM_SPECTRUM_COLOR_CHECK:
+        case IDC_SPECTRUM_GRADIENT_CHECK:
         case IDC_CUSTOM_WAVEFORM_COLOR_CHECK:
         case IDC_CUSTOM_WAVEFORM_UNPLAYED_CHECK:
         case IDC_CUSTOM_PROGRESS_TRACK_CHECK:
@@ -3667,6 +3736,16 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         }
         break;
 
+    case WM_HSCROLL:
+        if ((HWND)lp == GetDlgItem(hwnd, IDC_SPECTRUM_OPACITY_SLIDER)) {
+            int pos = (int)SendMessage(GetDlgItem(hwnd, IDC_SPECTRUM_OPACITY_SLIDER), TBM_GETPOS, 0, 0);
+            wchar_t buf[8];
+            wsprintfW(buf, L"%d%%", pos);
+            SetDlgItemTextW(hwnd, IDC_SPECTRUM_OPACITY_VALUE, buf);
+            p_this->on_changed();
+        }
+        break;
+
     case WM_DRAWITEM:
         {
             DRAWITEMSTRUCT* dis = reinterpret_cast<DRAWITEMSTRUCT*>(lp);
@@ -3675,7 +3754,8 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
                 dis->CtlID == IDC_HOVER_COLOR_BTN ||
                 dis->CtlID == IDC_VIS_SPECTRUM_COLOR_BTN || dis->CtlID == IDC_VIS_WAVEFORM_COLOR_BTN ||
                 dis->CtlID == IDC_VIS_WAVEFORM_UNPLAYED_COLOR_BTN ||
-                dis->CtlID == IDC_PROGRESS_TRACK_BTN || dis->CtlID == IDC_VOLUME_TRACK_BTN) {
+                dis->CtlID == IDC_PROGRESS_TRACK_BTN || dis->CtlID == IDC_VOLUME_TRACK_BTN ||
+                dis->CtlID == IDC_SPECTRUM_COLOR2_BTN) {
                 COLORREF color;
                 if (dis->CtlID == IDC_BUTTON_ACCENT_BTN) {
                     color = static_cast<COLORREF>(cfg_nowbar_button_accent_color.get_value());
@@ -3695,6 +3775,8 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
                     color = static_cast<COLORREF>(cfg_nowbar_progress_track_color.get_value());
                 } else if (dis->CtlID == IDC_VOLUME_TRACK_BTN) {
                     color = static_cast<COLORREF>(cfg_nowbar_volume_track_color.get_value());
+                } else if (dis->CtlID == IDC_SPECTRUM_COLOR2_BTN) {
+                    color = static_cast<COLORREF>(cfg_nowbar_spectrum_color2.get_value());
                 } else {
                     color = static_cast<COLORREF>(cfg_nowbar_volume_accent_color.get_value());
                 }
@@ -3828,6 +3910,8 @@ void nowbar_preferences::apply_settings() {
             // Save per-visualization settings
             cfg_nowbar_spectrum_width = (int)SendMessage(GetDlgItem(m_hwnd, IDC_VIS_SPECTRUM_WIDTH_COMBO), CB_GETCURSEL, 0, 0);
             cfg_nowbar_spectrum_shape = (int)SendMessage(GetDlgItem(m_hwnd, IDC_VIS_SPECTRUM_SHAPE_COMBO), CB_GETCURSEL, 0, 0);
+            cfg_nowbar_spectrum_opacity = (int)SendMessage(GetDlgItem(m_hwnd, IDC_SPECTRUM_OPACITY_SLIDER), TBM_GETPOS, 0, 0);
+            cfg_nowbar_spectrum_gradient_mode = (IsDlgButtonChecked(m_hwnd, IDC_SPECTRUM_GRADIENT_CHECK) == BST_CHECKED) ? 1 : 0;
             cfg_nowbar_waveform_width = (int)SendMessage(GetDlgItem(m_hwnd, IDC_VIS_WAVEFORM_WIDTH_COMBO), CB_GETCURSEL, 0, 0);
             cfg_nowbar_vis_60fps = (IsDlgButtonChecked(m_hwnd, IDC_VIS_60FPS_CHECK) == BST_CHECKED) ? 1 : 0;
             // Color buttons are saved immediately via color picker, no need to save here
@@ -4070,6 +4154,9 @@ void nowbar_preferences::reset_settings() {
             cfg_nowbar_volume_accent_color = RGB(140, 140, 140);
             cfg_nowbar_hover_color = RGB(255, 255, 255);
             cfg_nowbar_spectrum_color = RGB(100, 180, 255);
+            cfg_nowbar_spectrum_opacity = 75;
+            cfg_nowbar_spectrum_gradient_mode = 0;
+            cfg_nowbar_spectrum_color2 = RGB(30, 80, 160);
             cfg_nowbar_waveform_color = RGB(255, 85, 0);
             cfg_nowbar_waveform_unplayed_color = RGB(60, 60, 60);
             cfg_nowbar_progress_track_color = RGB(60, 60, 60);
@@ -4082,6 +4169,9 @@ void nowbar_preferences::reset_settings() {
             CheckDlgButton(m_hwnd, IDC_CUSTOM_VOLUME_ACCENT_CHECK, BST_UNCHECKED);
             CheckDlgButton(m_hwnd, IDC_CUSTOM_HOVER_COLOR_CHECK, BST_UNCHECKED);
             CheckDlgButton(m_hwnd, IDC_CUSTOM_SPECTRUM_COLOR_CHECK, BST_UNCHECKED);
+            SendMessage(GetDlgItem(m_hwnd, IDC_SPECTRUM_OPACITY_SLIDER), TBM_SETPOS, TRUE, 75);
+            SetDlgItemTextW(m_hwnd, IDC_SPECTRUM_OPACITY_VALUE, L"75%");
+            CheckDlgButton(m_hwnd, IDC_SPECTRUM_GRADIENT_CHECK, BST_UNCHECKED);
             CheckDlgButton(m_hwnd, IDC_CUSTOM_WAVEFORM_COLOR_CHECK, BST_UNCHECKED);
             CheckDlgButton(m_hwnd, IDC_CUSTOM_WAVEFORM_UNPLAYED_CHECK, BST_UNCHECKED);
             CheckDlgButton(m_hwnd, IDC_CUSTOM_PROGRESS_TRACK_CHECK, BST_UNCHECKED);
@@ -4095,6 +4185,7 @@ void nowbar_preferences::reset_settings() {
             InvalidateRect(GetDlgItem(m_hwnd, IDC_VOLUME_ACCENT_BTN), nullptr, TRUE);
             InvalidateRect(GetDlgItem(m_hwnd, IDC_HOVER_COLOR_BTN), nullptr, TRUE);
             InvalidateRect(GetDlgItem(m_hwnd, IDC_VIS_SPECTRUM_COLOR_BTN), nullptr, TRUE);
+            InvalidateRect(GetDlgItem(m_hwnd, IDC_SPECTRUM_COLOR2_BTN), nullptr, TRUE);
             InvalidateRect(GetDlgItem(m_hwnd, IDC_VIS_WAVEFORM_COLOR_BTN), nullptr, TRUE);
             InvalidateRect(GetDlgItem(m_hwnd, IDC_VIS_WAVEFORM_UNPLAYED_COLOR_BTN), nullptr, TRUE);
             InvalidateRect(GetDlgItem(m_hwnd, IDC_PROGRESS_TRACK_BTN), nullptr, TRUE);
