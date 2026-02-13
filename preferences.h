@@ -71,7 +71,8 @@ pfc::string8 get_nowbar_custom_button_fb2k_action();
 bool get_nowbar_cbutton_enabled(int button_index);  // 0-5, returns enabled state
 int get_nowbar_cbutton_action(int button_index);    // 0-5, returns action 0-3
 pfc::string8 get_nowbar_cbutton_path(int button_index);  // 0-5, returns path string
-pfc::string8 get_nowbar_cbutton_icon_path(int button_index);  // 0-5, returns custom icon path (PNG/ICO)
+pfc::string8 get_nowbar_cbutton_icon_path(int button_index);  // 0-5, returns glyph character string
+int get_nowbar_cbutton_glyph_size(int button_index);  // 0-5, returns glyph size percentage (default 80)
 pfc::string8 get_nowbar_cbutton_label(int button_index);  // 0-5, returns tooltip label (or "Button #N" if empty)
 
 // Config file accessors for all 12 custom buttons (buttons 7-12 are hidden, keyboard-only)
