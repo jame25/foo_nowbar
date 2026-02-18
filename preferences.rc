@@ -34,7 +34,9 @@ BEGIN
     LTEXT           "Width:", IDC_VIS_SPECTRUM_WIDTH_LABEL, 102, 192, 22, 12
     COMBOBOX        IDC_VIS_SPECTRUM_WIDTH_COMBO, 126, 190, 50, 80, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
     LTEXT           "Shape:", IDC_VIS_SPECTRUM_SHAPE_LABEL, 182, 192, 24, 12
-    COMBOBOX        IDC_VIS_SPECTRUM_SHAPE_COMBO, 208, 190, 58, 80, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    COMBOBOX        IDC_VIS_SPECTRUM_SHAPE_COMBO, 208, 190, 50, 80, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "Style:", IDC_VIS_SPECTRUM_STYLE_LABEL, 264, 192, 20, 12
+    COMBOBOX        IDC_VIS_SPECTRUM_STYLE_COMBO, 286, 190, 36, 80, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
     LTEXT           "Width:", IDC_VIS_WAVEFORM_WIDTH_LABEL, 102, 210, 22, 12
     COMBOBOX        IDC_VIS_WAVEFORM_WIDTH_COMBO, 126, 208, 50, 80, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
 
@@ -228,7 +230,7 @@ BEGIN
     LTEXT           "foo_nowbar", IDC_ABOUT_NAME, 16, 30, 300, 12
     LTEXT           "", IDC_ABOUT_DESCRIPTION, 16, 44, 300, 12
     CONTROL         "<a href=""https://github.com/jame25/foo_nowbar"">GitHub Repository</a>", IDC_ABOUT_REPO_LINK, "SysLink", 0, 16, 64, 200, 12
-    CONTROL         "<a href=""https://buy.stripe.com/9B64gy4Wt16T6gD18F1sQ00"">Donate (Stripe)</a> - Alipay / WeChat Pay supported", IDC_ABOUT_DONATE_LINK, "SysLink", 0, 16, 80, 300, 12
+    CONTROL         "<a href=""https://buy.stripe.com/3cIdR874Bg1NfRdaJf1sQ02"">Donate (Stripe)</a> - Alipay supported", IDC_ABOUT_DONATE_LINK, "SysLink", 0, 16, 80, 300, 12
     LTEXT           "Other Plugins:", IDC_ABOUT_OTHER_LABEL, 16, 100, 300, 12
     CONTROL         "<a href=""https://github.com/jame25/foo_artwork"">foo_artwork</a> - Online artwork retrieval", IDC_ABOUT_FOO_ARTWORK_LINK, "SysLink", 0, 16, 116, 300, 12
     CONTROL         "<a href=""https://github.com/jame25/foo_traycontrols"">foo_traycontrols</a> - System tray playback controls", IDC_ABOUT_FOO_TRAYCONTROLS_LINK, "SysLink", 0, 16, 132, 300, 12
