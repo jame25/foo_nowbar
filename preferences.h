@@ -22,6 +22,8 @@ bool get_nowbar_hover_circles_enabled();  // true=Yes (show), false=No (hide)
 bool get_nowbar_alternate_icons_enabled();  // true=Enabled, false=Disabled
 int get_nowbar_play_icon_style();  // 0=Normal, 1=Inverted
 bool get_nowbar_cbutton_autohide();  // true=Yes (auto-hide), false=No
+bool get_nowbar_volume_icon_visible();  // true=Show, false=Hidden
+bool get_nowbar_volume_bar_visible();  // true=Show, false=Hidden
 bool get_nowbar_glass_effect_enabled();  // true=Enabled, false=Disabled (Windows 11 only)
 bool get_nowbar_infinite_playback_enabled();  // true=Enabled, false=Disabled
 void set_nowbar_infinite_playback_enabled(bool enabled);  // Toggle infinite playback mode
