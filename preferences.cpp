@@ -2527,6 +2527,9 @@ void nowbar_preferences::init_tab_control() {
 
     tie.pszText = (LPWSTR)L"Fonts && Colors";
     TabCtrl_InsertItem(hTab, 4, &tie);
+
+    tie.pszText = (LPWSTR)L"About";
+    TabCtrl_InsertItem(hTab, 5, &tie);
 }
 
 void nowbar_preferences::switch_tab(int tab) {
@@ -2718,6 +2721,17 @@ void nowbar_preferences::switch_tab(int tab) {
     ShowWindow(GetDlgItem(m_hwnd, IDC_PROGRESS_TRACK_BTN), show_fonts);
     ShowWindow(GetDlgItem(m_hwnd, IDC_CUSTOM_VOLUME_TRACK_CHECK), show_fonts);
     ShowWindow(GetDlgItem(m_hwnd, IDC_VOLUME_TRACK_BTN), show_fonts);
+
+    // About tab controls (Tab 5)
+    BOOL show_about = (tab == 5) ? SW_SHOW : SW_HIDE;
+    ShowWindow(GetDlgItem(m_hwnd, IDC_ABOUT_NAME), show_about);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_ABOUT_DESCRIPTION), show_about);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_ABOUT_REPO_LINK), show_about);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_ABOUT_DONATE_LINK), show_about);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_ABOUT_OTHER_LABEL), show_about);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_ABOUT_FOO_ARTWORK_LINK), show_about);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_ABOUT_FOO_TRAYCONTROLS_LINK), show_about);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_ABOUT_NOTE), show_about);
 }
 
 // Helper to update Visualization section enable/disable states
@@ -3216,6 +3230,16 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         // Update path control states based on action selection
         update_all_cbutton_path_states(hwnd);
         
+        // Initialize About tab text
+        {
+            wchar_t about_name[128];
+            swprintf_s(about_name, L"foo_nowbar v%hs", FOO_NOWBAR_VERSION_STRING);
+            SetDlgItemTextW(hwnd, IDC_ABOUT_NAME, about_name);
+            wchar_t about_desc[256];
+            swprintf_s(about_desc, L"%hs", FOO_NOWBAR_DESCRIPTION);
+            SetDlgItemTextW(hwnd, IDC_ABOUT_DESCRIPTION, about_desc);
+        }
+
         // Show initial tab
         p_this->switch_tab(0);
         
@@ -4031,7 +4055,10 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
                 int sel = TabCtrl_GetCurSel(pnmhdr->hwndFrom);
                 p_this->switch_tab(sel);
             }
-            else if ((pnmhdr->idFrom == IDC_FOO_ARTWORK_LINK || pnmhdr->idFrom == IDC_FOO_TRAYCONTROLS_LINK) && (pnmhdr->code == NM_CLICK || pnmhdr->code == NM_RETURN)) {
+            else if ((pnmhdr->idFrom == IDC_FOO_ARTWORK_LINK || pnmhdr->idFrom == IDC_FOO_TRAYCONTROLS_LINK ||
+                      pnmhdr->idFrom == IDC_ABOUT_REPO_LINK || pnmhdr->idFrom == IDC_ABOUT_DONATE_LINK ||
+                      pnmhdr->idFrom == IDC_ABOUT_FOO_ARTWORK_LINK || pnmhdr->idFrom == IDC_ABOUT_FOO_TRAYCONTROLS_LINK) &&
+                     (pnmhdr->code == NM_CLICK || pnmhdr->code == NM_RETURN)) {
                 NMLINK* pnmlink = reinterpret_cast<NMLINK*>(lp);
                 ShellExecuteW(nullptr, L"open", pnmlink->item.szUrl, nullptr, nullptr, SW_SHOWNORMAL);
             }
