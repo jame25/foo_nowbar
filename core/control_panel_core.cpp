@@ -2033,29 +2033,21 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
       RECT star_rect = m_rect_stars[i];
       if (star_rect.right <= star_rect.left) continue;
 
-      // Determine which visual state this star is in
-      bool is_filled;
+      // Determine star color: accent for rated/hovered stars, secondary for the rest
       Gdiplus::Color star_color;
 
       if (m_rating_hover_star > 0) {
-        // Hover preview: fill stars 1..hover_star in accent, rest as outline
-        is_filled = (star_num <= m_rating_hover_star);
-        star_color = is_filled ? ratingAccentColor : icon_secondary_color;
+        // Hover preview: accent for stars 1..hover_star, secondary for the rest
+        star_color = (star_num <= m_rating_hover_star) ? ratingAccentColor : icon_secondary_color;
       } else if (m_rating_value > 0) {
-        // Rated: fill stars 1..rating in accent, rest as outline
-        is_filled = (star_num <= m_rating_value);
-        star_color = is_filled ? ratingAccentColor : icon_secondary_color;
+        // Rated: accent for stars 1..rating, secondary for the rest
+        star_color = (star_num <= m_rating_value) ? ratingAccentColor : icon_secondary_color;
       } else {
-        // Unrated: all 5 filled in secondary color
-        is_filled = true;
+        // Unrated: all 5 in secondary color
         star_color = icon_secondary_color;
       }
 
-      if (is_filled) {
-        draw_star_filled_icon(g, star_rect, star_color);
-      } else {
-        draw_star_outline_icon(g, star_rect, star_color);
-      }
+      draw_star_filled_icon(g, star_rect, star_color);
     }
   }
 
@@ -6033,58 +6025,6 @@ void ControlPanelCore::draw_star_filled_icon(Gdiplus::Graphics& g, const RECT& r
   g.SetTransform(&oldMatrix);
 }
 
-void ControlPanelCore::draw_star_outline_icon(Gdiplus::Graphics& g, const RECT& rect,
-                                               const Gdiplus::Color& color) {
-  float iconSize = static_cast<float>(std::min(rect.right - rect.left,
-                                               rect.bottom - rect.top));
-  float cx = (rect.left + rect.right) / 2.0f;
-  float cy = (rect.top + rect.bottom) / 2.0f;
-  float scale = iconSize / 24.0f;
-
-  Gdiplus::Matrix oldMatrix;
-  g.GetTransform(&oldMatrix);
-
-  Gdiplus::Matrix matrix;
-  matrix.Translate(cx - 12 * scale, cy - 12 * scale);
-  matrix.Scale(scale, scale);
-  g.SetTransform(&matrix);
-
-  Gdiplus::SolidBrush brush(color);
-  Gdiplus::GraphicsPath path;
-  path.SetFillMode(Gdiplus::FillModeAlternate);
-
-  // Outer star (same as filled)
-  path.StartFigure();
-  path.AddLine(svgToNorm(233, -120), svgToNorm(298, -401));
-  path.AddLine(svgToNorm(298, -401), svgToNorm(80, -590));
-  path.AddLine(svgToNorm(80, -590), svgToNorm(368, -615));
-  path.AddLine(svgToNorm(368, -615), svgToNorm(480, -880));
-  path.AddLine(svgToNorm(480, -880), svgToNorm(592, -615));
-  path.AddLine(svgToNorm(592, -615), svgToNorm(880, -590));
-  path.AddLine(svgToNorm(880, -590), svgToNorm(662, -401));
-  path.AddLine(svgToNorm(662, -401), svgToNorm(727, -120));
-  path.AddLine(svgToNorm(727, -120), svgToNorm(480, -269));
-  path.AddLine(svgToNorm(480, -269), svgToNorm(233, -120));
-  path.CloseFigure();
-
-  // Inner cutout (creates outline effect via alternate fill mode)
-  // Computed from SVG relative path: m354-287 126-76 126 77 -33-144 111-96 -146-13 -58-136 -58 135 -146 13 111 97 -33 143Z
-  path.StartFigure();
-  path.AddLine(svgToNorm(354, -287), svgToNorm(480, -363));
-  path.AddLine(svgToNorm(480, -363), svgToNorm(606, -286));
-  path.AddLine(svgToNorm(606, -286), svgToNorm(573, -430));
-  path.AddLine(svgToNorm(573, -430), svgToNorm(684, -526));
-  path.AddLine(svgToNorm(684, -526), svgToNorm(538, -539));
-  path.AddLine(svgToNorm(538, -539), svgToNorm(480, -675));
-  path.AddLine(svgToNorm(480, -675), svgToNorm(422, -540));
-  path.AddLine(svgToNorm(422, -540), svgToNorm(276, -527));
-  path.AddLine(svgToNorm(276, -527), svgToNorm(387, -430));
-  path.AddLine(svgToNorm(387, -430), svgToNorm(354, -287));
-  path.CloseFigure();
-
-  g.FillPath(&brush, &path);
-  g.SetTransform(&oldMatrix);
-}
 
 // Draw play icon from Material Design SVG (without circle - just the triangle)
 // Triangle: m380-300 280-180-280-180v360Z
