@@ -178,7 +178,18 @@ void ControlPanelDUI::update_artwork() {
             }
         } catch (...) {}
 
-        // No local artwork found - try online via foo_artwork if enabled
+        // No local artwork found - try stub image from foobar2000 display settings
+        bool stub_set = false;
+        try {
+            auto stub_extractor = art_manager->open_stub(fb2k::noAbort);
+            album_art_data_ptr stub_data;
+            if (stub_extractor->query(album_art_ids::cover_front, stub_data, fb2k::noAbort)) {
+                m_core->set_artwork(stub_data);
+                stub_set = true;
+            }
+        } catch (...) {}
+
+        // Try online via foo_artwork if enabled (may override stub)
         if (get_nowbar_online_artwork() && is_artwork_bridge_available()) {
             pfc::string8 artist, title;
             service_ptr_t<titleformat_object> script_artist, script_title;
@@ -188,9 +199,11 @@ void ControlPanelDUI::update_artwork() {
             pc->playback_format_title(nullptr, artist, script_artist, nullptr, playback_control::display_level_all);
             pc->playback_format_title(nullptr, title, script_title, nullptr, playback_control::display_level_all);
             request_online_artwork(artist.c_str(), title.c_str());
-            // Don't clear artwork - wait for async callback from foo_artwork
+            // Don't clear artwork - stub or previous art shows while waiting
             return;
         }
+
+        if (stub_set) return;
     }
 
     m_core->clear_artwork();
