@@ -284,3 +284,33 @@ foo_nowbar/
 ## License
 
 This component is provided as-is for personal use with foobar2000.
+
+## Support Development
+
+If you find these components useful, consider supporting development:
+
+| Platform | Payment Methods |
+|----------|----------------|
+| **[Ko-fi](https://ko-fi.com/Jame25)** | Cards, PayPal |
+| **[Stripe](https://buy.stripe.com/9B64gy4Wt16T6gD18F1sQ00)** | Alipay, WeChat Pay, Cards, Apple Pay, Google Pay |
+
+Your support helps cover development time and enables new features. Thank you! 🙏
+
+---
+
+## 支持开发
+
+如果您觉得这些组件有用，请考虑支持开发：
+
+| 平台 | 支付方式 |
+|------|----------|
+| **[Ko-fi](https://ko-fi.com/Jame25)** | 银行卡、PayPal |
+| **[Stripe](https://buy.stripe.com/9B64gy4Wt16T6gD18F1sQ00)** | 支付宝、微信支付、银行卡、Apple Pay、Google Pay |
+
+您的支持有助于支付开发时间并实现新功能。谢谢！🙏
+
+---
+
+**Feature Requests:** Paid feature requests are available for supporters. [Contact me on Telegram](https://t.me/jame25) to discuss.
+
+**功能请求：** 为支持者提供付费功能请求。[请在 Telegram 上联系我](https://t.me/jame25) 进行讨论。
