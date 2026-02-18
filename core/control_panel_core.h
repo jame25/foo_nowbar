@@ -346,6 +346,9 @@ private:
     std::vector<float> m_spectrum_bars;
     std::vector<float> m_spectrum_peaks;          // peak heights (0.0-1.0)
     std::vector<float> m_spectrum_peak_velocity;  // gravity velocity per peak
+    std::vector<float> m_spectrum_bars_right;           // right channel bars (stereo mirrored mode)
+    std::vector<float> m_spectrum_peaks_right;          // right channel peak heights
+    std::vector<float> m_spectrum_peak_velocity_right;  // right channel peak gravity
     int m_spectrum_bar_count = 0;  // current bar count based on panel width
     float m_spectrum_opacity = 0.0f;
     float m_spectrum_target_opacity = 0.0f;
