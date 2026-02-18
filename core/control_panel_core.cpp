@@ -15,6 +15,40 @@
 #pragma comment(lib, "comdlg32.lib")
 #pragma comment(lib, "msimg32.lib")
 
+// Resolve U+XXXX notation to actual UTF-8 character.
+// If the input matches "U+XXXX" (4-6 hex digits), returns the UTF-8 encoding
+// of that codepoint. Otherwise returns the input unchanged.
+static pfc::string8 resolve_unicode_notation(const pfc::string8& input) {
+    const char* s = input.c_str();
+    if (s[0] == 'U' && s[1] == '+') {
+        const char* hex_start = s + 2;
+        size_t hex_len = strlen(hex_start);
+        if (hex_len >= 4 && hex_len <= 6) {
+            char* end = nullptr;
+            unsigned long cp = strtoul(hex_start, &end, 16);
+            if (end == hex_start + hex_len && cp <= 0x10FFFF) {
+                // Encode codepoint as UTF-8
+                wchar_t wbuf[3] = {};
+                int wlen = 0;
+                if (cp <= 0xFFFF) {
+                    wbuf[0] = (wchar_t)cp;
+                    wlen = 1;
+                } else {
+                    // Supplementary plane: encode as surrogate pair
+                    cp -= 0x10000;
+                    wbuf[0] = (wchar_t)(0xD800 + (cp >> 10));
+                    wbuf[1] = (wchar_t)(0xDC00 + (cp & 0x3FF));
+                    wlen = 2;
+                }
+                pfc::string8 result;
+                result = pfc::stringcvt::string_utf8_from_wide(wbuf, wlen);
+                return result;
+            }
+        }
+    }
+    return input;
+}
+
 namespace nowbar {
 
 // Static instance registry for theme/settings change notifications
@@ -1094,6 +1128,20 @@ void ControlPanelCore::update_layout(const RECT &rect) {
   m_rect_cbutton6 = {};
   m_rect_custom = {};  // Legacy - clear it
   
+  // Scale custom button size based on the largest glyph size across all enabled buttons.
+  // Default glyph size is 80%; if any button uses a larger size (e.g. 120%), all buttons
+  // get proportionally larger rects so hover circles accommodate the biggest glyph.
+  int max_glyph_pct = 80;
+  for (int i = 0; i < 6; i++) {
+    if (get_nowbar_cbutton_enabled(i)) {
+      int pct = get_nowbar_cbutton_glyph_size(i);
+      if (pct > max_glyph_pct) max_glyph_pct = pct;
+    }
+  }
+  int cbutton_size = (max_glyph_pct > 80)
+      ? static_cast<int>(button_size * max_glyph_pct / 80.0f)
+      : button_size;
+
   // Calculate available space for custom buttons
   // Use Super button right edge if visible, otherwise use Repeat button right edge
   int min_cbutton_left = get_nowbar_super_icon_visible()
@@ -1122,26 +1170,26 @@ void ControlPanelCore::update_layout(const RECT &rect) {
     // Single row layout - all 6 buttons in one row, vertically centered
     int buttons_to_show = 0;
     for (int count = total_enabled; count > 0; count--) {
-      int width_needed = count * button_size + (count - 1) * spacing;
+      int width_needed = count * cbutton_size + (count - 1) * spacing;
       if (width_needed <= available_width) {
         buttons_to_show = count;
         break;
       }
     }
-    
+
     // Calculate total width and starting position (right-aligned)
-    int total_width = buttons_to_show > 0 ? buttons_to_show * button_size + (buttons_to_show - 1) * spacing : 0;
+    int total_width = buttons_to_show > 0 ? buttons_to_show * cbutton_size + (buttons_to_show - 1) * spacing : 0;
     int start_x = cbutton_right_edge - total_width;
     int x = start_x;
     int shown = 0;
-    
+
     // Position buttons in order (1-6) from left to right, using right_btn_y for vertical centering
-    RECT* rects[6] = {&m_rect_cbutton1, &m_rect_cbutton2, &m_rect_cbutton3, 
+    RECT* rects[6] = {&m_rect_cbutton1, &m_rect_cbutton2, &m_rect_cbutton3,
                       &m_rect_cbutton4, &m_rect_cbutton5, &m_rect_cbutton6};
     for (int i = 0; i < 6 && shown < buttons_to_show; i++) {
       if (btn_enabled[i]) {
-        *rects[i] = {x, right_btn_y, x + button_size, right_btn_y + button_size};
-        x += button_size + spacing;
+        *rects[i] = {x, right_btn_y, x + cbutton_size, right_btn_y + cbutton_size};
+        x += cbutton_size + spacing;
         shown++;
       }
     }
@@ -1149,87 +1197,87 @@ void ControlPanelCore::update_layout(const RECT &rect) {
     // 2-row layout - buttons 1-3 in row 1, buttons 4-6 in row 2
     bool row1_enabled[3] = {btn_enabled[0], btn_enabled[1], btn_enabled[2]};
     bool row2_enabled[3] = {btn_enabled[3], btn_enabled[4], btn_enabled[5]};
-    
+
     int row1_count = (row1_enabled[0] ? 1 : 0) + (row1_enabled[1] ? 1 : 0) + (row1_enabled[2] ? 1 : 0);
     int row2_count = (row2_enabled[0] ? 1 : 0) + (row2_enabled[1] ? 1 : 0) + (row2_enabled[2] ? 1 : 0);
-    
+
     // Calculate vertical positions based on how many rows are actually used
     int row_spacing = 2;  // Small gap between rows
     int row1_y, row2_y;
-    
+
     if (row2_count > 0) {
       // Both rows have buttons - center both rows together
-      int total_height = button_size * 2 + row_spacing;
+      int total_height = cbutton_size * 2 + row_spacing;
       row1_y = y_center - total_height / 2;
-      row2_y = row1_y + button_size + row_spacing;
+      row2_y = row1_y + cbutton_size + row_spacing;
     } else {
       // Only row 1 has buttons - center just row 1
-      row1_y = y_center - button_size / 2;
+      row1_y = y_center - cbutton_size / 2;
       row2_y = 0;  // Not used
     }
-    
+
     // Calculate how many buttons fit in each row
     int row1_to_show = 0;
     for (int count = row1_count; count > 0; count--) {
-      int width_needed = count * button_size + (count - 1) * spacing;
+      int width_needed = count * cbutton_size + (count - 1) * spacing;
       if (width_needed <= available_width) {
         row1_to_show = count;
         break;
       }
     }
-    
+
     int row2_to_show = 0;
     for (int count = row2_count; count > 0; count--) {
-      int width_needed = count * button_size + (count - 1) * spacing;
+      int width_needed = count * cbutton_size + (count - 1) * spacing;
       if (width_needed <= available_width) {
         row2_to_show = count;
         break;
       }
     }
-    
+
     // Calculate the maximum width needed (to align both rows to same left edge)
-    int row1_width = row1_to_show > 0 ? row1_to_show * button_size + (row1_to_show - 1) * spacing : 0;
-    int row2_width = row2_to_show > 0 ? row2_to_show * button_size + (row2_to_show - 1) * spacing : 0;
+    int row1_width = row1_to_show > 0 ? row1_to_show * cbutton_size + (row1_to_show - 1) * spacing : 0;
+    int row2_width = row2_to_show > 0 ? row2_to_show * cbutton_size + (row2_to_show - 1) * spacing : 0;
     int max_width = std::max(row1_width, row2_width);
     int start_x = cbutton_right_edge - max_width;
-    
+
     // Position Row 1 buttons (1, 2, 3)
     int row1_x = start_x;
     int shown1 = 0;
-    
+
     if (row1_enabled[0] && shown1 < row1_to_show) {
-      m_rect_cbutton1 = {row1_x, row1_y, row1_x + button_size, row1_y + button_size};
-      row1_x += button_size + spacing;
+      m_rect_cbutton1 = {row1_x, row1_y, row1_x + cbutton_size, row1_y + cbutton_size};
+      row1_x += cbutton_size + spacing;
       shown1++;
     }
     if (row1_enabled[1] && shown1 < row1_to_show) {
-      m_rect_cbutton2 = {row1_x, row1_y, row1_x + button_size, row1_y + button_size};
-      row1_x += button_size + spacing;
+      m_rect_cbutton2 = {row1_x, row1_y, row1_x + cbutton_size, row1_y + cbutton_size};
+      row1_x += cbutton_size + spacing;
       shown1++;
     }
     if (row1_enabled[2] && shown1 < row1_to_show) {
-      m_rect_cbutton3 = {row1_x, row1_y, row1_x + button_size, row1_y + button_size};
-      row1_x += button_size + spacing;
+      m_rect_cbutton3 = {row1_x, row1_y, row1_x + cbutton_size, row1_y + cbutton_size};
+      row1_x += cbutton_size + spacing;
       shown1++;
     }
-    
+
     // Position Row 2 buttons (4, 5, 6)
     int row2_x = start_x;
     int shown2 = 0;
-    
+
     if (row2_enabled[0] && shown2 < row2_to_show) {
-      m_rect_cbutton4 = {row2_x, row2_y, row2_x + button_size, row2_y + button_size};
-      row2_x += button_size + spacing;
+      m_rect_cbutton4 = {row2_x, row2_y, row2_x + cbutton_size, row2_y + cbutton_size};
+      row2_x += cbutton_size + spacing;
       shown2++;
     }
     if (row2_enabled[1] && shown2 < row2_to_show) {
-      m_rect_cbutton5 = {row2_x, row2_y, row2_x + button_size, row2_y + button_size};
-      row2_x += button_size + spacing;
+      m_rect_cbutton5 = {row2_x, row2_y, row2_x + cbutton_size, row2_y + cbutton_size};
+      row2_x += cbutton_size + spacing;
       shown2++;
     }
     if (row2_enabled[2] && shown2 < row2_to_show) {
-      m_rect_cbutton6 = {row2_x, row2_y, row2_x + button_size, row2_y + button_size};
-      row2_x += button_size + spacing;
+      m_rect_cbutton6 = {row2_x, row2_y, row2_x + cbutton_size, row2_y + cbutton_size};
+      row2_x += cbutton_size + spacing;
       shown2++;
     }
   }
@@ -2383,7 +2431,7 @@ void ControlPanelCore::draw_playback_buttons(Gdiplus::Graphics &g) {
     RECT iconRect = {rect.left + inset, rect.top + inset, rect.right - inset, rect.bottom - inset};
     
     // Check if a glyph character is set for this button
-    pfc::string8 glyph_utf8 = get_nowbar_cbutton_icon_path(index);
+    pfc::string8 glyph_utf8 = resolve_unicode_notation(get_nowbar_cbutton_icon_path(index));
     if (!glyph_utf8.is_empty()) {
       // Render glyph via GDI DrawTextW for font linking (emoji/symbol fallback),
       // then composite onto GDI+ Graphics with alpha support.
