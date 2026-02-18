@@ -216,6 +216,8 @@
 #define IDC_SPECTRUM_GRADIENT_CHECK        1524
 #define IDC_SPECTRUM_COLOR2_BTN            1525
 #define IDC_SPECTRUM_COLOR_MODE_COMBO      1526
+#define IDC_VIS_SPECTRUM_STYLE_LABEL      1527
+#define IDC_VIS_SPECTRUM_STYLE_COMBO      1528
 
 // About tab controls
 #define IDC_ABOUT_NAME             1600
