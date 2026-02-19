@@ -311,6 +311,6 @@ Your support helps cover development time and enables new features. Thank you! �
 
 ---
 
-**Feature Requests:** Paid feature requests are available for supporters. [Contact me on Telegram](https://t.me/jame25) to discuss.
+**Feature Requests:** Paid feature requests are available for supporters. [Contact me on Telegram](https://t.me/j4m31) to discuss.
 
-**功能请求：** 为支持者提供付费功能请求。[请在 Telegram 上联系我](https://t.me/jame25) 进行讨论。
+**功能请求：** 为支持者提供付费功能请求。[请在 Telegram 上联系我](https://t.me/j4m31) 进行讨论。
