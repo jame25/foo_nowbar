@@ -507,7 +507,9 @@ private:
     std::unique_ptr<Gdiplus::Font> m_font_title;
     std::unique_ptr<Gdiplus::Font> m_font_artist;
     std::unique_ptr<Gdiplus::Font> m_font_time;
-    
+    int m_title_font_height = 0;   // Measured pixel height of title font
+    int m_artist_font_height = 0;  // Measured pixel height of artist font
+
     // Artwork request callback
     ArtworkRequestCallback m_artwork_request_cb;
     
