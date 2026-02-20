@@ -40,8 +40,23 @@ static cfg_int cfg_nowbar_bar_style(
     0  // Default: Pill-shaped
 );
 
+static cfg_int cfg_nowbar_seekbar_length(
+    GUID{0xABCDEF06, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x68, 0x01}},
+    0  // Default: Fixed
+);
+
 static cfg_int cfg_nowbar_mood_icon_visible(
     GUID{0xABCDEF07, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0x8F}},
+    1  // Default: Show (visible)
+);
+
+static cfg_int cfg_nowbar_shuffle_icon_visible(
+    GUID{0xABCDEF6B, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xFB}},
+    1  // Default: Show (visible)
+);
+
+static cfg_int cfg_nowbar_repeat_icon_visible(
+    GUID{0xABCDEF6C, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xFC}},
     1  // Default: Show (visible)
 );
 
@@ -1554,8 +1569,23 @@ int get_nowbar_bar_style() {
     return style;
 }
 
+int get_nowbar_seekbar_length() {
+    int len = cfg_nowbar_seekbar_length;
+    if (len < 0) len = 0;
+    if (len > 1) len = 1;
+    return len;
+}
+
 bool get_nowbar_mood_icon_visible() {
     return cfg_nowbar_mood_icon_visible != 0;
+}
+
+bool get_nowbar_shuffle_icon_visible() {
+    return cfg_nowbar_shuffle_icon_visible != 0;
+}
+
+bool get_nowbar_repeat_icon_visible() {
+    return cfg_nowbar_repeat_icon_visible != 0;
 }
 
 bool get_nowbar_rating_visible() {
@@ -2609,6 +2639,8 @@ void nowbar_preferences::switch_tab(int tab) {
     ShowWindow(GetDlgItem(m_hwnd, IDC_BACKGROUND_STYLE_COMBO), show_appearance);
     ShowWindow(GetDlgItem(m_hwnd, IDC_BAR_STYLE_LABEL), show_appearance);
     ShowWindow(GetDlgItem(m_hwnd, IDC_BAR_STYLE_COMBO), show_appearance);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_SEEKBAR_LENGTH_LABEL), show_appearance);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_SEEKBAR_LENGTH_COMBO), show_appearance);
     ShowWindow(GetDlgItem(m_hwnd, IDC_GLASS_EFFECT_LABEL), show_appearance);
     ShowWindow(GetDlgItem(m_hwnd, IDC_GLASS_EFFECT_COMBO), show_appearance);
     ShowWindow(GetDlgItem(m_hwnd, IDC_SMOOTH_ANIMATIONS_LABEL), show_appearance);
@@ -2620,6 +2652,10 @@ void nowbar_preferences::switch_tab(int tab) {
     BOOL show_icons = (tab == 2) ? SW_SHOW : SW_HIDE;
     ShowWindow(GetDlgItem(m_hwnd, IDC_MOOD_ICON_LABEL), show_icons);
     ShowWindow(GetDlgItem(m_hwnd, IDC_MOOD_ICON_COMBO), show_icons);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_SHUFFLE_ICON_LABEL), show_icons);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_SHUFFLE_ICON_COMBO), show_icons);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_REPEAT_ICON_LABEL), show_icons);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_REPEAT_ICON_COMBO), show_icons);
     ShowWindow(GetDlgItem(m_hwnd, IDC_STOP_ICON_LABEL), show_icons);
     ShowWindow(GetDlgItem(m_hwnd, IDC_STOP_ICON_COMBO), show_icons);
     ShowWindow(GetDlgItem(m_hwnd, IDC_STOP_AFTER_CURRENT_LABEL), show_icons);
@@ -2991,6 +3027,12 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         SendMessage(hBarStyleCombo, CB_ADDSTRING, 0, (LPARAM)L"Rectangular");
         SendMessage(hBarStyleCombo, CB_SETCURSEL, cfg_nowbar_bar_style, 0);
 
+        // Initialize seekbar length combobox
+        HWND hSeekbarLengthCombo = GetDlgItem(hwnd, IDC_SEEKBAR_LENGTH_COMBO);
+        SendMessage(hSeekbarLengthCombo, CB_ADDSTRING, 0, (LPARAM)L"Fixed");
+        SendMessage(hSeekbarLengthCombo, CB_ADDSTRING, 0, (LPARAM)L"Scaling");
+        SendMessage(hSeekbarLengthCombo, CB_SETCURSEL, cfg_nowbar_seekbar_length, 0);
+
         // Initialize cover margin combobox
         HWND hCoverMarginCombo = GetDlgItem(hwnd, IDC_COVER_MARGIN_COMBO);
         SendMessage(hCoverMarginCombo, CB_ADDSTRING, 0, (LPARAM)L"Yes");
@@ -3005,6 +3047,18 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         SendMessage(hMoodIconCombo, CB_ADDSTRING, 0, (LPARAM)L"Show");
         SendMessage(hMoodIconCombo, CB_ADDSTRING, 0, (LPARAM)L"Hidden");
         SendMessage(hMoodIconCombo, CB_SETCURSEL, cfg_nowbar_mood_icon_visible ? 0 : 1, 0);
+
+        // Initialize shuffle icon visibility combobox
+        HWND hShuffleIconCombo = GetDlgItem(hwnd, IDC_SHUFFLE_ICON_COMBO);
+        SendMessage(hShuffleIconCombo, CB_ADDSTRING, 0, (LPARAM)L"Show");
+        SendMessage(hShuffleIconCombo, CB_ADDSTRING, 0, (LPARAM)L"Hidden");
+        SendMessage(hShuffleIconCombo, CB_SETCURSEL, cfg_nowbar_shuffle_icon_visible ? 0 : 1, 0);
+
+        // Initialize repeat icon visibility combobox
+        HWND hRepeatIconCombo = GetDlgItem(hwnd, IDC_REPEAT_ICON_COMBO);
+        SendMessage(hRepeatIconCombo, CB_ADDSTRING, 0, (LPARAM)L"Show");
+        SendMessage(hRepeatIconCombo, CB_ADDSTRING, 0, (LPARAM)L"Hidden");
+        SendMessage(hRepeatIconCombo, CB_SETCURSEL, cfg_nowbar_repeat_icon_visible ? 0 : 1, 0);
 
         // Initialize rating stars visibility combobox
         HWND hRatingStarsCombo = GetDlgItem(hwnd, IDC_RATING_STARS_COMBO);
@@ -3299,8 +3353,11 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         case IDC_SMOOTH_ANIMATIONS_COMBO:
         case IDC_BACKGROUND_STYLE_COMBO:
         case IDC_BAR_STYLE_COMBO:
+        case IDC_SEEKBAR_LENGTH_COMBO:
         case IDC_COVER_MARGIN_COMBO:
         case IDC_MOOD_ICON_COMBO:
+        case IDC_SHUFFLE_ICON_COMBO:
+        case IDC_REPEAT_ICON_COMBO:
         case IDC_STOP_ICON_COMBO:
         case IDC_STOP_AFTER_CURRENT_COMBO:
         case IDC_SUPER_ICON_COMBO:
@@ -4149,6 +4206,9 @@ void nowbar_preferences::apply_settings() {
         // Save bar style (0=Pill-shaped, 1=Rectangular)
         cfg_nowbar_bar_style = (int)SendMessage(GetDlgItem(m_hwnd, IDC_BAR_STYLE_COMBO), CB_GETCURSEL, 0, 0);
 
+        // Save seekbar length (0=Fixed, 1=Scaling)
+        cfg_nowbar_seekbar_length = (int)SendMessage(GetDlgItem(m_hwnd, IDC_SEEKBAR_LENGTH_COMBO), CB_GETCURSEL, 0, 0);
+
         // Save cover margin setting (0=Yes, 1=No in combobox -> config 1=Yes, 0=No)
         int coverMarginSel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_COVER_MARGIN_COMBO), CB_GETCURSEL, 0, 0);
         cfg_nowbar_cover_margin = (coverMarginSel == 0) ? 1 : 0;
@@ -4156,6 +4216,14 @@ void nowbar_preferences::apply_settings() {
         // Save mood icon visibility (0=Show, 1=Hidden in combobox -> config 1=Show, 0=Hidden)
         int moodIconSel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_MOOD_ICON_COMBO), CB_GETCURSEL, 0, 0);
         cfg_nowbar_mood_icon_visible = (moodIconSel == 0) ? 1 : 0;
+
+        // Save shuffle icon visibility (0=Show, 1=Hidden in combobox -> config 1=Show, 0=Hidden)
+        int shuffleIconSel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_SHUFFLE_ICON_COMBO), CB_GETCURSEL, 0, 0);
+        cfg_nowbar_shuffle_icon_visible = (shuffleIconSel == 0) ? 1 : 0;
+
+        // Save repeat icon visibility (0=Show, 1=Hidden in combobox -> config 1=Show, 0=Hidden)
+        int repeatIconSel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_REPEAT_ICON_COMBO), CB_GETCURSEL, 0, 0);
+        cfg_nowbar_repeat_icon_visible = (repeatIconSel == 0) ? 1 : 0;
 
         // Save rating stars visibility
         int ratingStarsSel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_RATING_STARS_COMBO), CB_GETCURSEL, 0, 0);
@@ -4402,6 +4470,8 @@ void nowbar_preferences::reset_settings() {
             SendMessage(GetDlgItem(m_hwnd, IDC_COVER_MARGIN_COMBO), CB_SETCURSEL, 0, 0);  // Default: Yes
             SendMessage(GetDlgItem(m_hwnd, IDC_BACKGROUND_STYLE_COMBO), CB_SETCURSEL, 0, 0);  // Default: Solid
             SendMessage(GetDlgItem(m_hwnd, IDC_BAR_STYLE_COMBO), CB_SETCURSEL, 0, 0);
+            cfg_nowbar_seekbar_length = 0;  // Default: Fixed
+            SendMessage(GetDlgItem(m_hwnd, IDC_SEEKBAR_LENGTH_COMBO), CB_SETCURSEL, 0, 0);  // Default: Fixed
             SendMessage(GetDlgItem(m_hwnd, IDC_GLASS_EFFECT_COMBO), CB_SETCURSEL, 0, 0);  // Default: Disabled
             SendMessage(GetDlgItem(m_hwnd, IDC_SMOOTH_ANIMATIONS_COMBO), CB_SETCURSEL, 1, 0);  // Default: Disabled (index 1)
             CheckDlgButton(m_hwnd, IDC_ONLINE_ARTWORK_CHECK, BST_UNCHECKED);
@@ -4409,6 +4479,8 @@ void nowbar_preferences::reset_settings() {
         } else if (m_current_tab == 2) {
             // Reset Icons tab settings
             cfg_nowbar_mood_icon_visible = 1;  // Show (visible)
+            cfg_nowbar_shuffle_icon_visible = 1;  // Show (default)
+            cfg_nowbar_repeat_icon_visible = 1;  // Show (default)
             cfg_nowbar_rating_visible = 1;  // Show (default)
             cfg_nowbar_stop_icon_visible = 0;  // Hidden (default)
             cfg_nowbar_stop_after_current_icon_visible = 0;  // Hidden (default)
@@ -4423,6 +4495,8 @@ void nowbar_preferences::reset_settings() {
 
             // Update Icons tab UI
             SendMessage(GetDlgItem(m_hwnd, IDC_MOOD_ICON_COMBO), CB_SETCURSEL, 0, 0);
+            SendMessage(GetDlgItem(m_hwnd, IDC_SHUFFLE_ICON_COMBO), CB_SETCURSEL, 0, 0);  // Default: Show
+            SendMessage(GetDlgItem(m_hwnd, IDC_REPEAT_ICON_COMBO), CB_SETCURSEL, 0, 0);  // Default: Show
             SendMessage(GetDlgItem(m_hwnd, IDC_RATING_STARS_COMBO), CB_SETCURSEL, 0, 0);
             SendMessage(GetDlgItem(m_hwnd, IDC_STOP_ICON_COMBO), CB_SETCURSEL, 1, 0);  // Default: Hidden
             SendMessage(GetDlgItem(m_hwnd, IDC_STOP_AFTER_CURRENT_COMBO), CB_SETCURSEL, 1, 0);  // Default: Hidden
