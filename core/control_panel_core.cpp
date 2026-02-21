@@ -1524,7 +1524,13 @@ void ControlPanelCore::update_layout(const RECT &rect) {
     int time_height = static_cast<int>(m_metrics.text_height * m_size_scale);
     int seekbar_center_y = (m_rect_seekbar.top + m_rect_seekbar.bottom) / 2;
     int timer_extent = static_cast<int>(120 * m_dpi_scale);
-    m_rect_time = {m_rect_seekbar.left - timer_extent,
+    int time_left = m_rect_seekbar.left - timer_extent;
+    // Clamp left edge so the waveform fast-paint path (which clears and
+    // redraws only m_rect_time + m_rect_waveform) does not erase track info
+    // text that is never redrawn in that path.
+    if (time_left < m_rect_track_info.right)
+        time_left = m_rect_track_info.right;
+    m_rect_time = {time_left,
                    seekbar_center_y - time_height / 2,
                    m_rect_seekbar.right + timer_extent,
                    seekbar_center_y + time_height / 2};
