@@ -407,11 +407,18 @@ SIZE ControlPanelCore::get_min_size() const {
   // - Core controls (shuffle, prev, play, next, repeat, super): ~300px
   // - Seekbar/timer overlap area: ~120px
   // - Custom buttons: ~150px
-  // - Volume bar: ~200px  
+  // - Volume bar: ~200px
   // - MiniPlayer button: ~50px
   // - Margins and spacing: ~125px
   // Total: ~1232px to accommodate all elements including spectrum visualizer
-  LONG min_width = static_cast<LONG>(1232 * m_dpi_scale);
+  bool has_any_cbutton = false;
+  for (int i = 0; i < 6; i++) {
+    if (get_nowbar_cbutton_enabled(i)) { has_any_cbutton = true; break; }
+  }
+  bool volume_vis = get_nowbar_volume_icon_visible() || get_nowbar_volume_bar_visible();
+  bool right_side_empty = !volume_vis && !get_nowbar_miniplayer_icon_visible() && !has_any_cbutton;
+  LONG base_width = right_side_empty ? 832 : 1232;
+  LONG min_width = static_cast<LONG>(base_width * m_dpi_scale);
   
   return {min_width, min_height};
 }
@@ -1420,12 +1427,19 @@ void ControlPanelCore::update_layout(const RECT &rect) {
   }
   int full_super_right = full_last_core_right + full_spacing + full_button_size;
 
-  // Left edge uses scaled button positions so the seekbar shrinks with the
-  // buttons at smaller panel heights, leaving room for the elapsed time
-  // display between the track info and the seekbar.  Right edge keeps
-  // full-scale positions so the seekbar extends past the last button.
-  int seekbar_left = get_nowbar_mood_icon_visible() ? m_rect_heart.left : core_left_edge;
-  int seekbar_right = get_nowbar_super_icon_visible() ? full_super_right : full_last_core_right;
+  // Compute seekbar bounds centered on the visible button span.
+  // The leftmost visible button edge and rightmost visible button edge
+  // define the center; the seekbar extends equally from that center.
+  int buttons_left = core_left_edge;
+  int buttons_right = core_right_edge;
+  if (get_nowbar_mood_icon_visible())
+    buttons_left = m_rect_heart.left;
+  if (get_nowbar_super_icon_visible())
+    buttons_right = m_rect_super.right;
+  int buttons_center = (buttons_left + buttons_right) / 2;
+  int buttons_half = (buttons_right - buttons_left) / 2;
+  int seekbar_left = buttons_center - buttons_half;
+  int seekbar_right = buttons_center + buttons_half;
 
   // Find leftmost custom button edge (if any are enabled/positioned)
   int cbuttons_left_edge = INT_MAX;
@@ -1453,8 +1467,13 @@ void ControlPanelCore::update_layout(const RECT &rect) {
                     : rect.right - sp;
     int left_gap = seekbar_left - avail_left;
     int right_gap = avail_right - seekbar_right;
-    if (left_gap > 0) seekbar_left -= left_gap / 2;
-    if (right_gap > 0) seekbar_right += right_gap / 2;
+    // Extend each side independently by half its available gap.
+    // When buttons are centered (gaps equal), this matches symmetric
+    // extension. When buttons are pushed off-center by artwork, the
+    // side with more space extends further, shifting the seekbar toward
+    // the center of the available space.
+    if (left_gap > 0) seekbar_left -= static_cast<int>(left_gap * 0.50);
+    if (right_gap > 0) seekbar_right += static_cast<int>(right_gap * 0.50);
 
     // Shorten the scaling seekbar by 10% on each side so the elapsed/remaining
     // timer text does not overlap the progress bar at narrow panel widths.
@@ -1472,15 +1491,23 @@ void ControlPanelCore::update_layout(const RECT &rect) {
       m_rect_track_info.right = adjusted_info_right;
   }
 
-  // Safety clamp: ensure seekbar left leaves room for the elapsed timer text.
-  // The timer draws between the track info right edge and the seekbar left edge,
-  // so we reserve enough horizontal space for the timer text + gaps.
+  // Safety clamp: ensure seekbar leaves room for timer text on both sides.
+  // The elapsed timer draws between the track info right edge and the seekbar,
+  // and the remaining timer draws between the seekbar and the panel right edge.
   if (vis_mode != 1) {
     int timer_reserve = static_cast<int>(65 * m_dpi_scale);
     int min_seekbar_left = m_rect_track_info.right + timer_reserve;
     if (seekbar_left < min_seekbar_left)
       seekbar_left = min_seekbar_left;
+    int max_seekbar_right = rect.right - right_inset - timer_reserve;
+    if (seekbar_right > max_seekbar_right)
+      seekbar_right = max_seekbar_right;
   }
+
+  // Apply seekbar position offset (shifts entire seekbar+timers block)
+  int seekbar_offset = static_cast<int>(get_nowbar_seekbar_position() * m_dpi_scale);
+  seekbar_left += seekbar_offset;
+  seekbar_right += seekbar_offset;
 
   // Clear new rects by default
   m_rect_thin_progress = {};
@@ -2183,6 +2210,19 @@ void ControlPanelCore::draw_track_info(Gdiplus::Graphics &g) {
     Gdiplus::RectF waveCharBounds;
     g.MeasureString(L"XXXXXX", 6, m_font_title.get(), Gdiplus::PointF(0, 0), &waveCharBounds);
     title_w += waveCharBounds.Width;
+  }
+  // When all right-side elements are hidden (smaller min width), shorten title by 6 chars
+  {
+    bool has_any_cbutton = false;
+    for (int i = 0; i < 6; i++) {
+      if (get_nowbar_cbutton_enabled(i)) { has_any_cbutton = true; break; }
+    }
+    bool volume_vis = get_nowbar_volume_icon_visible() || get_nowbar_volume_bar_visible();
+    if (!volume_vis && !get_nowbar_miniplayer_icon_visible() && !has_any_cbutton) {
+      Gdiplus::RectF minCharBounds;
+      g.MeasureString(L"XXXXXX", 6, m_font_title.get(), Gdiplus::PointF(0, 0), &minCharBounds);
+      title_w -= minCharBounds.Width;
+    }
   }
   if (title_w < 0) title_w = 0;
 
@@ -3128,10 +3168,13 @@ void ControlPanelCore::draw_time_display(Gdiplus::Graphics &g) {
   float timer_right = (float)(m_rect_seekbar.left - timer_gap);
   float timer_left = timer_right - time_width;
   
-  // Constrain timer left edge to not overlap with track info text or artwork
+  // Constrain timer left edge to not overlap with track info text or artwork.
+  // Shift the constraint boundaries by the seekbar position offset so the
+  // elapsed timer moves as a block with the seekbar instead of staying anchored.
   int timer_spacing = static_cast<int>(8 * m_dpi_scale);
-  float min_timer_left = (float)(m_rect_track_info.right + timer_spacing);
-  float min_timer_artwork = (float)(m_rect_artwork.right + timer_spacing);
+  int seekbar_pos_offset = static_cast<int>(get_nowbar_seekbar_position() * m_dpi_scale);
+  float min_timer_left = (float)(m_rect_track_info.right + timer_spacing + seekbar_pos_offset);
+  float min_timer_artwork = (float)(m_rect_artwork.right + timer_spacing + seekbar_pos_offset);
   if (min_timer_artwork > min_timer_left)
     min_timer_left = min_timer_artwork;
   if (timer_left < min_timer_left) {
