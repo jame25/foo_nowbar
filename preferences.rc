@@ -53,12 +53,15 @@ BEGIN
     COMBOBOX        IDC_BAR_STYLE_COMBO, 70, 96, 120, 80, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
     LTEXT           "Seekbar Length:", IDC_SEEKBAR_LENGTH_LABEL, 16, 116, 60, 12
     COMBOBOX        IDC_SEEKBAR_LENGTH_COMBO, 80, 114, 110, 80, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
-    LTEXT           "Glass Effect (Win11):", IDC_GLASS_EFFECT_LABEL, 16, 134, 75, 12
-    COMBOBOX        IDC_GLASS_EFFECT_COMBO, 95, 132, 95, 80, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
-    LTEXT           "Smooth Animations:", IDC_SMOOTH_ANIMATIONS_LABEL, 16, 152, 70, 12
-    COMBOBOX        IDC_SMOOTH_ANIMATIONS_COMBO, 90, 150, 100, 80, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
-    AUTOCHECKBOX    "Online Artwork", IDC_ONLINE_ARTWORK_CHECK, 16, 170, 60, 12
-    CONTROL         "(requires <a href=""https://github.com/jame25/foo_artwork"">foo_artwork</a>)", IDC_FOO_ARTWORK_LINK, "SysLink", 0, 76, 172, 100, 12
+    LTEXT           "Seekbar Position:", IDC_SEEKBAR_POSITION_LABEL, 16, 134, 65, 12
+    CONTROL         "", IDC_SEEKBAR_POSITION_SLIDER, TRACKBAR_CLASS, TBS_NOTICKS | WS_TABSTOP, 84, 132, 80, 14
+    LTEXT           "0", IDC_SEEKBAR_POSITION_VALUE, 168, 134, 25, 12
+    LTEXT           "Glass Effect (Win11):", IDC_GLASS_EFFECT_LABEL, 16, 152, 75, 12
+    COMBOBOX        IDC_GLASS_EFFECT_COMBO, 95, 150, 95, 80, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "Smooth Animations:", IDC_SMOOTH_ANIMATIONS_LABEL, 16, 170, 70, 12
+    COMBOBOX        IDC_SMOOTH_ANIMATIONS_COMBO, 90, 168, 100, 80, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    AUTOCHECKBOX    "Online Artwork", IDC_ONLINE_ARTWORK_CHECK, 16, 188, 60, 12
+    CONTROL         "(requires <a href=""https://github.com/jame25/foo_artwork"">foo_artwork</a>)", IDC_FOO_ARTWORK_LINK, "SysLink", 0, 76, 190, 100, 12
 
     // === Icons Tab Controls (Tab 2) ===
     LTEXT           "Mood Icon:", IDC_MOOD_ICON_LABEL, 16, 26, 50, 12
@@ -240,7 +243,7 @@ BEGIN
     LTEXT           "foo_nowbar", IDC_ABOUT_NAME, 16, 30, 300, 12
     LTEXT           "", IDC_ABOUT_DESCRIPTION, 16, 44, 300, 12
     CONTROL         "<a href=""https://github.com/jame25/foo_nowbar"">GitHub Repository</a>", IDC_ABOUT_REPO_LINK, "SysLink", 0, 16, 64, 200, 12
-    CONTROL         "<a href=""https://buy.stripe.com/3cIdR874Bg1NfRdaJf1sQ02"">Donate (Stripe)</a> - Alipay supported", IDC_ABOUT_DONATE_LINK, "SysLink", 0, 16, 80, 300, 12
+    CONTROL         "<a href=""https://ko-fi.com/Jame25"">Donate (Ko-Fi)</a>", IDC_ABOUT_DONATE_LINK, "SysLink", 0, 16, 80, 300, 12
     LTEXT           "Other Plugins:", IDC_ABOUT_OTHER_LABEL, 16, 100, 300, 12
     CONTROL         "<a href=""https://github.com/jame25/foo_artwork"">foo_artwork</a> - Online artwork retrieval", IDC_ABOUT_FOO_ARTWORK_LINK, "SysLink", 0, 16, 116, 300, 12
     CONTROL         "<a href=""https://github.com/jame25/foo_traycontrols"">foo_traycontrols</a> - System tray playback controls", IDC_ABOUT_FOO_TRAYCONTROLS_LINK, "SysLink", 0, 16, 132, 300, 12
