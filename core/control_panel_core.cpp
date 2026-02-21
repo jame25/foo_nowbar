@@ -1366,15 +1366,16 @@ void ControlPanelCore::update_layout(const RECT &rect) {
   int timer_space;
   if (get_nowbar_rating_visible() && m_rect_rating.right > m_rect_rating.left) {
     reference_left = m_rect_rating.left;
-    // Rating stars are further left than the timer text, so only need a small gap
     timer_space = static_cast<int>(spacing);
   } else if (get_nowbar_mood_icon_visible()) {
     reference_left = m_rect_heart.left;
-    // Timer extends ~62px left from seekbar (≈ heart position): text width + gap
-    timer_space = (vis_mode == 1) ? 0 : static_cast<int>(65 * m_dpi_scale);
+    // Small gap only — draw_time_display() has a runtime clamp that prevents
+    // the elapsed timer from overlapping the track info text, so the layout
+    // does not need to reserve the full timer width here.
+    timer_space = (vis_mode == 1) ? 0 : static_cast<int>(spacing);
   } else {
     reference_left = core_left_edge;
-    timer_space = (vis_mode == 1) ? 0 : static_cast<int>(65 * m_dpi_scale);
+    timer_space = (vis_mode == 1) ? 0 : static_cast<int>(spacing);
   }
   int info_right = reference_left - timer_space;
   // Use actual font heights when available, fall back to metric default
@@ -1419,7 +1420,11 @@ void ControlPanelCore::update_layout(const RECT &rect) {
   }
   int full_super_right = full_last_core_right + full_spacing + full_button_size;
 
-  int seekbar_left = get_nowbar_mood_icon_visible() ? full_heart_left : full_core_left;
+  // Left edge uses scaled button positions so the seekbar shrinks with the
+  // buttons at smaller panel heights, leaving room for the elapsed time
+  // display between the track info and the seekbar.  Right edge keeps
+  // full-scale positions so the seekbar extends past the last button.
+  int seekbar_left = get_nowbar_mood_icon_visible() ? m_rect_heart.left : core_left_edge;
   int seekbar_right = get_nowbar_super_icon_visible() ? full_super_right : full_last_core_right;
 
   // Find leftmost custom button edge (if any are enabled/positioned)
@@ -1450,6 +1455,13 @@ void ControlPanelCore::update_layout(const RECT &rect) {
     int right_gap = avail_right - seekbar_right;
     if (left_gap > 0) seekbar_left -= left_gap / 2;
     if (right_gap > 0) seekbar_right += right_gap / 2;
+
+    // Shorten the scaling seekbar by 10% on each side so the elapsed/remaining
+    // timer text does not overlap the progress bar at narrow panel widths.
+    int seekbar_w = seekbar_right - seekbar_left;
+    int inset = static_cast<int>(seekbar_w * 0.10);
+    seekbar_left += inset;
+    seekbar_right -= inset;
   }
   // seekbar_length_mode == 0: Fixed (current Normal behavior, no change)
 
@@ -1458,6 +1470,16 @@ void ControlPanelCore::update_layout(const RECT &rect) {
     int adjusted_info_right = seekbar_left - timer_space;
     if (adjusted_info_right < m_rect_track_info.right)
       m_rect_track_info.right = adjusted_info_right;
+  }
+
+  // Safety clamp: ensure seekbar left leaves room for the elapsed timer text.
+  // The timer draws between the track info right edge and the seekbar left edge,
+  // so we reserve enough horizontal space for the timer text + gaps.
+  if (vis_mode != 1) {
+    int timer_reserve = static_cast<int>(65 * m_dpi_scale);
+    int min_seekbar_left = m_rect_track_info.right + timer_reserve;
+    if (seekbar_left < min_seekbar_left)
+      seekbar_left = min_seekbar_left;
   }
 
   // Clear new rects by default
@@ -1490,6 +1512,9 @@ void ControlPanelCore::update_layout(const RECT &rect) {
       if (right_gap > 0) spectrum_right += right_gap / 2;
     }
     int spectrum_top = m_rect_play.top;
+    // Clamp spectrum top so it doesn't overlap the track info text
+    if (spectrum_top < m_rect_track_info.bottom)
+      spectrum_top = m_rect_track_info.bottom;
     m_rect_spectrum_full = {spectrum_left, spectrum_top, spectrum_right, rect.bottom};
 
     // Time display in top-right corner, just below thin progress bar
@@ -1587,16 +1612,16 @@ void ControlPanelCore::paint(HDC hdc, const RECT &rect) {
   if (get_nowbar_cover_artwork_visible()) {
     draw_artwork(g);
   }
-  draw_track_info(g);
-
   int paint_vis_mode = get_nowbar_visualization_mode();
   if (paint_vis_mode == 1) {
-    // Mode 1: spectrum behind buttons, then buttons, then thin progress bar + time
+    // Mode 1: spectrum first, then track info on top, then buttons, then thin progress bar + time
     draw_full_spectrum_gdiplus(g);
+    draw_track_info(g);
     draw_playback_buttons(g);
     draw_thin_progress_bar(g);
     draw_time_display_top_right(g);
   } else if (paint_vis_mode == 2) {
+    draw_track_info(g);
     // Mode 2: waveform behind buttons, then buttons, then tooltip on top, then time display
     draw_waveform_bar(g);
     draw_playback_buttons(g);
@@ -1604,6 +1629,7 @@ void ControlPanelCore::paint(HDC hdc, const RECT &rect) {
     draw_time_display(g);
   } else {
     // Mode 0: normal seekbar, no visualization
+    draw_track_info(g);
     draw_playback_buttons(g);
     draw_seekbar(g);
     draw_time_display(g);
@@ -2088,11 +2114,19 @@ void ControlPanelCore::draw_artwork(Gdiplus::Graphics &g) {
 }
 
 void ControlPanelCore::draw_track_info(Gdiplus::Graphics &g) {
-  // Set clipping region to prevent text overflow beyond boundaries
+  // Set clipping region to prevent text overflow beyond boundaries.
+  // When rating stars are hidden, widen the clip to match the extended title_w
+  // so the extra characters are actually visible.
+  int clip_w = m_rect_track_info.right - m_rect_track_info.left;
+  if (!get_nowbar_rating_visible()) {
+    Gdiplus::RectF clipCharBounds;
+    g.MeasureString(L"XXXXXXXXX", 9, m_font_title.get(), Gdiplus::PointF(0, 0), &clipCharBounds);
+    clip_w += static_cast<int>(clipCharBounds.Width);
+  }
   Gdiplus::Rect clipRect(
       m_rect_track_info.left,
       m_rect_track_info.top,
-      m_rect_track_info.right - m_rect_track_info.left,
+      clip_w,
       m_rect_track_info.bottom - m_rect_track_info.top
   );
   g.SetClip(clipRect);
@@ -2118,15 +2152,55 @@ void ControlPanelCore::draw_track_info(Gdiplus::Graphics &g) {
       : static_cast<int>(m_metrics.text_height);
   int text_gap = static_cast<int>(4 * m_dpi_scale);
 
+  float text_w = (float)(m_rect_track_info.right - m_rect_track_info.left);
+
+  // Shorten the title rect by 6 chars when rating stars are visible.
+  // When rating stars are hidden, widen by 9 chars to reclaim freed space.
+  Gdiplus::RectF titleCharBounds6;
+  g.MeasureString(L"XXXXXX", 6, m_font_title.get(), Gdiplus::PointF(0, 0), &titleCharBounds6);
+  Gdiplus::RectF titleCharBounds9;
+  g.MeasureString(L"XXXXXXXXX", 9, m_font_title.get(), Gdiplus::PointF(0, 0), &titleCharBounds9);
+  float title_w;
+  if (get_nowbar_rating_visible()) {
+    title_w = text_w - titleCharBounds6.Width;
+  } else {
+    title_w = text_w + titleCharBounds9.Width;
+  }
+  // In Spectrum mode, shorten title by an additional 3 chars;
+  // but widen by 8 chars when rating stars are enabled.
+  if (get_nowbar_visualization_mode() == 1) {
+    Gdiplus::RectF specCharBounds;
+    g.MeasureString(L"XXX", 3, m_font_title.get(), Gdiplus::PointF(0, 0), &specCharBounds);
+    title_w -= specCharBounds.Width;
+    if (get_nowbar_rating_visible()) {
+      Gdiplus::RectF specRatingBounds;
+      g.MeasureString(L"XXXXXXXX", 8, m_font_title.get(), Gdiplus::PointF(0, 0), &specRatingBounds);
+      title_w += specRatingBounds.Width;
+    }
+  }
+  // In Waveform or Normal mode with rating stars enabled, widen title by 6 chars
+  if ((get_nowbar_visualization_mode() == 2 || get_nowbar_visualization_mode() == 0) && get_nowbar_rating_visible()) {
+    Gdiplus::RectF waveCharBounds;
+    g.MeasureString(L"XXXXXX", 6, m_font_title.get(), Gdiplus::PointF(0, 0), &waveCharBounds);
+    title_w += waveCharBounds.Width;
+  }
+  if (title_w < 0) title_w = 0;
+
   Gdiplus::RectF titleRect(
       (float)m_rect_track_info.left, (float)m_rect_track_info.top,
-      (float)(m_rect_track_info.right - m_rect_track_info.left),
+      title_w,
       (float)title_h);
+
+  // Measure ~5 characters in the artist font to shorten the artist rect
+  Gdiplus::RectF charBounds;
+  g.MeasureString(L"XXXXX", 5, m_font_artist.get(), Gdiplus::PointF(0, 0), &charBounds);
+  float artist_w = text_w - charBounds.Width;
+  if (artist_w < 0) artist_w = 0;
 
   Gdiplus::RectF artistRect(
       (float)m_rect_track_info.left,
       (float)(m_rect_track_info.top + title_h + text_gap),
-      (float)(m_rect_track_info.right - m_rect_track_info.left),
+      artist_w,
       (float)artist_h);
 
   Gdiplus::StringFormat sf;
@@ -3054,10 +3128,12 @@ void ControlPanelCore::draw_time_display(Gdiplus::Graphics &g) {
   float timer_right = (float)(m_rect_seekbar.left - timer_gap);
   float timer_left = timer_right - time_width;
   
-  // Constrain timer left edge to not overlap with artwork
-  // (Track info text is clipped, so timer can use the space between artwork and seekbar)
-  int timer_spacing = static_cast<int>(8 * m_dpi_scale); // Minimum spacing from artwork
-  float min_timer_left = (float)(m_rect_artwork.right + timer_spacing);
+  // Constrain timer left edge to not overlap with track info text or artwork
+  int timer_spacing = static_cast<int>(8 * m_dpi_scale);
+  float min_timer_left = (float)(m_rect_track_info.right + timer_spacing);
+  float min_timer_artwork = (float)(m_rect_artwork.right + timer_spacing);
+  if (min_timer_artwork > min_timer_left)
+    min_timer_left = min_timer_artwork;
   if (timer_left < min_timer_left) {
     timer_left = min_timer_left;
   }
