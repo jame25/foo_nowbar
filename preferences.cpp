@@ -1648,8 +1648,11 @@ bool get_nowbar_hover_circles_enabled() {
     return cfg_nowbar_hover_circles != 0;
 }
 
-bool get_nowbar_alternate_icons_enabled() {
-    return cfg_nowbar_alternate_icons != 0;
+int get_nowbar_alternate_icons_style() {
+    int style = cfg_nowbar_alternate_icons;
+    if (style < 0) style = 0;
+    if (style > 2) style = 2;
+    return style;  // 0=Style 1, 1=Style 2, 2=Style 3
 }
 
 int get_nowbar_play_icon_style() {
@@ -3300,9 +3303,10 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
 
         // Initialize alternate icons combobox
         HWND hAlternateIconsCombo = GetDlgItem(hwnd, IDC_ALTERNATE_ICONS_COMBO);
-        SendMessage(hAlternateIconsCombo, CB_ADDSTRING, 0, (LPARAM)L"Enabled");
-        SendMessage(hAlternateIconsCombo, CB_ADDSTRING, 0, (LPARAM)L"Disabled");
-        SendMessage(hAlternateIconsCombo, CB_SETCURSEL, cfg_nowbar_alternate_icons ? 0 : 1, 0);
+        SendMessage(hAlternateIconsCombo, CB_ADDSTRING, 0, (LPARAM)L"Style 1");
+        SendMessage(hAlternateIconsCombo, CB_ADDSTRING, 0, (LPARAM)L"Style 2");
+        SendMessage(hAlternateIconsCombo, CB_ADDSTRING, 0, (LPARAM)L"Style 3");
+        SendMessage(hAlternateIconsCombo, CB_SETCURSEL, cfg_nowbar_alternate_icons, 0);
 
         // Initialize play icon style combobox
         HWND hPlayIconStyleCombo = GetDlgItem(hwnd, IDC_PLAY_ICON_STYLE_COMBO);
@@ -4468,9 +4472,8 @@ void nowbar_preferences::apply_settings() {
         int hoverCirclesSel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_HOVER_CIRCLES_COMBO), CB_GETCURSEL, 0, 0);
         cfg_nowbar_hover_circles = (hoverCirclesSel == 0) ? 1 : 0;
 
-        // Save alternate icons setting (0=Enabled, 1=Disabled in combobox -> config 1=Enabled, 0=Disabled)
-        int alternateIconsSel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_ALTERNATE_ICONS_COMBO), CB_GETCURSEL, 0, 0);
-        cfg_nowbar_alternate_icons = (alternateIconsSel == 0) ? 1 : 0;
+        // Save alternate icons style (0=Style 1, 1=Style 2, 2=Style 3)
+        cfg_nowbar_alternate_icons = (int)SendMessage(GetDlgItem(m_hwnd, IDC_ALTERNATE_ICONS_COMBO), CB_GETCURSEL, 0, 0);
 
         // Save play icon style setting (0=Dark, 1=Light)
         cfg_nowbar_play_icon_style = (int)SendMessage(GetDlgItem(m_hwnd, IDC_PLAY_ICON_STYLE_COMBO), CB_GETCURSEL, 0, 0);
@@ -4705,7 +4708,7 @@ void nowbar_preferences::reset_settings() {
             cfg_nowbar_super_icon_visible = 1;  // Show (default)
             cfg_nowbar_miniplayer_icon_visible = 1;  // Show (visible)
             cfg_nowbar_hover_circles = 1;  // Show (default)
-            cfg_nowbar_alternate_icons = 0;  // Disabled
+            cfg_nowbar_alternate_icons = 0;  // Style 1 (default)
             cfg_nowbar_play_icon_style = 0;  // Dark (default)
             cfg_nowbar_cbutton_autohide = 0;  // No (default)
             cfg_nowbar_volume_icon_visible = 1;  // Show (default)
@@ -4721,7 +4724,7 @@ void nowbar_preferences::reset_settings() {
             SendMessage(GetDlgItem(m_hwnd, IDC_SUPER_ICON_COMBO), CB_SETCURSEL, 0, 0);  // Default: Show
             SendMessage(GetDlgItem(m_hwnd, IDC_MINIPLAYER_ICON_COMBO), CB_SETCURSEL, 0, 0);
             SendMessage(GetDlgItem(m_hwnd, IDC_HOVER_CIRCLES_COMBO), CB_SETCURSEL, 0, 0);  // Default: Show
-            SendMessage(GetDlgItem(m_hwnd, IDC_ALTERNATE_ICONS_COMBO), CB_SETCURSEL, 1, 0);  // Default: Disabled
+            SendMessage(GetDlgItem(m_hwnd, IDC_ALTERNATE_ICONS_COMBO), CB_SETCURSEL, 0, 0);  // Default: Style 1
             SendMessage(GetDlgItem(m_hwnd, IDC_PLAY_ICON_STYLE_COMBO), CB_SETCURSEL, 0, 0);  // Default: Normal
             SendMessage(GetDlgItem(m_hwnd, IDC_AUTOHIDE_CBUTTONS_COMBO), CB_SETCURSEL, 1, 0);  // Default: No
             SendMessage(GetDlgItem(m_hwnd, IDC_VOLUME_ICON_COMBO), CB_SETCURSEL, 0, 0);  // Default: Show
