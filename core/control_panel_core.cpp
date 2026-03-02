@@ -2319,64 +2319,146 @@ void ControlPanelCore::draw_artwork(Gdiplus::Graphics &g) {
   int w = m_rect_artwork.right - m_rect_artwork.left;
   int h = m_rect_artwork.bottom - m_rect_artwork.top;
 
-  if (m_artwork_thumbnail) {
-    int srcW = m_artwork_thumbnail->GetWidth();
-    int srcH = m_artwork_thumbnail->GetHeight();
-    float srcAspect = (float)srcW / (float)srcH;
-    float dstAspect = (float)w / (float)h;
-    int cropX, cropY, cropW, cropH;
-    if (srcAspect > dstAspect) {
-      // Source is wider than destination: crop sides
-      cropH = srcH;
-      cropW = (int)(srcH * dstAspect);
-      cropX = (srcW - cropW) / 2;
-      cropY = 0;
-    } else {
-      // Source is taller than destination: crop top/bottom
-      cropW = srcW;
-      cropH = (int)(srcW / dstAspect);
-      cropX = 0;
-      cropY = (srcH - cropH) / 2;
+  bool rounded = (get_nowbar_cover_style() == 1);
+  float radius = rounded ? 8.0f * m_dpi_scale : 0.0f;
+
+  if (rounded) {
+    // Draw artwork into an off-screen bitmap, then composite onto the panel
+    // using FillPath with a TextureBrush. FillPath respects SmoothingModeAntiAlias,
+    // giving smooth rounded corners — unlike SetClip which is always binary/aliased.
+    Gdiplus::Bitmap offscreen(w, h, PixelFormat32bppPARGB);
+    {
+      Gdiplus::Graphics og(&offscreen);
+      og.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+      og.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHighQuality);
+
+      if (m_artwork_thumbnail) {
+        int srcW = m_artwork_thumbnail->GetWidth();
+        int srcH = m_artwork_thumbnail->GetHeight();
+        float srcAspect = (float)srcW / (float)srcH;
+        float dstAspect = (float)w / (float)h;
+        int cropX, cropY, cropW, cropH;
+        if (srcAspect > dstAspect) {
+          cropH = srcH;
+          cropW = (int)(srcH * dstAspect);
+          cropX = (srcW - cropW) / 2;
+          cropY = 0;
+        } else {
+          cropW = srcW;
+          cropH = (int)(srcW / dstAspect);
+          cropX = 0;
+          cropY = (srcH - cropH) / 2;
+        }
+        Gdiplus::Rect destRect(0, 0, w, h);
+        og.DrawImage(m_artwork_thumbnail.get(), destRect, cropX, cropY, cropW, cropH,
+                     Gdiplus::UnitPixel);
+      } else {
+        Gdiplus::Color placeholderBg = m_dark_mode
+            ? Gdiplus::Color(255, 60, 60, 60)
+            : Gdiplus::Color(255, 200, 200, 200);
+        Gdiplus::SolidBrush brush(placeholderBg);
+        og.FillRectangle(&brush, 0, 0, w, h);
+
+        bool is_stream = false;
+        if (m_state.current_track.is_valid()) {
+          const char* path = m_state.current_track->get_path();
+          is_stream = (strstr(path, "http://") == path) ||
+                      (strstr(path, "https://") == path) ||
+                      (strstr(path, "mms://") == path) ||
+                      (strstr(path, "rtsp://") == path) ||
+                      (strstr(path, "rtmp://") == path);
+        }
+
+        if (is_stream) {
+          RECT iconRect = {0, 0, w, h};
+          draw_radio_icon(og, iconRect, m_text_secondary_color);
+        } else {
+          Gdiplus::SolidBrush iconBrush(m_text_secondary_color);
+          Gdiplus::Font iconFont(L"Segoe MDL2 Assets", 24.0f * m_dpi_scale,
+                                 Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
+          Gdiplus::StringFormat sf;
+          sf.SetAlignment(Gdiplus::StringAlignmentCenter);
+          sf.SetLineAlignment(Gdiplus::StringAlignmentCenter);
+          Gdiplus::RectF artRect(0.0f, 0.0f, (float)w, (float)h);
+          og.DrawString(L"\uE8D6", -1, &iconFont, artRect, &sf, &iconBrush);
+        }
+      }
     }
-    Gdiplus::Rect destRect(m_rect_artwork.left, m_rect_artwork.top, w, h);
-    g.DrawImage(m_artwork_thumbnail.get(), destRect, cropX, cropY, cropW, cropH,
-                Gdiplus::UnitPixel);
+
+    // Build rounded-rect path in panel coordinates
+    float x = (float)m_rect_artwork.left;
+    float y = (float)m_rect_artwork.top;
+    float fw = (float)w;
+    float fh = (float)h;
+    float d = radius * 2.0f;
+    Gdiplus::GraphicsPath roundedPath;
+    roundedPath.AddArc(x, y, d, d, 180, 90);
+    roundedPath.AddArc(x + fw - d, y, d, d, 270, 90);
+    roundedPath.AddArc(x + fw - d, y + fh - d, d, d, 0, 90);
+    roundedPath.AddArc(x, y + fh - d, d, d, 90, 90);
+    roundedPath.CloseFigure();
+
+    // Use TextureBrush to paint the offscreen bitmap through FillPath,
+    // which applies anti-aliasing to the path edges for smooth corners.
+    Gdiplus::TextureBrush texBrush(&offscreen, Gdiplus::WrapModeClamp);
+    texBrush.TranslateTransform((float)m_rect_artwork.left, (float)m_rect_artwork.top);
+    g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+    g.FillPath(&texBrush, &roundedPath);
+    g.SetSmoothingMode(Gdiplus::SmoothingModeDefault);
   } else {
-    // Draw placeholder - use theme-appropriate background color
-    Gdiplus::Color placeholderBg = m_dark_mode
-        ? Gdiplus::Color(255, 60, 60, 60)    // Dark gray for dark themes
-        : Gdiplus::Color(255, 200, 200, 200); // Light gray for light themes
-    Gdiplus::SolidBrush brush(placeholderBg);
-    Gdiplus::Rect artR(m_rect_artwork.left, m_rect_artwork.top, w, h);
-    g.FillRectangle(&brush, artR);
-
-    // Check if the current track is a remote stream (http://, https://, etc.)
-    // Note: file:// URLs are local files, not streams
-    bool is_stream = false;
-    if (m_state.current_track.is_valid()) {
-      const char* path = m_state.current_track->get_path();
-      is_stream = (strstr(path, "http://") == path) ||
-                  (strstr(path, "https://") == path) ||
-                  (strstr(path, "mms://") == path) ||
-                  (strstr(path, "rtsp://") == path) ||
-                  (strstr(path, "rtmp://") == path);
-    }
-
-    if (is_stream) {
-      RECT iconRect = m_rect_artwork;
-      draw_radio_icon(g, iconRect, m_text_secondary_color);
+    // Square mode — draw directly, no offscreen bitmap needed
+    if (m_artwork_thumbnail) {
+      int srcW = m_artwork_thumbnail->GetWidth();
+      int srcH = m_artwork_thumbnail->GetHeight();
+      float srcAspect = (float)srcW / (float)srcH;
+      float dstAspect = (float)w / (float)h;
+      int cropX, cropY, cropW, cropH;
+      if (srcAspect > dstAspect) {
+        cropH = srcH;
+        cropW = (int)(srcH * dstAspect);
+        cropX = (srcW - cropW) / 2;
+        cropY = 0;
+      } else {
+        cropW = srcW;
+        cropH = (int)(srcW / dstAspect);
+        cropX = 0;
+        cropY = (srcH - cropH) / 2;
+      }
+      Gdiplus::Rect destRect(m_rect_artwork.left, m_rect_artwork.top, w, h);
+      g.DrawImage(m_artwork_thumbnail.get(), destRect, cropX, cropY, cropW, cropH,
+                  Gdiplus::UnitPixel);
     } else {
-      // Music note icon placeholder
-      Gdiplus::SolidBrush iconBrush(m_text_secondary_color);
-      Gdiplus::Font iconFont(L"Segoe MDL2 Assets", 24.0f * m_dpi_scale,
-                             Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
-      Gdiplus::StringFormat sf;
-      sf.SetAlignment(Gdiplus::StringAlignmentCenter);
-      sf.SetLineAlignment(Gdiplus::StringAlignmentCenter);
-      Gdiplus::RectF artRect((float)m_rect_artwork.left,
-                             (float)m_rect_artwork.top, (float)w, (float)h);
-      g.DrawString(L"\uE8D6", -1, &iconFont, artRect, &sf,
-                   &iconBrush); // Music note
+      Gdiplus::Color placeholderBg = m_dark_mode
+          ? Gdiplus::Color(255, 60, 60, 60)
+          : Gdiplus::Color(255, 200, 200, 200);
+      Gdiplus::SolidBrush brush(placeholderBg);
+      Gdiplus::Rect artR(m_rect_artwork.left, m_rect_artwork.top, w, h);
+      g.FillRectangle(&brush, artR);
+
+      bool is_stream = false;
+      if (m_state.current_track.is_valid()) {
+        const char* path = m_state.current_track->get_path();
+        is_stream = (strstr(path, "http://") == path) ||
+                    (strstr(path, "https://") == path) ||
+                    (strstr(path, "mms://") == path) ||
+                    (strstr(path, "rtsp://") == path) ||
+                    (strstr(path, "rtmp://") == path);
+      }
+
+      if (is_stream) {
+        RECT iconRect = m_rect_artwork;
+        draw_radio_icon(g, iconRect, m_text_secondary_color);
+      } else {
+        Gdiplus::SolidBrush iconBrush(m_text_secondary_color);
+        Gdiplus::Font iconFont(L"Segoe MDL2 Assets", 24.0f * m_dpi_scale,
+                               Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
+        Gdiplus::StringFormat sf;
+        sf.SetAlignment(Gdiplus::StringAlignmentCenter);
+        sf.SetLineAlignment(Gdiplus::StringAlignmentCenter);
+        Gdiplus::RectF artRect((float)m_rect_artwork.left,
+                               (float)m_rect_artwork.top, (float)w, (float)h);
+        g.DrawString(L"\uE8D6", -1, &iconFont, artRect, &sf, &iconBrush);
+      }
     }
   }
 }
