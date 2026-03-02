@@ -168,11 +168,11 @@ LRESULT ControlPanelCUI::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp) {
             // Background cache in paint_spectrum_only covers the dirty areas — no clear needed
             m_core->paint_spectrum_only(m_cache_dc, rect);
         } else if (waveform_fast) {
-            m_core->clear_waveform_dirty_rects(m_cache_dc, get_nowbar_initial_bg_color());
+            m_core->clear_waveform_dirty_rects(m_cache_dc, m_core->get_bg_colorref());
             m_core->paint_waveform_only(m_cache_dc, rect);
         } else {
             {
-                HBRUSH bgBrush = CreateSolidBrush(get_nowbar_initial_bg_color());
+                HBRUSH bgBrush = CreateSolidBrush(m_core ? m_core->get_bg_colorref() : get_nowbar_initial_bg_color());
                 FillRect(m_cache_dc, &rect, bgBrush);
                 DeleteObject(bgBrush);
             }
