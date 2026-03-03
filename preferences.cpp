@@ -269,7 +269,7 @@ static cfg_int cfg_nowbar_spectrum_shape(
 
 static cfg_int cfg_nowbar_spectrum_style(
     GUID{0xABCDEF8A, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0x8A}},
-    1  // Default: Curve (0=Mono, 1=Curve)
+    1  // Default: Curve (0=Mono, 1=Curve, 2=Dominoes)
 );
 
 static cfg_int cfg_nowbar_spectrum_height(
@@ -1757,7 +1757,7 @@ int get_nowbar_spectrum_shape() {
 int get_nowbar_spectrum_style() {
     int s = cfg_nowbar_spectrum_style;
     if (s < 0) s = 0;
-    if (s > 1) s = 1;  // 0=Mono, 1=Curve
+    if (s > 2) s = 2;  // 0=Mono, 1=Curve, 2=Dominoes
     return s;
 }
 
@@ -3418,6 +3418,7 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
             HWND hSpecStyle = GetDlgItem(hwnd, IDC_VIS_SPECTRUM_STYLE_COMBO);
             SendMessage(hSpecStyle, CB_ADDSTRING, 0, (LPARAM)L"Mono");
             SendMessage(hSpecStyle, CB_ADDSTRING, 0, (LPARAM)L"Curve");
+            SendMessage(hSpecStyle, CB_ADDSTRING, 0, (LPARAM)L"Dominoes");
             SendMessage(hSpecStyle, CB_SETCURSEL, cfg_nowbar_spectrum_style, 0);
 
             // Populate spectrum height combo (Low/Normal/High)
