@@ -3456,6 +3456,9 @@ void ControlPanelCore::draw_seekbar_tooltip(Gdiplus::Graphics &g) {
 }
 
 void ControlPanelCore::draw_time_display(Gdiplus::Graphics &g) {
+  // Hide timers in waveform mode when no track is loaded (e.g. after restart)
+  if (get_nowbar_visualization_mode() == 2 && m_state.track_length <= 0) return;
+
   // Determine if we're using artwork-based background that needs light text
   int bg_style = get_nowbar_background_style();
   bool use_light_foreground = (bg_style == 1 && m_artwork_colors_valid) || 
