@@ -12,6 +12,7 @@ bool get_nowbar_cover_margin();  // true=Yes (margin), false=No (edge-to-edge)
 int get_nowbar_cover_style();  // 0=Square, 1=Rounded
 bool get_nowbar_cover_artwork_visible();  // true=Yes (show), false=No (hide)
 int get_nowbar_bar_style();  // 0=Pill-shaped, 1=Rectangular
+bool get_nowbar_seekbar_visible();  // true=On, false=Off
 int get_nowbar_seekbar_length();  // 0=Fixed, 1=Scaling
 int get_nowbar_seekbar_position();  // -100 to +100 pixel offset
 bool get_nowbar_mood_icon_visible();  // true=Show, false=Hidden
