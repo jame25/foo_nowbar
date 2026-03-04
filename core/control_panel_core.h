@@ -192,10 +192,18 @@ public:
     // Deferred show-preferences (avoids blocking animation loop from menu handler)
     static constexpr UINT_PTR SHOW_PREFS_TIMER_ID = 1003;
     void do_show_preferences();
-    
+
+    // Animation frame message — posted by thread-pool timer at normal priority
+    // so it isn't starved by WM_MOUSEMOVE input from other panels.
+    static constexpr UINT WM_NOWBAR_ANIMATE = WM_APP + 1;
+    // Called by UI wrappers when WM_NOWBAR_ANIMATE arrives.
+    // Releases the one-shot timer handle and resets the active flag.
+    void on_animation_timer_fired();
+
 private:
     void update_layout(const RECT& rect);
     void invalidate();
+    void invalidate_soft();  // Invalidate without forcing full repaint (preserves fast path)
     void invalidate_rect(const RECT& rect);  // Partial invalidation for specific regions
     void invalidate_progress();  // Partial invalidation for progress-only updates (no full repaint)
     void update_fonts();
@@ -492,9 +500,14 @@ private:
     bool m_waveform_animating = false;
     bool m_needs_full_repaint = true;  // Forces full paint instead of spectrum-only fast path
     
-    // Timer-based animation scheduling
-    static constexpr UINT_PTR ANIMATION_TIMER_ID = 1001;
-    bool m_animation_timer_active = false;
+    // Animation timer scheduling — uses a thread-pool one-shot timer that posts
+    // WM_NOWBAR_ANIMATE (a normal-priority posted message) instead of SetTimer's
+    // WM_TIMER.  WM_TIMER has the lowest dispatch priority in Win32 and is
+    // completely starved by WM_MOUSEMOVE input from neighbouring panels, causing
+    // the spectrum animation to freeze while the cursor moves elsewhere.
+    static constexpr UINT_PTR ANIMATION_TIMER_ID = 1001;  // kept for non-animation timers
+    HANDLE m_anim_tp_timer = nullptr;   // thread-pool timer handle (nullptr = no timer pending)
+    bool m_animation_timer_active = false;  // true while a one-shot is in flight
     
     // Command state polling timer (private members - public interface above)
     static constexpr UINT COMMAND_STATE_POLL_INTERVAL_MS = 500;
@@ -562,6 +575,7 @@ private:
     // Title formatting
     titleformat_object::ptr m_titleformat_line1;
     titleformat_object::ptr m_titleformat_line2;
+    titleformat_object::ptr m_titleformat_rating; // Cached compiled "%rating%"
     pfc::string8 m_formatted_line1;
     pfc::string8 m_formatted_line2;
     
