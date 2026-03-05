@@ -562,9 +562,11 @@ private:
     // Fonts
     std::unique_ptr<Gdiplus::Font> m_font_title;
     std::unique_ptr<Gdiplus::Font> m_font_artist;
+    std::unique_ptr<Gdiplus::Font> m_font_line3;
     std::unique_ptr<Gdiplus::Font> m_font_time;
     int m_title_font_height = 0;   // Measured pixel height of title font
     int m_artist_font_height = 0;  // Measured pixel height of artist font
+    int m_line3_font_height = 0;   // Measured pixel height of line 3 font
 
     // Artwork request callback
     ArtworkRequestCallback m_artwork_request_cb;
@@ -575,9 +577,11 @@ private:
     // Title formatting
     titleformat_object::ptr m_titleformat_line1;
     titleformat_object::ptr m_titleformat_line2;
+    titleformat_object::ptr m_titleformat_line3;
     titleformat_object::ptr m_titleformat_rating; // Cached compiled "%rating%"
     pfc::string8 m_formatted_line1;
     pfc::string8 m_formatted_line2;
+    pfc::string8 m_formatted_line3;
     
     // Methods for title formatting
     void update_title_formats();
