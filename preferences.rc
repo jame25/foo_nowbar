@@ -197,11 +197,11 @@ BEGIN
     // === Fonts & Colors Tab Controls (Tab 4) ===
     GROUPBOX        "Font Settings", IDC_FONTS_GROUP, 12, 26, 316, 80
 
-    LTEXT           "Track Title:", IDC_TRACK_FONT_LABEL, 20, 40, 50, 12
+    LTEXT           "Line 1:", IDC_TRACK_FONT_LABEL, 20, 40, 50, 12
     LTEXT           "", IDC_TRACK_FONT_DISPLAY, 75, 40, 180, 12, SS_LEFTNOWORDWRAP | SS_PATHELLIPSIS
     PUSHBUTTON      "Select...", IDC_TRACK_FONT_SELECT, 260, 38, 56, 14
 
-    LTEXT           "Artist Name:", IDC_ARTIST_FONT_LABEL, 20, 56, 50, 12
+    LTEXT           "Line 2:", IDC_ARTIST_FONT_LABEL, 20, 56, 50, 12
     LTEXT           "", IDC_ARTIST_FONT_DISPLAY, 75, 56, 180, 12, SS_LEFTNOWORDWRAP | SS_PATHELLIPSIS
     PUSHBUTTON      "Select...", IDC_ARTIST_FONT_SELECT, 260, 54, 56, 14
 
