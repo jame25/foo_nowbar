@@ -367,7 +367,7 @@ private:
     static constexpr float CBUTTON_FADE_DURATION_MS = 300.0f;  // Fade duration in milliseconds
     
     // Spectrum visualizer
-    static constexpr int SPECTRUM_FFT_SIZE = 1024;
+    static constexpr int SPECTRUM_FFT_SIZE = 4096;
     static constexpr float SPECTRUM_FADE_DURATION_MS = 300.0f;
     service_ptr_t<visualisation_stream_v3> m_vis_stream;
     std::vector<float> m_spectrum_bars;
