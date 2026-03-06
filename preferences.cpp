@@ -102,7 +102,7 @@ static cfg_int cfg_nowbar_super_icon_visible(
 
 static cfg_int cfg_nowbar_miniplayer_icon_visible(
     GUID{0xABCDEF08, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0x90}},
-    1  // Default: Show (visible)
+    0  // Default: Hidden
 );
 
 static cfg_int cfg_nowbar_custom_button_visible(
@@ -2913,6 +2913,9 @@ void nowbar_preferences::switch_tab(int tab) {
     // Mood Tag setting
     ShowWindow(GetDlgItem(m_hwnd, IDC_MOOD_TAG_LABEL), show_general);
     ShowWindow(GetDlgItem(m_hwnd, IDC_MOOD_TAG_COMBO), show_general);
+    // Rating Stars setting
+    ShowWindow(GetDlgItem(m_hwnd, IDC_RATING_STARS_LABEL), show_general);
+    ShowWindow(GetDlgItem(m_hwnd, IDC_RATING_STARS_COMBO), show_general);
     // Playback Preview section
     ShowWindow(GetDlgItem(m_hwnd, IDC_PLAYBACK_PREVIEW_GROUP), show_general);
     ShowWindow(GetDlgItem(m_hwnd, IDC_SKIP_LOW_RATING_LABEL), show_general);
@@ -2983,8 +2986,6 @@ void nowbar_preferences::switch_tab(int tab) {
     ShowWindow(GetDlgItem(m_hwnd, IDC_ALTERNATE_ICONS_COMBO), show_icons);
     ShowWindow(GetDlgItem(m_hwnd, IDC_PLAY_ICON_STYLE_LABEL), show_icons);
     ShowWindow(GetDlgItem(m_hwnd, IDC_PLAY_ICON_STYLE_COMBO), show_icons);
-    ShowWindow(GetDlgItem(m_hwnd, IDC_RATING_STARS_LABEL), show_icons);
-    ShowWindow(GetDlgItem(m_hwnd, IDC_RATING_STARS_COMBO), show_icons);
     ShowWindow(GetDlgItem(m_hwnd, IDC_AUTOHIDE_CBUTTONS_LABEL), show_icons);
     ShowWindow(GetDlgItem(m_hwnd, IDC_AUTOHIDE_CBUTTONS_COMBO), show_icons);
     ShowWindow(GetDlgItem(m_hwnd, IDC_VOLUME_ICON_LABEL), show_icons);
@@ -3327,6 +3328,11 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         // Initialize online artwork checkbox
         CheckDlgButton(hwnd, IDC_ONLINE_ARTWORK_CHECK, cfg_nowbar_online_artwork ? BST_CHECKED : BST_UNCHECKED);
 
+        // Disable Online Artwork if foo_artwork is not installed
+        if (!GetModuleHandleW(L"foo_artwork.dll")) {
+            EnableWindow(GetDlgItem(hwnd, IDC_ONLINE_ARTWORK_CHECK), FALSE);
+        }
+
         // Initialize smooth animations combobox (moved from end of list, now after Theme Mode)
         HWND hSmoothAnimCombo = GetDlgItem(hwnd, IDC_SMOOTH_ANIMATIONS_COMBO);
         SendMessage(hSmoothAnimCombo, CB_ADDSTRING, 0, (LPARAM)L"Enabled");
@@ -3415,6 +3421,8 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
             if (cfg_nowbar_rating_visible == 1) rating_sel = 0;       // Show
             else if (cfg_nowbar_rating_visible == 2) rating_sel = 2;  // Line 3
             SendMessage(hRatingStarsCombo, CB_SETCURSEL, rating_sel, 0);
+            // Grey out Line 3 edit box when Rating Stars is set to "Line 3"
+            EnableWindow(GetDlgItem(hwnd, IDC_LINE3_FORMAT_EDIT), cfg_nowbar_rating_visible != 2);
         }
 
         // Initialize stop icon visibility combobox
@@ -3441,6 +3449,12 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         SendMessage(hMiniplayerIconCombo, CB_ADDSTRING, 0, (LPARAM)L"Hidden");
         SendMessage(hMiniplayerIconCombo, CB_SETCURSEL, cfg_nowbar_miniplayer_icon_visible ? 0 : 1, 0);
 
+        // Disable MiniPlayer Icon if foo_traycontrols is not installed
+        if (!GetModuleHandleW(L"foo_traycontrols.dll")) {
+            EnableWindow(GetDlgItem(hwnd, IDC_MINIPLAYER_ICON_LABEL), FALSE);
+            EnableWindow(hMiniplayerIconCombo, FALSE);
+        }
+
         // Initialize hover circles combobox
         HWND hHoverCirclesCombo = GetDlgItem(hwnd, IDC_HOVER_CIRCLES_COMBO);
         SendMessage(hHoverCirclesCombo, CB_ADDSTRING, 0, (LPARAM)L"Show");
@@ -3459,6 +3473,13 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         SendMessage(hPlayIconStyleCombo, CB_ADDSTRING, 0, (LPARAM)L"Normal");
         SendMessage(hPlayIconStyleCombo, CB_ADDSTRING, 0, (LPARAM)L"Inverted");
         SendMessage(hPlayIconStyleCombo, CB_SETCURSEL, cfg_nowbar_play_icon_style, 0);
+
+        // Grey out Play Icon Style when Alternate Icons is Style 2 or 3
+        {
+            BOOL enablePlayIcon = (cfg_nowbar_alternate_icons == 0) ? TRUE : FALSE;
+            EnableWindow(GetDlgItem(hwnd, IDC_PLAY_ICON_STYLE_LABEL), enablePlayIcon);
+            EnableWindow(GetDlgItem(hwnd, IDC_PLAY_ICON_STYLE_COMBO), enablePlayIcon);
+        }
 
         // Initialize auto-hide C-buttons combobox
         HWND hAutohideCbuttonsCombo = GetDlgItem(hwnd, IDC_AUTOHIDE_CBUTTONS_COMBO);
@@ -3713,9 +3734,7 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         case IDC_SUPER_ICON_COMBO:
         case IDC_MINIPLAYER_ICON_COMBO:
         case IDC_HOVER_CIRCLES_COMBO:
-        case IDC_ALTERNATE_ICONS_COMBO:
         case IDC_PLAY_ICON_STYLE_COMBO:
-        case IDC_RATING_STARS_COMBO:
         case IDC_AUTOHIDE_CBUTTONS_COMBO:
         case IDC_VOLUME_ICON_COMBO:
         case IDC_VOLUME_BAR_COMBO:
@@ -3725,6 +3744,26 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         case IDC_VIS_SPECTRUM_HEIGHT_COMBO:
         case IDC_VIS_WAVEFORM_WIDTH_COMBO:
             if (HIWORD(wp) == CBN_SELCHANGE) {
+                p_this->on_changed();
+            }
+            break;
+
+        case IDC_ALTERNATE_ICONS_COMBO:
+            if (HIWORD(wp) == CBN_SELCHANGE) {
+                // Grey out Play Icon Style when Alternate Icons is Style 2 or 3
+                int sel = (int)SendMessage((HWND)lp, CB_GETCURSEL, 0, 0);
+                BOOL enable = (sel == 0) ? TRUE : FALSE;
+                EnableWindow(GetDlgItem(hwnd, IDC_PLAY_ICON_STYLE_LABEL), enable);
+                EnableWindow(GetDlgItem(hwnd, IDC_PLAY_ICON_STYLE_COMBO), enable);
+                p_this->on_changed();
+            }
+            break;
+
+        case IDC_RATING_STARS_COMBO:
+            if (HIWORD(wp) == CBN_SELCHANGE) {
+                // Grey out Line 3 edit box when Rating Stars is set to "Line 3"
+                int sel = (int)SendMessage((HWND)lp, CB_GETCURSEL, 0, 0);
+                EnableWindow(GetDlgItem(hwnd, IDC_LINE3_FORMAT_EDIT), sel != 2);
                 p_this->on_changed();
             }
             break;
@@ -4564,14 +4603,6 @@ void nowbar_preferences::apply_settings() {
         uGetDlgItemText(m_hwnd, IDC_LINE3_FORMAT_EDIT, format_str);
         cfg_nowbar_line3_format = format_str;
 
-        // If Line 3 text is non-empty and Rating Stars is set to "Line 3", reset rating to Hidden
-        if (format_str.get_length() > 0 && cfg_nowbar_rating_visible == 2) {
-            cfg_nowbar_rating_visible = 0;
-            // Update the Rating Stars combo if it's visible (Icons tab)
-            HWND hRatingCombo = GetDlgItem(m_hwnd, IDC_RATING_STARS_COMBO);
-            if (hRatingCombo) SendMessage(hRatingCombo, CB_SETCURSEL, 1, 0);  // 1 = Hidden
-        }
-
         // Save theme mode
         cfg_nowbar_theme_mode = (int)SendMessage(GetDlgItem(m_hwnd, IDC_THEME_MODE_COMBO), CB_GETCURSEL, 0, 0);
         
@@ -4623,14 +4654,7 @@ void nowbar_preferences::apply_settings() {
         // Save rating stars visibility (combo: 0=Show, 1=Hidden, 2=Line 3 -> config: 1=Show, 0=Hidden, 2=Line 3)
         int ratingStarsSel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_RATING_STARS_COMBO), CB_GETCURSEL, 0, 0);
         if (ratingStarsSel == 0) cfg_nowbar_rating_visible = 1;       // Show
-        else if (ratingStarsSel == 2) {
-            cfg_nowbar_rating_visible = 2;  // Line 3
-            // If Line 3 text is set, clear it — rating stars take over that space
-            if (cfg_nowbar_line3_format.get().get_length() > 0) {
-                cfg_nowbar_line3_format = "";
-                uSetDlgItemText(m_hwnd, IDC_LINE3_FORMAT_EDIT, "");
-            }
-        }
+        else if (ratingStarsSel == 2) cfg_nowbar_rating_visible = 2;  // Line 3
         else cfg_nowbar_rating_visible = 0;                           // Hidden
 
         // Save stop icon visibility (0=Show, 1=Hidden in combobox -> config 1=Show, 0=Hidden)
@@ -4827,6 +4851,7 @@ void nowbar_preferences::reset_settings() {
             cfg_nowbar_line2_format = "%artist%";  // Default format
             cfg_nowbar_line3_format = "";  // Default: disabled
             cfg_nowbar_mood_tag_mode = 0;  // FEEDBACK (default)
+            cfg_nowbar_rating_visible = 0;  // Hidden (default)
             cfg_nowbar_skip_low_rating_enabled = 0;  // Disabled (default)
             cfg_nowbar_skip_low_rating_threshold = 1;  // 1 (default)
             cfg_nowbar_visualization_mode = 0;  // Disabled (default)
@@ -4842,6 +4867,8 @@ void nowbar_preferences::reset_settings() {
             uSetDlgItemText(m_hwnd, IDC_LINE2_FORMAT_EDIT, "%artist%");
             uSetDlgItemText(m_hwnd, IDC_LINE3_FORMAT_EDIT, "");
             SendMessage(GetDlgItem(m_hwnd, IDC_MOOD_TAG_COMBO), CB_SETCURSEL, 0, 0);  // Default: FEEDBACK
+            SendMessage(GetDlgItem(m_hwnd, IDC_RATING_STARS_COMBO), CB_SETCURSEL, 1, 0);  // Default: Hidden
+            EnableWindow(GetDlgItem(m_hwnd, IDC_LINE3_FORMAT_EDIT), TRUE);  // Re-enable Line 3 edit
             SendMessage(GetDlgItem(m_hwnd, IDC_SKIP_LOW_RATING_COMBO), CB_SETCURSEL, 0, 0);  // Default: Disabled
             SendMessage(GetDlgItem(m_hwnd, IDC_SKIP_RATING_THRESHOLD_COMBO), CB_SETCURSEL, 0, 0);  // Default: 1
             EnableWindow(GetDlgItem(m_hwnd, IDC_SKIP_RATING_THRESHOLD_COMBO), FALSE);  // Disabled when skip is off
@@ -4887,11 +4914,10 @@ void nowbar_preferences::reset_settings() {
             cfg_nowbar_mood_icon_visible = 1;  // Show (visible)
             cfg_nowbar_shuffle_icon_visible = 1;  // Show (default)
             cfg_nowbar_repeat_icon_visible = 1;  // Show (default)
-            cfg_nowbar_rating_visible = 1;  // Show (default)
             cfg_nowbar_stop_icon_visible = 0;  // Hidden (default)
             cfg_nowbar_stop_after_current_icon_visible = 0;  // Hidden (default)
             cfg_nowbar_super_icon_visible = 1;  // Show (default)
-            cfg_nowbar_miniplayer_icon_visible = 1;  // Show (visible)
+            cfg_nowbar_miniplayer_icon_visible = 0;  // Hidden (default)
             cfg_nowbar_hover_circles = 1;  // Show (default)
             cfg_nowbar_alternate_icons = 0;  // Style 1 (default)
             cfg_nowbar_play_icon_style = 0;  // Dark (default)
@@ -4903,14 +4929,15 @@ void nowbar_preferences::reset_settings() {
             SendMessage(GetDlgItem(m_hwnd, IDC_MOOD_ICON_COMBO), CB_SETCURSEL, 0, 0);
             SendMessage(GetDlgItem(m_hwnd, IDC_SHUFFLE_ICON_COMBO), CB_SETCURSEL, 0, 0);  // Default: Show
             SendMessage(GetDlgItem(m_hwnd, IDC_REPEAT_ICON_COMBO), CB_SETCURSEL, 0, 0);  // Default: Show
-            SendMessage(GetDlgItem(m_hwnd, IDC_RATING_STARS_COMBO), CB_SETCURSEL, 0, 0);
             SendMessage(GetDlgItem(m_hwnd, IDC_STOP_ICON_COMBO), CB_SETCURSEL, 1, 0);  // Default: Hidden
             SendMessage(GetDlgItem(m_hwnd, IDC_STOP_AFTER_CURRENT_COMBO), CB_SETCURSEL, 1, 0);  // Default: Hidden
             SendMessage(GetDlgItem(m_hwnd, IDC_SUPER_ICON_COMBO), CB_SETCURSEL, 0, 0);  // Default: Show
-            SendMessage(GetDlgItem(m_hwnd, IDC_MINIPLAYER_ICON_COMBO), CB_SETCURSEL, 0, 0);
+            SendMessage(GetDlgItem(m_hwnd, IDC_MINIPLAYER_ICON_COMBO), CB_SETCURSEL, 1, 0);  // Default: Hidden
             SendMessage(GetDlgItem(m_hwnd, IDC_HOVER_CIRCLES_COMBO), CB_SETCURSEL, 0, 0);  // Default: Show
             SendMessage(GetDlgItem(m_hwnd, IDC_ALTERNATE_ICONS_COMBO), CB_SETCURSEL, 0, 0);  // Default: Style 1
             SendMessage(GetDlgItem(m_hwnd, IDC_PLAY_ICON_STYLE_COMBO), CB_SETCURSEL, 0, 0);  // Default: Normal
+            EnableWindow(GetDlgItem(m_hwnd, IDC_PLAY_ICON_STYLE_LABEL), TRUE);   // Re-enable after reset
+            EnableWindow(GetDlgItem(m_hwnd, IDC_PLAY_ICON_STYLE_COMBO), TRUE);
             SendMessage(GetDlgItem(m_hwnd, IDC_AUTOHIDE_CBUTTONS_COMBO), CB_SETCURSEL, 1, 0);  // Default: No
             SendMessage(GetDlgItem(m_hwnd, IDC_VOLUME_ICON_COMBO), CB_SETCURSEL, 0, 0);  // Default: Show
             SendMessage(GetDlgItem(m_hwnd, IDC_VOLUME_BAR_COMBO), CB_SETCURSEL, 0, 0);  // Default: Show
