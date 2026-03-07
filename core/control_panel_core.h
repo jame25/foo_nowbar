@@ -282,6 +282,7 @@ private:
     bool m_pending_theme_refresh = true;  // Re-check theme on first paint to fix startup timing
     float m_dpi_scale = 1.0f;
     float m_size_scale = 1.0f;  // Scale factor for controls based on panel height
+    int m_panel_width = 0;     // Current panel width in pixels
     LayoutMetrics m_metrics;
     
     // Current state
@@ -567,6 +568,7 @@ private:
     int m_title_font_height = 0;   // Measured pixel height of title font
     int m_artist_font_height = 0;  // Measured pixel height of artist font
     int m_line3_font_height = 0;   // Measured pixel height of line 3 font
+    bool m_line3_visible = false;  // Whether line 3 is shown (false when panel too short)
 
     // Artwork request callback
     ArtworkRequestCallback m_artwork_request_cb;
