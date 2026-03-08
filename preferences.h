@@ -87,6 +87,7 @@ pfc::string8 get_nowbar_cbutton_icon_path(int button_index);  // 0-5, returns gl
 int get_nowbar_cbutton_glyph_size(int button_index);  // 0-5, returns glyph size percentage (default 80)
 pfc::string8 get_nowbar_cbutton_font(int button_index);  // 0-5, returns font name (default "Segoe UI")
 pfc::string8 get_nowbar_cbutton_label(int button_index);  // 0-5, returns tooltip label (or "Button #N" if empty)
+bool get_nowbar_3d_buttons_enabled();  // true=3D raised style, false=flat style
 
 // Config file accessors for all 12 custom buttons (buttons 7-12 are hidden, keyboard-only)
 int get_config_button_action(int button_index);       // 0-11, returns action 0-3 from config file
