@@ -99,7 +99,7 @@ A foobar2000 component that provides a "Now Playing" control panel for both Defa
 
 ## Installation
 
-1. Copy `foo_nowbar.dll` to your foobar2000 `components` folder
+1. Run foo_nowbar*.fb2k-component or extract `foo_nowbar.dll` (using 7zip) to your portable foobar2000 `components` folder
 2. Restart foobar2000
 3. Add the panel:
    - **Default UI**: View → Layout → Add panel → "Now Bar Control Panel"
