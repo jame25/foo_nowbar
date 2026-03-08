@@ -274,3 +274,7 @@
 #define IDC_CBUTTON4_FONT          1384
 #define IDC_CBUTTON5_FONT          1385
 #define IDC_CBUTTON6_FONT          1386
+
+// 3D Buttons toggle (Custom Buttons tab)
+#define IDC_CBUTTON_3D_LABEL       1390
+#define IDC_CBUTTON_3D_COMBO       1391
