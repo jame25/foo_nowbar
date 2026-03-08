@@ -4369,13 +4369,13 @@ void ControlPanelCore::draw_spectrum(Gdiplus::Graphics& g) {
 
     // Determine bar color
     BYTE cr1, cg1, cb1, cr2_g, cg2_g, cb2_g;
-    if (stereo && gradient_mode != 2) {
-      if (gradient_mode == 1) {
+    if (stereo && gradient_mode != 3) {
+      if (gradient_mode == 2) {
         // Gradient mode: use user colors for left, color2 for right
         cr1 = is_right ? r2 : r1; cg1 = is_right ? g2 : g1; cb1 = is_right ? b2 : b1;
         cr2_g = is_right ? r2 : r1; cg2_g = is_right ? g2 : g1; cb2_g = is_right ? b2 : b1;
       } else {
-        // Solid: use built-in warm/cool colors
+        // Solid/Adaptive: use built-in warm/cool colors
         cr1 = is_right ? rr1 : lr1; cg1 = is_right ? rg1 : lg1; cb1 = is_right ? rb1 : lb1;
         cr2_g = cr1; cg2_g = cg1; cb2_g = cb1;
       }
@@ -4384,13 +4384,13 @@ void ControlPanelCore::draw_spectrum(Gdiplus::Graphics& g) {
       cr2_g = r2; cg2_g = g2; cb2_g = b2;
     }
 
-    if (gradient_mode == 2) {
+    if (gradient_mode == 3) {
       float hue = (half_count > 1) ? (float)bar_idx / (float)(half_count - 1) * 300.0f : 0.0f;
       if (stereo && is_right) hue = 300.0f - hue;  // Mirror frequency colors
       COLORREF freq_color = hsl_to_rgb(hue, 0.9f, 0.55f);
       Gdiplus::SolidBrush barBrush(Gdiplus::Color(alpha, GetRValue(freq_color), GetGValue(freq_color), GetBValue(freq_color)));
       g.FillRectangle(&barBrush, x, y, bar_w, height);
-    } else if (gradient_mode == 1 && !stereo) {
+    } else if (gradient_mode == 2 && !stereo) {
       Gdiplus::LinearGradientBrush barBrush(
           Gdiplus::PointF(x, y), Gdiplus::PointF(x, bottom_f),
           Gdiplus::Color(alpha, cr1, cg1, cb1),
@@ -4408,14 +4408,14 @@ void ControlPanelCore::draw_spectrum(Gdiplus::Graphics& g) {
     if (peak_val <= bar_val) return;
     float peak_y = bottom_f - peak_val * (float)area_h;
     BYTE pr, pg, pb;
-    if (gradient_mode == 2) {
+    if (gradient_mode == 3) {
       float hue = (half_count > 1) ? (float)bar_idx / (float)(half_count - 1) * 300.0f : 0.0f;
       if (stereo && is_right) hue = 300.0f - hue;
       COLORREF freq_color = hsl_to_rgb(hue, 0.9f, 0.55f);
       pr = GetRValue(freq_color); pg = GetGValue(freq_color); pb = GetBValue(freq_color);
-    } else if (stereo && gradient_mode != 1) {
+    } else if (stereo && gradient_mode != 2) {
       pr = is_right ? rr1 : lr1; pg = is_right ? rg1 : lg1; pb = is_right ? rb1 : lb1;
-    } else if (stereo && gradient_mode == 1) {
+    } else if (stereo && gradient_mode == 2) {
       pr = is_right ? r2 : r1; pg = is_right ? g2 : g1; pb = is_right ? b2 : b1;
     } else {
       pr = r1; pg = g1; pb = b1;
@@ -4548,7 +4548,7 @@ void ControlPanelCore::draw_spectrum_curve(Gdiplus::Graphics& g, const RECT& are
   g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
 
   // Fill with gradient: full alpha at top fading to transparent at bottom
-  if (gradient_mode == 2) {
+  if (gradient_mode == 3) {
     // Frequency-mapped: use a multi-stop horizontal gradient
     Gdiplus::LinearGradientBrush fillBrush(
         Gdiplus::PointF(left_f, 0), Gdiplus::PointF(left_f + (float)area_w, 0),
@@ -4565,7 +4565,7 @@ void ControlPanelCore::draw_spectrum_curve(Gdiplus::Graphics& g, const RECT& are
     float positions[] = {0.0f, 0.25f, 0.5f, 0.75f, 1.0f};
     fillBrush.SetInterpolationColors(colors, positions, 5);
     g.FillPath(&fillBrush, &curvePath);
-  } else if (gradient_mode == 1) {
+  } else if (gradient_mode == 2) {
     // User gradient: top color to bottom color (vertical)
     Gdiplus::LinearGradientBrush fillBrush(
         Gdiplus::PointF(0, (float)area_rect.top),
@@ -4589,7 +4589,7 @@ void ControlPanelCore::draw_spectrum_curve(Gdiplus::Graphics& g, const RECT& are
   BYTE bright_g = (BYTE)std::min(255, (int)cg + 30);
   BYTE bright_b = (BYTE)std::min(255, (int)cb + 30);
 
-  if (gradient_mode == 2) {
+  if (gradient_mode == 3) {
     // Rainbow stroke
     Gdiplus::LinearGradientBrush strokeBrush(
         Gdiplus::PointF(left_f, 0), Gdiplus::PointF(left_f + (float)area_w, 0),
@@ -4856,12 +4856,12 @@ void ControlPanelCore::draw_full_spectrum(HDC hdc) {
     // Determine bar color
     int base_r, base_g, base_b;
     int base_r2 = r1, base_g2 = g1, base_b2 = b1;
-    if (gradient_mode == 2) {
+    if (gradient_mode == 3) {
       float hue = (half_count > 1) ? (float)bar_idx / (float)(half_count - 1) * 300.0f : 0.0f;
       if (stereo && is_right) hue = 300.0f - hue;
       COLORREF freq_color = hsl_to_rgb(hue, 0.9f, 0.55f);
       base_r = GetRValue(freq_color); base_g = GetGValue(freq_color); base_b = GetBValue(freq_color);
-    } else if (stereo && gradient_mode == 1) {
+    } else if (stereo && gradient_mode == 2) {
       base_r = is_right ? r2 : r1; base_g = is_right ? g2 : g1; base_b = is_right ? b2 : b1;
       base_r2 = base_r; base_g2 = base_g; base_b2 = base_b;
     } else if (stereo) {
@@ -4885,9 +4885,9 @@ void ControlPanelCore::draw_full_spectrum(HDC hdc) {
       int right = bx + bw;
 
       int row_r, row_g, row_b;
-      if (gradient_mode == 2) {
+      if (gradient_mode == 3) {
         row_r = base_r; row_g = base_g; row_b = base_b;
-      } else if (gradient_mode == 1 && bar_h > 1 && !stereo) {
+      } else if (gradient_mode == 2 && bar_h > 1 && !stereo) {
         float t = (float)(row - by) / (float)(bar_h - 1);
         row_r = (int)((float)r1 + ((float)r2 - (float)r1) * t);
         row_g = (int)((float)g1 + ((float)g2 - (float)g1) * t);
@@ -5094,8 +5094,8 @@ void ControlPanelCore::draw_full_spectrum_gdiplus(Gdiplus::Graphics& g) {
     float y = bottom_f - height;
 
     BYTE cr1, cg1, cb1;
-    if (stereo && gradient_mode != 2) {
-      if (gradient_mode == 1) {
+    if (stereo && gradient_mode != 3) {
+      if (gradient_mode == 2) {
         cr1 = is_right ? r2 : r1; cg1 = is_right ? g2 : g1; cb1 = is_right ? b2 : b1;
       } else {
         cr1 = is_right ? rr1 : lr1; cg1 = is_right ? rg1 : lg1; cb1 = is_right ? rb1 : lb1;
@@ -5104,7 +5104,7 @@ void ControlPanelCore::draw_full_spectrum_gdiplus(Gdiplus::Graphics& g) {
       cr1 = r1; cg1 = g1; cb1 = b1;
     }
 
-    if (gradient_mode == 2) {
+    if (gradient_mode == 3) {
       float hue = (half_count > 1) ? (float)bar_idx / (float)(half_count - 1) * 300.0f : 0.0f;
       if (stereo && is_right) hue = 300.0f - hue;
       COLORREF freq_color = hsl_to_rgb(hue, 0.9f, 0.55f);
@@ -5114,7 +5114,7 @@ void ControlPanelCore::draw_full_spectrum_gdiplus(Gdiplus::Graphics& g) {
       } else {
         g.FillRectangle(&barBrush, x, y, bar_w, height);
       }
-    } else if (gradient_mode == 1 && !stereo) {
+    } else if (gradient_mode == 2 && !stereo) {
       Gdiplus::LinearGradientBrush barBrush(
           Gdiplus::PointF(x, y), Gdiplus::PointF(x, bottom_f),
           Gdiplus::Color(alpha, r1, g1, b1),
@@ -5139,14 +5139,14 @@ void ControlPanelCore::draw_full_spectrum_gdiplus(Gdiplus::Graphics& g) {
     if (peak_val <= bar_val) return;
     float peak_y = bottom_f - peak_val * (float)area_h;
     BYTE pr, pg, pb;
-    if (gradient_mode == 2) {
+    if (gradient_mode == 3) {
       float hue = (half_count > 1) ? (float)bar_idx / (float)(half_count - 1) * 300.0f : 0.0f;
       if (stereo && is_right) hue = 300.0f - hue;
       COLORREF freq_color = hsl_to_rgb(hue, 0.9f, 0.55f);
       pr = GetRValue(freq_color); pg = GetGValue(freq_color); pb = GetBValue(freq_color);
-    } else if (stereo && gradient_mode != 1) {
+    } else if (stereo && gradient_mode != 2) {
       pr = is_right ? rr1 : lr1; pg = is_right ? rg1 : lg1; pb = is_right ? rb1 : lb1;
-    } else if (stereo && gradient_mode == 1) {
+    } else if (stereo && gradient_mode == 2) {
       pr = is_right ? r2 : r1; pg = is_right ? g2 : g1; pb = is_right ? b2 : b1;
     } else {
       pr = r1; pg = g1; pb = b1;
