@@ -2,7 +2,11 @@
   <a href="README-zh-CN.md">简体中文</a> | <b>English</b>
 </p>
 
----
+<!-- 在这里插入徽章 -->
+<p align="center">
+  <a href="https://github.com/jame25/foo_nowbar/releases"><img src="https://img.shields.io/github/v/release/jame25/foo_nowbar?style=flat-square&label=Latest%20Version&color=blue" alt="Latest%20Version"></a>
+  <a href="https://github.com/jame25/foo_nowbar/releases"><img src="https://img.shields.io/github/downloads/jame25/foo_nowbar/total?style=flat-square&label=Total%20Downloads&color=success" alt="Total%20Downloads"></a>
+</p>
 
 # foo_nowbar
 
