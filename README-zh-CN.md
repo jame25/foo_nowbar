@@ -4,12 +4,11 @@
 
 # foo_nowbar
 
-<p align="right">
+<p align="center">
   <!-- 徽章组：版本 | 下载 | 支持 -->
   <a href="https://github.com/jame25/foo_nowbar/releases"><img src="https://img.shields.io/github/v/release/jame25/foo_nowbar?style=flat-square&label=%E6%9C%80%E6%96%B0%E7%89%88%E6%9C%AC&&color=blue" alt="最新版本"></a>
   <a href="https://github.com/jame25/foo_nowbar/releases"><img src="https://img.shields.io/github/downloads/jame25/foo_nowbar/total?style=flat-square&label=%E4%B8%8B%E8%BD%BD%E6%AC%A1%E6%95%B0&&color=success" alt="下载次数"></a>
   <a href="https://ko-fi.com/Jame25"><img src="https://img.shields.io/badge/在%20Ko--fi%20上支持我-FF5E5B?style=flat-square&logo=kofi&logoColor=white" alt="在Ko-fi上支持我"></a>
-  <b>简体中文</b> | <a href="README.md">English</a>
 </p>
 
 一个为 foobar2000 设计的 “正在播放” 控制面板组件，同时支持默认界面 (Default UI) 和分栏界面 (Columns UI)。
