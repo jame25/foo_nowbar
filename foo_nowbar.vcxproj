@@ -195,6 +195,7 @@
     <ClInclude Include="core\playback_state.h" />
     <ClInclude Include="ui\control_panel_cui.h" />
     <ClInclude Include="ui\control_panel_dui.h" />
+    <ClInclude Include="nowbar_color_service.h" />
   </ItemGroup>
   
   <ItemGroup>
@@ -212,6 +213,7 @@
     <ClCompile Include="ui\control_panel_cui.cpp" />
     <ClCompile Include="ui\control_panel_dui.cpp" />
     <ClCompile Include="mainmenu_commands.cpp" />
+    <ClCompile Include="nowbar_color_service_impl.cpp" />
   </ItemGroup>
   
   <ItemGroup>
