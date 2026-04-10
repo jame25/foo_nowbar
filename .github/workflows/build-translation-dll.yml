@@ -14,41 +14,41 @@ jobs:
     
     # 1.1 My Project
     - name: Checkout foo_nowbar
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         path: foo_nowbar
 
     # 1.2 Columns UI Component (Wrapper)
     - name: Checkout Columns UI Source
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         repository: reupen/columns_ui
         path: columns_ui
 
     # 1.3 Columns UI SDK (Build target: columns_ui_sdk.lib)
     - name: Checkout Columns UI SDK
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         repository: reupen/columns_ui-sdk
         path: columns_ui/columns_ui-sdk
 
     # 1.4 Foobar2000 SDK (Build target: foobar2000_SDK.lib)
     - name: Checkout Foobar2000 SDK
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         repository: reupen/foobar2000-sdk-modified
         path: columns_ui/foobar2000
 
     # 1.5 PFC (Build target: pfc.lib)
     - name: Checkout PFC
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         repository: reupen/pfc-modified
         path: columns_ui/pfc
 
     # 1.6 libPPUI (Helper)
     - name: Checkout libPPUI
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         repository: marc2k3/foobar2000-sdk
         path: temp_libppui
@@ -63,7 +63,7 @@ jobs:
 
     # 1.7 SVG Services (Header only API)
     - name: Checkout SVG Services
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         repository: reupen/svg-services
         path: columns_ui/svg-services
@@ -72,7 +72,7 @@ jobs:
     # 2. Build Environment Setup
     # -------------------------------------------------------------------------
     - name: Setup MSBuild
-      uses: microsoft/setup-msbuild@v2
+      uses: microsoft/setup-msbuild@v3
 
     # Debug: Verify structure matches project expectations
     - name: Debug Directory Structure
