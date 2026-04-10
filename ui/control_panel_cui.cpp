@@ -25,7 +25,7 @@ void ControlPanelCUI::initialize_core(HWND wnd) {
                 cui::colours::helper colour_helper;
                 bg = colour_helper.get_colour(cui::colours::colour_background);
                 text = colour_helper.get_colour(cui::colours::colour_text);
-                highlight = colour_helper.get_colour(cui::colours::colour_selection_background);
+                highlight = colour_helper.get_colour(cui::colours::colour_active_item_frame);
                 selection = colour_helper.get_colour(cui::colours::colour_selection_background);
                 return true;
             } catch (...) {
@@ -94,13 +94,14 @@ void ControlPanelCUI::update_artwork() {
 
         // Try online via foo_artwork if enabled (may override stub)
         if (get_nowbar_online_artwork() && is_artwork_bridge_available()) {
+            if (!m_tf_artist.is_valid())
+                titleformat_compiler::get()->compile_safe(m_tf_artist, "%artist%");
+            if (!m_tf_title.is_valid())
+                titleformat_compiler::get()->compile_safe(m_tf_title, "%title%");
             pfc::string8 artist, title;
-            service_ptr_t<titleformat_object> script_artist, script_title;
-            titleformat_compiler::get()->compile_safe(script_artist, "%artist%");
-            titleformat_compiler::get()->compile_safe(script_title, "%title%");
             // Use playback_format_title for streams - it merges dynamic stream metadata
-            pc->playback_format_title(nullptr, artist, script_artist, nullptr, playback_control::display_level_all);
-            pc->playback_format_title(nullptr, title, script_title, nullptr, playback_control::display_level_all);
+            pc->playback_format_title(nullptr, artist, m_tf_artist, nullptr, playback_control::display_level_all);
+            pc->playback_format_title(nullptr, title, m_tf_title, nullptr, playback_control::display_level_all);
             request_online_artwork(artist.c_str(), title.c_str());
             // Don't clear artwork - stub or previous art shows while waiting
             return;
