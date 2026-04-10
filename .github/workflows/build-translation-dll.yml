@@ -78,9 +78,9 @@ jobs:
     - name: Debug Directory Structure
       run: |
         echo "Listing columns_ui structure..."
-        dir columns_ui
-        dir columns_ui\pfc
-        dir columns_ui\foobar2000\SDK
+        dir lib\columns_ui
+        dir lib\columns_ui\pfc
+        dir lib\columns_ui\foobar2000\SDK
       shell: cmd
 
     # -------------------------------------------------------------------------
