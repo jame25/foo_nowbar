@@ -20,7 +20,7 @@ jobs:
 
     # 1.2 Columns UI Component (Wrapper)
     - name: Checkout Columns UI Source
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         repository: reupen/columns_ui
         path: columns_ui
