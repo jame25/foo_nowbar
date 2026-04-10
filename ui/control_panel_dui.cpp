@@ -38,6 +38,12 @@ ControlPanelDUI::ControlPanelDUI(ui_element_config::ptr config, ui_element_insta
 }
 
 ControlPanelDUI::~ControlPanelDUI() {
+    // Release cached GDI objects explicitly. WM_DESTROY cleanup is unreachable
+    // here because GWLP_USERDATA is zeroed before DestroyWindow, so WindowProc
+    // falls through to DefWindowProc instead of handle_message.
+    if (m_cache_bitmap) { SelectObject(m_cache_dc, m_cache_old_bitmap); DeleteObject(m_cache_bitmap); m_cache_bitmap = nullptr; }
+    if (m_cache_dc) { DeleteDC(m_cache_dc); m_cache_dc = nullptr; }
+
     if (m_hwnd) {
         SetWindowLongPtr(m_hwnd, GWLP_USERDATA, 0);
         DestroyWindow(m_hwnd);
@@ -157,12 +163,13 @@ void ControlPanelDUI::update_artwork() {
         // Try online via foo_artwork if enabled (may override stub)
         if (get_nowbar_online_artwork() && is_artwork_bridge_available()) {
             pfc::string8 artist, title;
-            service_ptr_t<titleformat_object> script_artist, script_title;
-            titleformat_compiler::get()->compile_safe(script_artist, "%artist%");
-            titleformat_compiler::get()->compile_safe(script_title, "%title%");
+            if (!m_tf_artist.is_valid())
+                titleformat_compiler::get()->compile_safe(m_tf_artist, "%artist%");
+            if (!m_tf_title.is_valid())
+                titleformat_compiler::get()->compile_safe(m_tf_title, "%title%");
             // Use playback_format_title for streams - it merges dynamic stream metadata
-            pc->playback_format_title(nullptr, artist, script_artist, nullptr, playback_control::display_level_all);
-            pc->playback_format_title(nullptr, title, script_title, nullptr, playback_control::display_level_all);
+            pc->playback_format_title(nullptr, artist, m_tf_artist, nullptr, playback_control::display_level_all);
+            pc->playback_format_title(nullptr, title, m_tf_title, nullptr, playback_control::display_level_all);
             request_online_artwork(artist.c_str(), title.c_str());
             // Don't clear artwork - stub or previous art shows while waiting
             return;
