@@ -111,9 +111,15 @@ ControlPanelCore* ControlPanelCore::get_first_instance() {
 
 void ControlPanelCore::notify_theme_changed() {
   if (g_shutdown) return;
-  std::lock_guard<std::mutex> lock(g_instances_mutex);
-  // Call on_settings_changed() which properly respects theme mode preferences
-  for (auto *instance : g_instances) {
+  // Copy under lock, then iterate without holding it.
+  // on_settings_changed() -> nowbar_notify_color_changed() can re-enter
+  // g_instances_mutex via get_first_instance(), so we must not hold it.
+  std::vector<ControlPanelCore*> snapshot;
+  {
+    std::lock_guard<std::mutex> lock(g_instances_mutex);
+    snapshot = g_instances;
+  }
+  for (auto *instance : snapshot) {
     instance->on_settings_changed();
   }
 }
@@ -504,15 +510,23 @@ void ControlPanelCore::set_miniplayer_active(bool active) {
 }
 
 void ControlPanelCore::notify_all_settings_changed() {
-  std::lock_guard<std::mutex> lock(g_instances_mutex);
-  for (auto *instance : g_instances) {
+  std::vector<ControlPanelCore*> snapshot;
+  {
+    std::lock_guard<std::mutex> lock(g_instances_mutex);
+    snapshot = g_instances;
+  }
+  for (auto *instance : snapshot) {
     instance->on_settings_changed();
   }
 }
 
 void ControlPanelCore::notify_online_artwork_received() {
-  std::lock_guard<std::mutex> lock(g_instances_mutex);
-  for (auto *instance : g_instances) {
+  std::vector<ControlPanelCore*> snapshot;
+  {
+    std::lock_guard<std::mutex> lock(g_instances_mutex);
+    snapshot = g_instances;
+  }
+  for (auto *instance : snapshot) {
     instance->on_online_artwork_received();
   }
 }
