@@ -1,124 +1,54 @@
 #include "pch.h"
-#include "control_panel_dui.h"
+#include "control_panel_cui.h"
 #include "../preferences.h"
 #include "../artwork_bridge.h"
 
 namespace nowbar {
 
-// Window class name
-const wchar_t* ControlPanelDUI::get_class_name() {
-    return L"foo_nowbar_dui_element";
-}
+// Register with Columns UI
+uie::window_factory<ControlPanelCUI> g_cui_factory;
 
-bool ControlPanelDUI::register_class() {
-    static bool registered = false;
-    if (registered) return true;
-    
-    WNDCLASSEXW wc = {};
-    wc.cbSize = sizeof(wc);
-    wc.style = CS_DBLCLKS;
-    wc.lpfnWndProc = WindowProc;
-    wc.hInstance = core_api::get_my_instance();
-    wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
-    wc.hbrBackground = CreateSolidBrush(RGB(24, 24, 24));  // Dark background to prevent white flash
-    wc.lpszClassName = get_class_name();
-    
-    registered = (RegisterClassExW(&wc) != 0);
-    return registered;
-}
-
-ui_element_config::ptr ControlPanelDUI::g_get_default_configuration() {
-    return ui_element_config::g_create_empty(g_get_guid());
-}
-
-ControlPanelDUI::ControlPanelDUI(ui_element_config::ptr config, ui_element_instance_callback::ptr callback)
-    : m_config(config)
-    , m_callback(callback)
-{
-}
-
-ControlPanelDUI::~ControlPanelDUI() {
-    // Release cached GDI objects explicitly. WM_DESTROY cleanup is unreachable
-    // here because GWLP_USERDATA is zeroed before DestroyWindow, so WindowProc
-    // falls through to DefWindowProc instead of handle_message.
-    if (m_cache_bitmap) { SelectObject(m_cache_dc, m_cache_old_bitmap); DeleteObject(m_cache_bitmap); m_cache_bitmap = nullptr; }
-    if (m_cache_dc) { DeleteDC(m_cache_dc); m_cache_dc = nullptr; }
-
-    if (m_hwnd) {
-        SetWindowLongPtr(m_hwnd, GWLP_USERDATA, 0);
-        DestroyWindow(m_hwnd);
-        m_hwnd = nullptr;
-    }
-}
-
-void ControlPanelDUI::initialize_window(HWND parent) {
-    if (!register_class()) return;
-    
-    m_hwnd = CreateWindowExW(
-        0,
-        get_class_name(),
-        L"",
-        WS_CHILD | WS_CLIPCHILDREN | WS_CLIPSIBLINGS | WS_VISIBLE,
-        0, 0, 100, 100,
-        parent,
-        nullptr,
-        core_api::get_my_instance(),
-        this
-    );
-}
-
-void ControlPanelDUI::set_configuration(ui_element_config::ptr data) {
-    m_config = data;
-}
-
-ui_element_config::ptr ControlPanelDUI::get_configuration() {
-    return m_config;
-}
-
-ui_element_min_max_info ControlPanelDUI::get_min_max_info() {
-    ui_element_min_max_info info;
-    
-    // Get DPI for scaling calculations
-    int dpi = 96;
-    if (m_hwnd) {
-        HDC hdc = GetDC(m_hwnd);
-        if (hdc) {
-            dpi = GetDeviceCaps(hdc, LOGPIXELSY);
-            ReleaseDC(m_hwnd, hdc);
+void ControlPanelCUI::initialize_core(HWND wnd) {
+    if (!m_core) {
+        m_core = std::make_unique<ControlPanelCore>();
+        
+        // Set callbacks BEFORE initialize() so they're available when on_settings_changed() is called
+        
+        // Set artwork request callback
+        m_core->set_artwork_request_callback([this]() {
+            update_artwork();
+        });
+        
+        // Set color query callback for Custom theme mode (CUI global color scheme sync)
+        m_core->set_color_query_callback([](COLORREF& bg, COLORREF& text, COLORREF& highlight, COLORREF& selection) -> bool {
+            try {
+                cui::colours::helper colour_helper;
+                bg = colour_helper.get_colour(cui::colours::colour_background);
+                text = colour_helper.get_colour(cui::colours::colour_text);
+                highlight = colour_helper.get_colour(cui::colours::colour_active_item_frame);
+                selection = colour_helper.get_colour(cui::colours::colour_selection_background);
+                return true;
+            } catch (...) {
+                return false;
+            }
+        });
+        
+        // Register for CUI colour change notifications
+        m_colour_callback = std::make_unique<ColourCallback>(this);
+        if (fb2k::std_api_try_get(m_colour_manager)) {
+            m_colour_manager->register_common_callback(m_colour_callback.get());
         }
+        
+        // Now initialize (which calls on_settings_changed with callbacks available)
+        m_core->initialize(wnd);
+        
+        // Load artwork for current track
+        update_artwork();
     }
-
-    // Minimum height: 0.55 inches, scaled by DPI
-    // At 96 DPI: 0.55 * 96 = 53 pixels
-    info.m_min_height = static_cast<t_uint32>(0.55 * dpi);
-
-    // No max_height: reporting a tight cap (~107px) to the DUI host pins the
-    // main window when nowbar is the sole content element (e.g. replaces the
-    // Default Playlist), leaving the window stuck narrow and short. Compact
-    // appearance at tall sizes is handled by the renderer, not by forcing the
-    // host layout.
-
-
-    // Fixed minimum width that accommodates all elements at any height
-    // Including Super button, spectrum visualizer after Repeat.
-    // When volume, miniplayer, and all custom buttons are hidden, allow a
-    // smaller minimum width since those right-side elements are absent.
-    double base_width = 1232.0;
-    {
-      bool has_any_cbutton = false;
-      for (int i = 0; i < 6; i++) {
-        if (get_nowbar_cbutton_enabled(i)) { has_any_cbutton = true; break; }
-      }
-      bool volume_vis = get_nowbar_volume_icon_visible() || get_nowbar_volume_bar_visible();
-      if (!volume_vis && !get_nowbar_miniplayer_icon_visible() && !has_any_cbutton)
-        base_width = 832.0;
-    }
-    info.m_min_width = static_cast<t_uint32>(base_width * dpi / 96.0);
-    
-    return info;
 }
 
-void ControlPanelDUI::update_artwork() {
+
+void ControlPanelCUI::update_artwork() {
     if (!m_core) return;
 
     // Check for pending online artwork from foo_artwork callback
@@ -164,11 +94,11 @@ void ControlPanelDUI::update_artwork() {
 
         // Try online via foo_artwork if enabled (may override stub)
         if (get_nowbar_online_artwork() && is_artwork_bridge_available()) {
-            pfc::string8 artist, title;
             if (!m_tf_artist.is_valid())
                 titleformat_compiler::get()->compile_safe(m_tf_artist, "%artist%");
             if (!m_tf_title.is_valid())
                 titleformat_compiler::get()->compile_safe(m_tf_title, "%title%");
+            pfc::string8 artist, title;
             // Use playback_format_title for streams - it merges dynamic stream metadata
             pc->playback_format_title(nullptr, artist, m_tf_artist, nullptr, playback_control::display_level_all);
             pc->playback_format_title(nullptr, title, m_tf_title, nullptr, playback_control::display_level_all);
@@ -183,56 +113,19 @@ void ControlPanelDUI::update_artwork() {
     m_core->clear_artwork();
 }
 
-LRESULT CALLBACK ControlPanelDUI::WindowProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
-    ControlPanelDUI* self = nullptr;
-    
-    if (msg == WM_NCCREATE) {
-        auto cs = reinterpret_cast<CREATESTRUCT*>(lp);
-        self = static_cast<ControlPanelDUI*>(cs->lpCreateParams);
-        SetWindowLongPtr(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(self));
-        self->m_hwnd = hwnd;
-    } else {
-        self = reinterpret_cast<ControlPanelDUI*>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
-    }
-    
-    if (self) {
-        return self->handle_message(msg, wp, lp);
-    }
-    
-    return DefWindowProc(hwnd, msg, wp, lp);
-}
-
-LRESULT ControlPanelDUI::handle_message(UINT msg, WPARAM wp, LPARAM lp) {
+LRESULT ControlPanelCUI::on_message(HWND wnd, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
     case WM_CREATE:
-        m_core = std::make_unique<ControlPanelCore>();
-        
-        // Set callbacks BEFORE initialize() so they're available when on_settings_changed() is called
-        m_core->set_artwork_request_callback([this]() {
-            update_artwork();
-        });
-        
-        // Set color query callback for Custom theme mode (DUI color scheme sync)
-        m_core->set_color_query_callback([this](COLORREF& bg, COLORREF& text, COLORREF& highlight, COLORREF& selection) -> bool {
-            if (!m_callback.is_valid()) return false;
-            try {
-                bg = m_callback->query_std_color(ui_color_background);
-                text = m_callback->query_std_color(ui_color_text);
-                highlight = m_callback->query_std_color(ui_color_highlight);
-                selection = m_callback->query_std_color(ui_color_selection);
-                return true;
-            } catch (...) {
-                return false;
-            }
-        });
-        
-        // Now initialize (which calls on_settings_changed with callbacks available)
-        m_core->initialize(m_hwnd);
-        
-        update_artwork();
+        initialize_core(wnd);
         return 0;
         
     case WM_DESTROY:
+        // Unregister colour callback before destroying
+        if (m_colour_manager.is_valid() && m_colour_callback) {
+            m_colour_manager->deregister_common_callback(m_colour_callback.get());
+        }
+        m_colour_callback.reset();
+        m_colour_manager.release();
         m_core.reset();
         // Release cached offscreen bitmap
         if (m_cache_bitmap) { SelectObject(m_cache_dc, m_cache_old_bitmap); DeleteObject(m_cache_bitmap); m_cache_bitmap = nullptr; }
@@ -242,17 +135,17 @@ LRESULT ControlPanelDUI::handle_message(UINT msg, WPARAM wp, LPARAM lp) {
         
     case WM_SIZE: {
         if (m_core) {
-            InvalidateRect(m_hwnd, nullptr, FALSE);
+            InvalidateRect(wnd, nullptr, FALSE);
         }
         return 0;
     }
         
     case WM_PAINT: {
         PAINTSTRUCT ps;
-        HDC hdc = BeginPaint(m_hwnd, &ps);
+        HDC hdc = BeginPaint(wnd, &ps);
 
         RECT rect;
-        GetClientRect(m_hwnd, &rect);
+        GetClientRect(wnd, &rect);
 
         // Recreate cached offscreen bitmap only when window size changes
         if (rect.right != m_cache_w || rect.bottom != m_cache_h || !m_cache_dc) {
@@ -291,7 +184,7 @@ LRESULT ControlPanelDUI::handle_message(UINT msg, WPARAM wp, LPARAM lp) {
 
         BitBlt(hdc, 0, 0, rect.right, rect.bottom, m_cache_dc, 0, 0, SRCCOPY);
 
-        EndPaint(m_hwnd, &ps);
+        EndPaint(wnd, &ps);
         return 0;
     }
         
@@ -305,9 +198,9 @@ LRESULT ControlPanelDUI::handle_message(UINT msg, WPARAM wp, LPARAM lp) {
         return 1;
     }
         
-    case WM_MOUSEMOVE:
+    case WM_MOUSEMOVE: {
         if (!m_tracking_mouse) {
-            TRACKMOUSEEVENT tme = { sizeof(tme), TME_LEAVE, m_hwnd, 0 };
+            TRACKMOUSEEVENT tme = { sizeof(tme), TME_LEAVE, wnd, 0 };
             TrackMouseEvent(&tme);
             m_tracking_mouse = true;
         }
@@ -315,6 +208,7 @@ LRESULT ControlPanelDUI::handle_message(UINT msg, WPARAM wp, LPARAM lp) {
             m_core->on_mouse_move(GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
         }
         return 0;
+    }
         
     case WM_MOUSELEAVE:
         m_tracking_mouse = false;
@@ -324,7 +218,7 @@ LRESULT ControlPanelDUI::handle_message(UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
         
     case WM_LBUTTONDOWN:
-        SetCapture(m_hwnd);
+        SetCapture(wnd);
         if (m_core) {
             m_core->on_lbutton_down(GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
         }
@@ -349,12 +243,22 @@ LRESULT ControlPanelDUI::handle_message(UINT msg, WPARAM wp, LPARAM lp) {
         }
         return 0;
         
+    case WM_SETTINGCHANGE:
+        // System settings changed - trigger theme update
+        if (m_core) {
+            m_core->on_settings_changed();
+        }
+        return 0;
+        
     case ControlPanelCore::WM_NOWBAR_ANIMATE: {
+        // Thread-pool timer fired — release the one-shot handle, invalidate,
+        // and force an immediate paint so it isn't delayed by low-priority
+        // WM_PAINT scheduling.
         if (m_core) m_core->on_animation_timer_fired();
         const RECT* dirty = m_core ? m_core->get_animation_dirty_rect() : nullptr;
-        InvalidateRect(m_hwnd, dirty, FALSE);
+        InvalidateRect(wnd, dirty, FALSE);
         if (m_core) m_core->clear_animation_dirty();
-        UpdateWindow(m_hwnd);
+        UpdateWindow(wnd);
         return 0;
     }
 
@@ -370,37 +274,7 @@ LRESULT ControlPanelDUI::handle_message(UINT msg, WPARAM wp, LPARAM lp) {
 
     }
 
-    return DefWindowProc(m_hwnd, msg, wp, lp);
+    return DefWindowProc(wnd, msg, wp, lp);
 }
-
-// DUI factory - simple implementation without WTL
-class ControlPanelDUIElement : public ui_element {
-public:
-    GUID get_guid() override { return ControlPanelDUI::g_get_guid(); }
-    GUID get_subclass() override { return ControlPanelDUI::g_get_subclass(); }
-    void get_name(pfc::string_base& out) override { ControlPanelDUI::g_get_name(out); }
-    
-    ui_element_instance::ptr instantiate(HWND parent, ui_element_config::ptr cfg, ui_element_instance_callback::ptr callback) override {
-        PFC_ASSERT(cfg->get_guid() == get_guid());
-        service_ptr_t<ControlPanelDUI> item = new service_impl_t<ControlPanelDUI>(cfg, callback);
-        item->initialize_window(parent);
-        return item;
-    }
-    
-    ui_element_config::ptr get_default_configuration() override {
-        return ControlPanelDUI::g_get_default_configuration();
-    }
-    
-    ui_element_children_enumerator_ptr enumerate_children(ui_element_config::ptr cfg) override {
-        return nullptr;
-    }
-    
-    bool get_description(pfc::string_base& out) override {
-        out = ControlPanelDUI::g_get_description();
-        return true;
-    }
-};
-
-static service_factory_single_t<ControlPanelDUIElement> g_dui_factory;
 
 } // namespace nowbar
