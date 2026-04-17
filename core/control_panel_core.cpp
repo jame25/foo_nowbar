@@ -766,48 +766,42 @@ void ControlPanelCore::update_fonts() {
                         ? get_nowbar_time_font()
                         : get_nowbar_default_time_font();
 
-  // Create GDI+ fonts from LOGFONT
+  // Build each font defensively. A GetDC failure or a transient GDI+ state
+  // (observed during early DUI layout restoration) can make the first font
+  // allocation return an invalid or null pointer. We always end with a usable
+  // Gdiplus::Font (last-resort: GenericSansSerif, emHeight=12) so downstream
+  // GetHeight()/DrawString() calls never dereference null.
   HDC hdc = GetDC(m_hwnd);
-  Gdiplus::Font *titleFont = new Gdiplus::Font(hdc, &lf_track);
-  Gdiplus::Font *artistFont = new Gdiplus::Font(hdc, &lf_artist);
-  Gdiplus::Font *line3Font = new Gdiplus::Font(hdc, &lf_line3);
-  Gdiplus::Font *timeFont = new Gdiplus::Font(hdc, &lf_time);
 
-  // Validate fonts — GDI+ silently fails on bitmap/raster fonts.
-  // Fall back to defaults if the selected font can't be used.
-  if (titleFont->GetLastStatus() != Gdiplus::Ok) {
-    delete titleFont;
-    lf_track = get_nowbar_default_font(false);
-    titleFont = new Gdiplus::Font(hdc, &lf_track);
-  }
-  if (artistFont->GetLastStatus() != Gdiplus::Ok) {
-    delete artistFont;
-    lf_artist = get_nowbar_default_font(true);
-    artistFont = new Gdiplus::Font(hdc, &lf_artist);
-  }
-  if (line3Font->GetLastStatus() != Gdiplus::Ok) {
-    delete line3Font;
-    lf_line3 = get_nowbar_default_font(true);
-    line3Font = new Gdiplus::Font(hdc, &lf_line3);
-  }
-  if (timeFont->GetLastStatus() != Gdiplus::Ok) {
-    delete timeFont;
-    lf_time = get_nowbar_default_time_font();
-    timeFont = new Gdiplus::Font(hdc, &lf_time);
-  }
+  auto make_font = [&](const LOGFONT& lf, const LOGFONT& def) -> Gdiplus::Font* {
+    Gdiplus::Font* f = nullptr;
+    try { f = new Gdiplus::Font(hdc, &lf); } catch (...) { f = nullptr; }
+    if (f && f->GetLastStatus() == Gdiplus::Ok) return f;
+    delete f;
+    try { f = new Gdiplus::Font(hdc, &def); } catch (...) { f = nullptr; }
+    if (f && f->GetLastStatus() == Gdiplus::Ok) return f;
+    delete f;
+    // Last resort — family-based constructor does not need an HDC and
+    // cannot fail in practice when GDI+ itself is available.
+    try { f = new Gdiplus::Font(Gdiplus::FontFamily::GenericSansSerif(), 12.0f); }
+    catch (...) { f = nullptr; }
+    return f;
+  };
+
+  m_font_title.reset(make_font(lf_track,  get_nowbar_default_font(false)));
+  m_font_artist.reset(make_font(lf_artist, get_nowbar_default_font(true)));
+  m_font_line3.reset(make_font(lf_line3,  get_nowbar_default_font(true)));
+  m_font_time.reset(make_font(lf_time,   get_nowbar_default_time_font()));
 
   ReleaseDC(m_hwnd, hdc);
 
-  m_font_title.reset(titleFont);
-  m_font_artist.reset(artistFont);
-  m_font_line3.reset(line3Font);
-  m_font_time.reset(timeFont);
-
-  // Measure actual font pixel heights for layout
+  // Measure actual font pixel heights for layout. Each GetHeight() call is
+  // guarded because an extreme failure (GDI+ uninitialized, OOM) could still
+  // leave a null pointer here.
   float dpi = 96.0f * m_dpi_scale;
-  m_title_font_height = static_cast<int>(m_font_title->GetHeight(dpi) + 0.99f);
-  m_artist_font_height = static_cast<int>(m_font_artist->GetHeight(dpi) + 0.99f);
-  m_line3_font_height = static_cast<int>(m_font_line3->GetHeight(dpi) + 0.99f);
+  m_title_font_height  = m_font_title  ? static_cast<int>(m_font_title->GetHeight(dpi)  + 0.99f) : 16;
+  m_artist_font_height = m_font_artist ? static_cast<int>(m_font_artist->GetHeight(dpi) + 0.99f) : 14;
+  m_line3_font_height  = m_font_line3  ? static_cast<int>(m_font_line3->GetHeight(dpi)  + 0.99f) : 14;
 
   invalidate();
 }
