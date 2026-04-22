@@ -598,7 +598,8 @@ private:
     pfc::string8 m_formatted_line1;
     pfc::string8 m_formatted_line2;
     pfc::string8 m_formatted_line3;
-    
+    bool m_lines_have_dynamic_time = false;  // True if any line format references %playback_time*%
+
     // Methods for title formatting
     void update_title_formats();
     void evaluate_title_formats();
