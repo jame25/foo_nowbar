@@ -315,6 +315,10 @@ void ControlPanelDUI::update_artwork() {
 
         // Try online via foo_artwork if enabled (may override stub)
         if (get_nowbar_online_artwork() && is_artwork_bridge_available()) {
+            // Keep only this track's fallback while waiting, including on a miss.
+            // Clear before requesting: the provider may deliver a result synchronously.
+            if (!stub_set) m_core->clear_artwork();
+
             pfc::string8 artist, title;
             if (!m_tf_artist.is_valid())
                 titleformat_compiler::get()->compile_safe(m_tf_artist, "$if($or(%artist%,%title%),%artist%,%foo_artwork_artist%)");
@@ -330,7 +334,6 @@ void ControlPanelDUI::update_artwork() {
             if (!artist.is_empty() || !title.is_empty()) {
                 request_online_artwork(artist.c_str(), title.c_str());
             }
-            // Don't clear artwork - stub or previous art shows while waiting
             return;
         }
 

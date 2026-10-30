@@ -27,10 +27,11 @@ static std::string g_last_requested_title;
 // Callback function that receives artwork results from foo_artwork.
 // Called on foo_artwork's worker thread - must synchronize and marshal to main thread.
 static void artwork_result_callback(bool success, HBITMAP bitmap) {
-    if (success && bitmap) {
+    {
         std::lock_guard<std::mutex> lock(g_pending_mutex);
-        g_pending_artwork_bitmap = bitmap;
-        g_has_pending_artwork = true;
+        // Failure/clear notifications supersede any unconsumed successful result.
+        g_pending_artwork_bitmap = success ? bitmap : nullptr;
+        g_has_pending_artwork = g_pending_artwork_bitmap != nullptr;
     }
 
     // Always marshal notification to main thread so that title formats (%foo_artwork_title%, %foo_artwork_artist%)
