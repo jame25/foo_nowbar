@@ -113,6 +113,10 @@ public:
     void set_artwork(album_art_data_ptr data);
     void set_artwork_from_hbitmap(HBITMAP bitmap);  // For online artwork from foo_artwork
     void clear_artwork();
+    bool has_online_artwork_for_track(const metadb_handle_ptr& track) const {
+        return m_artwork_is_online && m_artwork_thumbnail != nullptr &&
+               track.is_valid() && m_artwork_track == track;
+    }
     
     // Get minimum size
     SIZE get_min_size() const;
@@ -620,6 +624,7 @@ private:
     std::unique_ptr<Gdiplus::Bitmap> m_artwork_bitmap;
     std::unique_ptr<Gdiplus::Bitmap> m_artwork_thumbnail;  // Pre-scaled artwork (max 512x512) for rendering
     std::unique_ptr<Gdiplus::Bitmap> m_default_artwork;
+    metadb_handle_ptr m_artwork_track;
     bool m_artwork_is_online = false;  // True if current artwork is from foo_artwork (online)
 
     // Colors
@@ -686,6 +691,9 @@ private:
     pfc::string8 m_formatted_line1;
     pfc::string8 m_formatted_line2;
     pfc::string8 m_formatted_line3;
+    pfc::string8 m_layout_line1;
+    pfc::string8 m_layout_line2;
+    pfc::string8 m_layout_line3;
     bool m_lines_have_dynamic_time = false;  // True if any line format references %playback_time*%
     metadb_handle_ptr m_selected_track;      // Explicitly selected track when stopped in Mode 0
 

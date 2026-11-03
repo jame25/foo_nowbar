@@ -279,6 +279,10 @@ void PlaybackStateManager::on_playback_dynamic_info_track(const file_info& p_inf
             if (m_state.track_artist == previous_artist && m_state.track_title == previous_title &&
                 m_state.track_album == previous_album) return;
 
+            if (m_state.track_artist != previous_artist || m_state.track_title != previous_title) {
+                clear_pending_online_artwork();
+            }
+
             // Leave the playback callback before notifying panels. Only the newest
             // queued song snapshot should refresh artwork, never restart the full
             // track-change workflow (waveform decoding, progress reset, etc.).

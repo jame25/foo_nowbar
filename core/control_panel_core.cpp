@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "control_panel_core.h"
+#include "../artwork_bridge.h"
 #include "../preferences.h"
 #include "../nowbar_color_service.h"
 #include "../resource.h"
@@ -711,8 +712,15 @@ void ControlPanelCore::notify_online_artwork_received() {
     std::lock_guard<std::mutex> lock(g_instances_mutex);
     snapshot = g_instances;
   }
+  HBITMAP pending_bitmap = get_pending_online_artwork();
   for (auto *instance : snapshot) {
-    instance->on_online_artwork_received();
+    if (pending_bitmap) {
+      instance->evaluate_title_formats();
+      instance->m_needs_full_repaint = true;
+      instance->set_artwork_from_hbitmap(pending_bitmap);
+    } else {
+      instance->on_online_artwork_received();
+    }
   }
 }
 
@@ -1505,9 +1513,9 @@ void ControlPanelCore::update_layout(const RECT &rect) {
       Gdiplus::StringFormat sf(Gdiplus::StringFormat::GenericTypographic());
       sf.SetFormatFlags(Gdiplus::StringFormatFlagsNoWrap | Gdiplus::StringFormatFlagsMeasureTrailingSpaces);
 
-      std::wstring line1 = utf8_to_wide(m_formatted_line1.c_str());
-      std::wstring line2 = utf8_to_wide(m_formatted_line2.c_str());
-      std::wstring line3 = utf8_to_wide(m_formatted_line3.c_str());
+      std::wstring line1 = utf8_to_wide(m_layout_line1.c_str());
+      std::wstring line2 = utf8_to_wide(m_layout_line2.c_str());
+      std::wstring line3 = utf8_to_wide(m_layout_line3.c_str());
 
       float max_w = 0.0f;
       if (m_font_title && !line1.empty()) {
@@ -1524,6 +1532,27 @@ void ControlPanelCore::update_layout(const RECT &rect) {
         Gdiplus::RectF bounds;
         g.MeasureString(line3.c_str(), -1, m_font_line3.get(), Gdiplus::PointF(0, 0), &sf, &bounds);
         if (bounds.Width > max_w) max_w = bounds.Width;
+      }
+      // Also guard against the actual formatted text exceeding the stabilized layout string
+      if (m_lines_have_dynamic_time) {
+        std::wstring dyn1 = utf8_to_wide(m_formatted_line1.c_str());
+        std::wstring dyn2 = utf8_to_wide(m_formatted_line2.c_str());
+        std::wstring dyn3 = utf8_to_wide(m_formatted_line3.c_str());
+        if (m_font_title && !dyn1.empty()) {
+          Gdiplus::RectF bounds;
+          g.MeasureString(dyn1.c_str(), -1, m_font_title.get(), Gdiplus::PointF(0, 0), &sf, &bounds);
+          if (bounds.Width > max_w) max_w = bounds.Width;
+        }
+        if (m_font_artist && !dyn2.empty()) {
+          Gdiplus::RectF bounds;
+          g.MeasureString(dyn2.c_str(), -1, m_font_artist.get(), Gdiplus::PointF(0, 0), &sf, &bounds);
+          if (bounds.Width > max_w) max_w = bounds.Width;
+        }
+        if (m_font_line3 && !dyn3.empty() && m_line3_visible) {
+          Gdiplus::RectF bounds;
+          g.MeasureString(dyn3.c_str(), -1, m_font_line3.get(), Gdiplus::PointF(0, 0), &sf, &bounds);
+          if (bounds.Width > max_w) max_w = bounds.Width;
+        }
       }
       if (rating_on_line3) {
         int star_size = static_cast<int>(artist_h * 0.85f);
@@ -8053,6 +8082,7 @@ void ControlPanelCore::set_artwork(album_art_data_ptr data) {
       if (SUCCEEDED(CreateStreamOnHGlobal(hMem, TRUE, &stream))) {
         m_artwork_bitmap.reset(Gdiplus::Bitmap::FromStream(stream));
         stream->Release();
+        m_artwork_track = get_display_track();
 
         // Create thumbnail first (downscales full-res and releases it),
         // then extract colors from the smaller thumbnail instead of full-res.
@@ -8095,6 +8125,8 @@ void ControlPanelCore::set_artwork_from_hbitmap(HBITMAP bitmap) {
   m_artwork_bitmap.reset(Gdiplus::Bitmap::FromHBITMAP(bitmap, nullptr));
 
   if (m_artwork_bitmap && m_artwork_bitmap->GetLastStatus() == Gdiplus::Ok) {
+    m_artwork_track = get_display_track();
+
     // Create thumbnail first (downscales full-res and releases it),
     // then extract colors from the smaller thumbnail instead of full-res.
     create_artwork_thumbnail();
@@ -8116,6 +8148,8 @@ void ControlPanelCore::set_artwork_from_hbitmap(HBITMAP bitmap) {
     m_blurred_artwork_size = {0, 0};
     m_bg_cache_valid = false;
   } else {
+    m_artwork_is_online = false;
+    m_artwork_track.release();
     m_artwork_bitmap.reset();
     m_artwork_thumbnail.reset();
   }
@@ -8127,8 +8161,10 @@ void ControlPanelCore::set_artwork_from_hbitmap(HBITMAP bitmap) {
 }
 
 void ControlPanelCore::clear_artwork() {
+  bool had_valid_colors = m_artwork_colors_valid;
   m_needs_full_repaint = true;
   m_artwork_is_online = false;
+  m_artwork_track.release();
   m_artwork_bitmap.reset();
   m_artwork_thumbnail.reset();
   m_artwork_colors_valid = false;
@@ -8136,6 +8172,9 @@ void ControlPanelCore::clear_artwork() {
   m_target_background.reset();
   m_blurred_artwork_size = {0, 0};
   m_bg_cache_valid = false;  // Invalidate cache when artwork cleared
+  if (had_valid_colors) {
+    nowbar_notify_color_changed();
+  }
   invalidate();
 }
 
@@ -9187,12 +9226,62 @@ void ControlPanelCore::update_title_formats() {
   evaluate_title_formats();
 }
 
+namespace {
+
+// Titleformat hook that substitutes fixed-width worst-case values for dynamic
+// fields (%bitrate*%, %playback_time*%) when measuring layout width, preventing
+// the scaled seekbar/spectrum from stretching and shrinking as VBR bitrates
+// fluctuate across digit boundaries (e.g. 900-1000 kbps).
+class layout_width_titleformat_hook : public titleformat_hook {
+public:
+  explicit layout_width_titleformat_hook(t_int64 nominal_bitrate)
+      : m_max_bitrate(std::max<t_int64>(nominal_bitrate, 9999)) {}
+
+  bool process_field(titleformat_text_out* p_out, const char* p_name,
+                     t_size p_name_length, bool& p_found_flag) override {
+    if (pfc::stricmp_ascii_ex(p_name, p_name_length, "bitrate", SIZE_MAX) == 0 ||
+        pfc::stricmp_ascii_ex(p_name, p_name_length, "bitrate_dynamic", SIZE_MAX) == 0 ||
+        pfc::stricmp_ascii_ex(p_name, p_name_length, "bitrate_peak", SIZE_MAX) == 0) {
+      p_out->write_int(titleformat_inputtypes::meta, m_max_bitrate);
+      p_found_flag = true;
+      return true;
+    }
+    if (pfc::stricmp_ascii_ex(p_name, p_name_length, "playback_time", SIZE_MAX) == 0 ||
+        pfc::stricmp_ascii_ex(p_name, p_name_length, "playback_time_remaining", SIZE_MAX) == 0) {
+      p_out->write(titleformat_inputtypes::meta, "00:00");
+      p_found_flag = true;
+      return true;
+    }
+    if (pfc::stricmp_ascii_ex(p_name, p_name_length, "playback_time_seconds", SIZE_MAX) == 0 ||
+        pfc::stricmp_ascii_ex(p_name, p_name_length, "playback_time_remaining_seconds", SIZE_MAX) == 0) {
+      p_out->write(titleformat_inputtypes::meta, "0000");
+      p_found_flag = true;
+      return true;
+    }
+    p_found_flag = false;
+    return false;
+  }
+
+  bool process_function(titleformat_text_out*, const char*, t_size,
+                        titleformat_hook_function_params*, bool&) override {
+    return false;
+  }
+
+private:
+  t_int64 m_max_bitrate;
+};
+
+} // namespace
+
 void ControlPanelCore::evaluate_title_formats() {
   metadb_handle_ptr track = get_display_track();
   if (!track.is_valid()) {
     m_formatted_line1 = "";
     m_formatted_line2 = "";
     m_formatted_line3 = "";
+    m_layout_line1 = "";
+    m_layout_line2 = "";
+    m_layout_line3 = "";
     return;
   }
 
@@ -9270,6 +9359,67 @@ void ControlPanelCore::evaluate_title_formats() {
       m_formatted_line1 = fa_title;
       m_formatted_line2 = fa_artist;
     }
+  }
+
+  // Compute stabilized layout strings: when dynamic fields (%bitrate*%, %playback_time*%)
+  // are present, evaluate with a hook that substitutes fixed worst-case values (e.g. 4-digit
+  // bitrate) so update_layout() reserves a constant width while draw_track_info() renders
+  // the live m_formatted_line* values.
+  if (m_lines_have_dynamic_time) {
+    t_int64 nominal_bitrate = 0;
+    metadb_info_container::ptr info_ref = track->get_info_ref();
+    if (info_ref.is_valid()) {
+      nominal_bitrate = info_ref->info().info_get_bitrate();
+    }
+    layout_width_titleformat_hook hook(nominal_bitrate);
+
+    if (m_titleformat_line1.is_valid()) {
+      if (use_playback) {
+        pc->playback_format_title(&hook, m_layout_line1,
+                                  m_titleformat_line1, nullptr,
+                                  playback_control::display_level_all);
+      } else {
+        track->format_title(&hook, m_layout_line1,
+                            m_titleformat_line1, nullptr);
+      }
+    } else {
+      m_layout_line1 = "";
+    }
+
+    if (m_titleformat_line2.is_valid()) {
+      if (use_playback) {
+        pc->playback_format_title(&hook, m_layout_line2,
+                                  m_titleformat_line2, nullptr,
+                                  playback_control::display_level_all);
+      } else {
+        track->format_title(&hook, m_layout_line2,
+                            m_titleformat_line2, nullptr);
+      }
+    } else {
+      m_layout_line2 = "";
+    }
+
+    if (m_titleformat_line3.is_valid()) {
+      if (use_playback) {
+        pc->playback_format_title(&hook, m_layout_line3,
+                                  m_titleformat_line3, nullptr,
+                                  playback_control::display_level_all);
+      } else {
+        track->format_title(&hook, m_layout_line3,
+                            m_titleformat_line3, nullptr);
+      }
+    } else {
+      m_layout_line3 = "";
+    }
+
+    if (use_playback && missing_native_pair) {
+      m_layout_line1 = m_formatted_line1;
+      m_layout_line2 = m_formatted_line2;
+    }
+  } else {
+    m_layout_line1 = m_formatted_line1;
+    m_layout_line2 = m_formatted_line2;
+    m_layout_line3 = m_formatted_line3;
   }
 }
 
