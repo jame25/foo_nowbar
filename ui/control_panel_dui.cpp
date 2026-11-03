@@ -281,23 +281,26 @@ void ControlPanelDUI::update_artwork() {
             } else {
                 track->format_title(nullptr, cover_path, tf_cover, nullptr);
             }
-            if (!cover_path.is_empty() && GetFileAttributesA(cover_path.c_str()) != INVALID_FILE_ATTRIBUTES) {
-                HANDLE hFile = CreateFileA(cover_path.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-                if (hFile != INVALID_HANDLE_VALUE) {
-                    DWORD size = GetFileSize(hFile, NULL);
-                    if (size > 0 && size < 64 * 1024 * 1024) {
-                        std::vector<uint8_t> buffer(size);
-                        DWORD bytesRead = 0;
-                        if (ReadFile(hFile, buffer.data(), size, &bytesRead, NULL) && bytesRead == size) {
-                            album_art_data_ptr data = album_art_data_impl::g_create(buffer.data(), buffer.size());
-                            if (data.is_valid()) {
-                                m_core->set_artwork(data);
-                                CloseHandle(hFile);
-                                return;
+            if (!cover_path.is_empty()) {
+                pfc::stringcvt::string_wide_from_utf8 wide_cover_path(cover_path.c_str());
+                if (GetFileAttributesW(wide_cover_path.get_ptr()) != INVALID_FILE_ATTRIBUTES) {
+                    HANDLE hFile = CreateFileW(wide_cover_path.get_ptr(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+                    if (hFile != INVALID_HANDLE_VALUE) {
+                        DWORD size = GetFileSize(hFile, NULL);
+                        if (size > 0 && size < 64 * 1024 * 1024) {
+                            std::vector<uint8_t> buffer(size);
+                            DWORD bytesRead = 0;
+                            if (ReadFile(hFile, buffer.data(), size, &bytesRead, NULL) && bytesRead == size) {
+                                album_art_data_ptr data = album_art_data_impl::g_create(buffer.data(), buffer.size());
+                                if (data.is_valid()) {
+                                    m_core->set_artwork(data);
+                                    CloseHandle(hFile);
+                                    return;
+                                }
                             }
                         }
+                        CloseHandle(hFile);
                     }
-                    CloseHandle(hFile);
                 }
             }
         }
@@ -327,10 +330,14 @@ void ControlPanelDUI::update_artwork() {
                 track->format_title(nullptr, artist, m_tf_artist, nullptr);
                 track->format_title(nullptr, title, m_tf_title, nullptr);
             }
+            const bool keep_online_art = m_core->has_online_artwork_for_track(track) &&
+                                         is_online_artwork_loaded_for(artist.c_str(), title.c_str());
+            if (!stub_set && !keep_online_art) {
+                m_core->clear_artwork();
+            }
             if (!artist.is_empty() || !title.is_empty()) {
                 request_online_artwork(artist.c_str(), title.c_str());
             }
-            // Don't clear artwork - stub or previous art shows while waiting
             return;
         }
 
