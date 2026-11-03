@@ -19,6 +19,7 @@ static HMODULE g_foo_artwork_module = nullptr;
 static std::mutex g_pending_mutex;
 static HBITMAP g_pending_artwork_bitmap = nullptr;
 static bool g_has_pending_artwork = false;
+static bool g_online_artwork_loaded = false;
 
 // Last requested artist & title for search deduplication
 static std::string g_last_requested_artist;
@@ -27,10 +28,12 @@ static std::string g_last_requested_title;
 // Callback function that receives artwork results from foo_artwork.
 // Called on foo_artwork's worker thread - must synchronize and marshal to main thread.
 static void artwork_result_callback(bool success, HBITMAP bitmap) {
-    if (success && bitmap) {
+    {
         std::lock_guard<std::mutex> lock(g_pending_mutex);
-        g_pending_artwork_bitmap = bitmap;
-        g_has_pending_artwork = true;
+        // Failure/clear notifications supersede any unconsumed successful result.
+        g_pending_artwork_bitmap = (success && bitmap) ? bitmap : nullptr;
+        g_has_pending_artwork = g_pending_artwork_bitmap != nullptr;
+        g_online_artwork_loaded = g_has_pending_artwork;
     }
 
     // Always marshal notification to main thread so that title formats (%foo_artwork_title%, %foo_artwork_artist%)
@@ -84,6 +87,7 @@ void shutdown_artwork_bridge() {
     std::lock_guard<std::mutex> lock(g_pending_mutex);
     g_pending_artwork_bitmap = nullptr;
     g_has_pending_artwork = false;
+    g_online_artwork_loaded = false;
     g_last_requested_artist.clear();
     g_last_requested_title.clear();
 }
@@ -92,6 +96,7 @@ void clear_pending_online_artwork() {
     std::lock_guard<std::mutex> lock(g_pending_mutex);
     g_pending_artwork_bitmap = nullptr;
     g_has_pending_artwork = false;
+    g_online_artwork_loaded = false;
     g_last_requested_artist.clear();
     g_last_requested_title.clear();
 }
@@ -125,6 +130,7 @@ void request_online_artwork(const char* artist, const char* title) {
         g_last_requested_title = safe_title;
         g_pending_artwork_bitmap = nullptr;
         g_has_pending_artwork = false;
+        g_online_artwork_loaded = false;
     }
 
     // Request artwork from foo_artwork
@@ -142,4 +148,20 @@ HBITMAP get_pending_online_artwork() {
     g_pending_artwork_bitmap = nullptr;
     g_has_pending_artwork = false;
     return bitmap;
+}
+
+bool is_online_artwork_loaded_for(const char* artist, const char* title) {
+    std::lock_guard<std::mutex> lock(g_pending_mutex);
+    if (!g_online_artwork_loaded) {
+        return false;
+    }
+    const char* safe_artist = artist ? artist : "";
+    const char* safe_title = title ? title : "";
+    if (g_last_requested_artist.empty() && g_last_requested_title.empty()) {
+        g_last_requested_artist = safe_artist;
+        g_last_requested_title = safe_title;
+        return true;
+    }
+    return g_last_requested_artist == safe_artist &&
+           g_last_requested_title == safe_title;
 }

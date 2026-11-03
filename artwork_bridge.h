@@ -48,3 +48,6 @@ bool has_pending_online_artwork();
 
 // Get and clear the pending artwork bitmap (caller must NOT delete the HBITMAP)
 HBITMAP get_pending_online_artwork();
+
+// Check if online artwork is currently loaded for the given artist/title
+bool is_online_artwork_loaded_for(const char* artist, const char* title);
