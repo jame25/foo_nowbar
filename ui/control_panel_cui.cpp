@@ -72,9 +72,13 @@ void ControlPanelCUI::update_artwork() {
             }
         }
 
-        // Remote internet streams only have dynamic artwork while actively playing
+        // Remote internet streams only have dynamic artwork while actively playing.
+        // Local filesystems other than file:// (portable installs use file-relative:// for
+        // files on the install drive, archives use unpack://) are not streams.
         pfc::string8 path = track->get_path();
-        bool is_stream = (strstr(path.c_str(), "://") != nullptr && strstr(path.c_str(), "file://") != path.c_str());
+        bool is_stream = strstr(path.c_str(), "://") != nullptr &&
+                         !path.has_prefix("file-relative://") &&
+                         filesystem::g_is_remote_or_unrecognized(path.c_str());
         if (is_stream && !is_playing_track) {
             m_core->clear_artwork();
             return;

@@ -31,10 +31,23 @@ ui_element_config::ptr ControlPanelDUI::g_get_default_configuration() {
     return ui_element_config::g_create_empty(g_get_guid());
 }
 
+// The element configuration carries a snapshot of all Now Bar settings, so DUI
+// Export Theme includes them and Import Theme restores them in another profile.
+static void apply_settings_from_config(ui_element_config::ptr config) {
+    if (!config.is_valid() || config->get_data_size() == 0) return;
+    try {
+        stream_reader_memblock_ref reader(config->get_data(), config->get_data_size());
+        if (read_nowbar_settings_snapshot(&reader, fb2k::noAbort)) {
+            ControlPanelCore::notify_all_settings_changed();
+        }
+    } catch (...) {}
+}
+
 ControlPanelDUI::ControlPanelDUI(ui_element_config::ptr config, ui_element_instance_callback::ptr callback)
     : m_config(config)
     , m_callback(callback)
 {
+    apply_settings_from_config(config);
 }
 
 ControlPanelDUI::~ControlPanelDUI() {
@@ -69,10 +82,17 @@ void ControlPanelDUI::initialize_window(HWND parent) {
 
 void ControlPanelDUI::set_configuration(ui_element_config::ptr data) {
     m_config = data;
+    apply_settings_from_config(data);
 }
 
 ui_element_config::ptr ControlPanelDUI::get_configuration() {
-    return m_config;
+    try {
+        stream_writer_buffer_simple writer;
+        write_nowbar_settings_snapshot(&writer, fb2k::noAbort);
+        return ui_element_config::g_create(g_get_guid(), writer.m_buffer.get_ptr(), writer.m_buffer.get_size());
+    } catch (...) {
+        return m_config;
+    }
 }
 
 ui_element_min_max_info ControlPanelDUI::get_min_max_info() {
@@ -240,9 +260,13 @@ void ControlPanelDUI::update_artwork() {
             }
         }
 
-        // Remote internet streams only have dynamic artwork while actively playing
+        // Remote internet streams only have dynamic artwork while actively playing.
+        // Local filesystems other than file:// (portable installs use file-relative:// for
+        // files on the install drive, archives use unpack://) are not streams.
         pfc::string8 path = track->get_path();
-        bool is_stream = (strstr(path.c_str(), "://") != nullptr && strstr(path.c_str(), "file://") != path.c_str());
+        bool is_stream = strstr(path.c_str(), "://") != nullptr &&
+                         !path.has_prefix("file-relative://") &&
+                         filesystem::g_is_remote_or_unrecognized(path.c_str());
         if (is_stream && !is_playing_track) {
             m_core->clear_artwork();
             return;
