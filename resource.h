@@ -153,6 +153,7 @@
 #define IDC_SKIP_LOW_RATING_COMBO       1150
 #define IDC_SKIP_RATING_THRESHOLD_LABEL 1151
 #define IDC_SKIP_RATING_THRESHOLD_COMBO 1152
+#define IDC_SKIP_CUSTOM_QUERY_EDIT      1553
 
 // Spectrum Visualizer controls (General tab) - legacy, kept for reference
 #define IDC_SPECTRUM_LABEL         1153

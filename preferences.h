@@ -43,8 +43,13 @@ int get_nowbar_preview_mode();  // 0=Off, 1=35%, 2=50%, 3=60sec
 void set_nowbar_preview_mode(int mode);  // Set playback preview mode
 bool get_nowbar_skip_low_rating_enabled();  // true=Enabled, false=Disabled
 void set_nowbar_skip_low_rating_enabled(bool enabled);  // Toggle skip low rating
-int get_nowbar_skip_low_rating_threshold();  // 1, 2, or 3
+int get_nowbar_skip_low_rating_threshold();  // 1, 2, 3, or 4 (custom query)
 void set_nowbar_skip_low_rating_threshold(int threshold);  // Set skip rating threshold
+pfc::string8 get_nowbar_skip_custom_query();  // Custom skip condition (foobar2000 query syntax)
+
+// Settings snapshot carried in DUI element configuration (Export/Import Theme)
+void write_nowbar_settings_snapshot(stream_writer* out, abort_callback& abort);
+bool read_nowbar_settings_snapshot(stream_reader* in, abort_callback& abort);  // true if settings were applied
 int get_nowbar_selection_mode();  // 0=Prioritize Now Playing Mode, 1=Follow Selection
 void set_nowbar_selection_mode(int mode);  // Set selection mode
 bool get_nowbar_spectrum_visible();  // true=Enabled, false=Disabled

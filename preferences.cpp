@@ -676,6 +676,18 @@ static cfg_int cfg_nowbar_playback_time_visible(
     1  // Default: Show (1)
 );
 
+// Custom skip condition (foobar2000 query syntax), used when the skip threshold is 4
+static cfg_string cfg_nowbar_skip_custom_query(
+    GUID{0xABCDEF5B, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x68, 0x5B}},
+    ""  // Default: empty
+);
+
+// Identifies this profile in settings snapshots stored in DUI element configuration
+static cfg_struct_t<GUID> cfg_nowbar_settings_owner(
+    GUID{0xABCDEFC4, 0x1234, 0x5678, {0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0xC4}},
+    pfc::guid_null
+);
+
 //=============================================================================
 // Config File for All 12 Custom Buttons
 // Buttons 1-6: Visible on panel, have enabled/icon fields
@@ -1854,8 +1866,38 @@ void set_nowbar_skip_low_rating_enabled(bool enabled) {
 
 void set_nowbar_skip_low_rating_threshold(int threshold) {
     if (threshold < 1) threshold = 1;
-    if (threshold > 3) threshold = 3;
+    if (threshold > 4) threshold = 4;
     cfg_nowbar_skip_low_rating_threshold = threshold;
+}
+
+pfc::string8 get_nowbar_skip_custom_query() {
+    return cfg_nowbar_skip_custom_query;
+}
+
+// Settings snapshot for DUI element configuration (Export/Import Theme): the owning
+// profile's GUID followed by every Now Bar cfg_var in foobar2000's own record format.
+static GUID get_settings_owner() {
+    if (cfg_nowbar_settings_owner.get_value() == pfc::guid_null) {
+        cfg_nowbar_settings_owner = pfc::createGUID();
+    }
+    return cfg_nowbar_settings_owner.get_value();
+}
+
+void write_nowbar_settings_snapshot(stream_writer* out, abort_callback& abort) {
+    out->write_lendian_t(get_settings_owner(), abort);
+    cfg_var_writer::config_write_file(out, abort);
+}
+
+bool read_nowbar_settings_snapshot(stream_reader* in, abort_callback& abort) {
+    GUID owner;
+    in->read_lendian_t(owner, abort);
+    const GUID self = get_settings_owner();
+    // A snapshot written by this profile is never newer than the live settings
+    if (owner == self) return false;
+    cfg_var_reader::config_read_file(in, abort);
+    cfg_nowbar_settings_owner = self;
+    save_config_file();  // Sync custom buttons 1-6 into custom_buttons.conf
+    return true;
 }
 
 int get_nowbar_selection_mode() {
@@ -1954,7 +1996,7 @@ int get_nowbar_waveform_style() {
 int get_nowbar_skip_low_rating_threshold() {
     int threshold = cfg_nowbar_skip_low_rating_threshold;
     if (threshold < 1) threshold = 1;
-    if (threshold > 3) threshold = 3;  // 1, 2, or 3
+    if (threshold > 4) threshold = 4;  // 1, 2, 3, or 4 (custom query)
     return threshold;
 }
 
@@ -3016,6 +3058,7 @@ static const int g_tab0_controls[] = {
     IDC_MOOD_TAG_LABEL, IDC_MOOD_TAG_COMBO, IDC_PLAYBACK_PREVIEW_GROUP,
     IDC_SKIP_LOW_RATING_LABEL, IDC_SKIP_LOW_RATING_COMBO,
     IDC_SKIP_RATING_THRESHOLD_LABEL, IDC_SKIP_RATING_THRESHOLD_COMBO,
+    IDC_SKIP_CUSTOM_QUERY_EDIT,
     IDC_VIS_GROUP, IDC_VIS_ENABLE_CHECK, IDC_VIS_60FPS_CHECK,
     IDC_VIS_SPECTRUM_RADIO, IDC_VIS_SPECTRUM_WIDTH_LABEL,
     IDC_VIS_SPECTRUM_WIDTH_COMBO, IDC_VIS_SPECTRUM_STYLE_LABEL,
@@ -3603,9 +3646,13 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         SendMessage(hSkipRatingThresholdCombo, CB_ADDSTRING, 0, (LPARAM)L"1 (skip if rating = 1)");
         SendMessage(hSkipRatingThresholdCombo, CB_ADDSTRING, 0, (LPARAM)L"2 (skip if rating <= 2)");
         SendMessage(hSkipRatingThresholdCombo, CB_ADDSTRING, 0, (LPARAM)L"3 (skip if rating <= 3)");
-        SendMessage(hSkipRatingThresholdCombo, CB_SETCURSEL, cfg_nowbar_skip_low_rating_threshold - 1, 0);
+        SendMessage(hSkipRatingThresholdCombo, CB_ADDSTRING, 0, (LPARAM)L"Custom query");
+        SendMessage(hSkipRatingThresholdCombo, CB_SETCURSEL, get_nowbar_skip_low_rating_threshold() - 1, 0);
         // Enable/disable threshold combo based on skip low rating setting
         EnableWindow(hSkipRatingThresholdCombo, cfg_nowbar_skip_low_rating_enabled != 0);
+        uSetDlgItemText(hwnd, IDC_SKIP_CUSTOM_QUERY_EDIT, cfg_nowbar_skip_custom_query);
+        EnableWindow(GetDlgItem(hwnd, IDC_SKIP_CUSTOM_QUERY_EDIT),
+                     cfg_nowbar_skip_low_rating_enabled != 0 && get_nowbar_skip_low_rating_threshold() == 4);
 
         // Initialize Visualization section
         {
@@ -3832,7 +3879,6 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         case IDC_VOLUME_ICON_COMBO:
         case IDC_VOLUME_BAR_COMBO:
         case IDC_MOOD_TAG_COMBO:
-        case IDC_SKIP_RATING_THRESHOLD_COMBO:
         case IDC_VIS_SPECTRUM_WIDTH_COMBO:
         case IDC_VIS_SPECTRUM_HEIGHT_COMBO:
         case IDC_VIS_WAVEFORM_WIDTH_COMBO:
@@ -3869,10 +3915,13 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
             break;
 
         case IDC_SKIP_LOW_RATING_COMBO:
+        case IDC_SKIP_RATING_THRESHOLD_COMBO:
             if (HIWORD(wp) == CBN_SELCHANGE) {
-                // Enable/disable threshold combo based on skip low rating setting
-                int sel = (int)SendMessage(GetDlgItem(hwnd, IDC_SKIP_LOW_RATING_COMBO), CB_GETCURSEL, 0, 0);
-                EnableWindow(GetDlgItem(hwnd, IDC_SKIP_RATING_THRESHOLD_COMBO), sel == 1);
+                // Threshold combo needs skipping enabled; the query box needs "Custom query"
+                bool skip_on = SendMessage(GetDlgItem(hwnd, IDC_SKIP_LOW_RATING_COMBO), CB_GETCURSEL, 0, 0) == 1;
+                bool custom = SendMessage(GetDlgItem(hwnd, IDC_SKIP_RATING_THRESHOLD_COMBO), CB_GETCURSEL, 0, 0) == 3;
+                EnableWindow(GetDlgItem(hwnd, IDC_SKIP_RATING_THRESHOLD_COMBO), skip_on);
+                EnableWindow(GetDlgItem(hwnd, IDC_SKIP_CUSTOM_QUERY_EDIT), skip_on && custom);
                 p_this->on_changed();
             }
             break;
@@ -3999,6 +4048,7 @@ INT_PTR CALLBACK nowbar_preferences::ConfigProc(HWND hwnd, UINT msg, WPARAM wp, 
         case IDC_LINE1_FORMAT_EDIT:
         case IDC_LINE2_FORMAT_EDIT:
         case IDC_LINE3_FORMAT_EDIT:
+        case IDC_SKIP_CUSTOM_QUERY_EDIT:
             if (HIWORD(wp) == EN_CHANGE) {
                 p_this->on_changed();
             }
@@ -4863,7 +4913,9 @@ void nowbar_preferences::apply_settings() {
         int skipLowRatingSel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_SKIP_LOW_RATING_COMBO), CB_GETCURSEL, 0, 0);
         cfg_nowbar_skip_low_rating_enabled = (skipLowRatingSel == 1) ? 1 : 0;
         int skipRatingThresholdSel = (int)SendMessage(GetDlgItem(m_hwnd, IDC_SKIP_RATING_THRESHOLD_COMBO), CB_GETCURSEL, 0, 0);
-        cfg_nowbar_skip_low_rating_threshold = skipRatingThresholdSel + 1;  // Convert 0-based to 1-3
+        cfg_nowbar_skip_low_rating_threshold = skipRatingThresholdSel + 1;  // Convert 0-based to 1-4
+        uGetDlgItemText(m_hwnd, IDC_SKIP_CUSTOM_QUERY_EDIT, format_str);
+        cfg_nowbar_skip_custom_query = format_str;
 
         // Save visualization mode from checkbox + radio buttons
         {
@@ -5016,6 +5068,7 @@ void nowbar_preferences::reset_settings() {
             cfg_nowbar_rating_visible = 0;  // Hidden (default)
             cfg_nowbar_skip_low_rating_enabled = 0;  // Disabled (default)
             cfg_nowbar_skip_low_rating_threshold = 1;  // 1 (default)
+            cfg_nowbar_skip_custom_query = "";  // Default: empty
             cfg_nowbar_visualization_mode = 0;  // Disabled (default)
             cfg_nowbar_vis_type = 1;  // Default: Spectrum
             cfg_nowbar_spectrum_width = 1;  // Default: Normal
@@ -5035,6 +5088,8 @@ void nowbar_preferences::reset_settings() {
             SendMessage(GetDlgItem(m_hwnd, IDC_SKIP_LOW_RATING_COMBO), CB_SETCURSEL, 0, 0);  // Default: Disabled
             SendMessage(GetDlgItem(m_hwnd, IDC_SKIP_RATING_THRESHOLD_COMBO), CB_SETCURSEL, 0, 0);  // Default: 1
             EnableWindow(GetDlgItem(m_hwnd, IDC_SKIP_RATING_THRESHOLD_COMBO), FALSE);  // Disabled when skip is off
+            uSetDlgItemText(m_hwnd, IDC_SKIP_CUSTOM_QUERY_EDIT, "");
+            EnableWindow(GetDlgItem(m_hwnd, IDC_SKIP_CUSTOM_QUERY_EDIT), FALSE);
             // Reset Visualization section UI
             CheckDlgButton(m_hwnd, IDC_VIS_ENABLE_CHECK, BST_UNCHECKED);
             CheckDlgButton(m_hwnd, IDC_VIS_60FPS_CHECK, BST_UNCHECKED);
