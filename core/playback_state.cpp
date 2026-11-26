@@ -695,6 +695,26 @@ bool PlaybackStateManager::check_and_skip_low_rating(metadb_handle_ptr p_track) 
     // Get the rating threshold
     int threshold = get_nowbar_skip_low_rating_threshold();
 
+    // Threshold 4: skip tracks matching the custom query, e.g.
+    // (%rating% EQUAL 4) OR (%title% HAS Instrumental)
+    if (threshold == 4) {
+        pfc::string8 query = get_nowbar_skip_custom_query();
+        if (query.is_empty()) return false;
+        try {
+            search_filter::ptr filter = search_filter_manager::get()->create(query);
+            bool match = false;
+            filter->test_multi(pfc::list_single_ref_t<metadb_handle_ptr>(p_track), &match);
+            if (match) {
+                m_consecutive_rating_skips++;
+                main_thread_callback_manager::get()->add_callback(fb2k::service_new<LowRatingSkipCallback>());
+                return true;
+            }
+        } catch (...) {
+            // Invalid query: don't skip
+        }
+        return false;
+    }
+
     // Evaluate %rating% using title formatting
     // foo_playcount exposes rating through title formatting
     try {

@@ -353,6 +353,9 @@ private:
     // UI selection tracking for Selection Mode
     class SelectionCallback;
     std::unique_ptr<SelectionCallback> m_selection_callback;
+    // Follow Selection: true when the playlist focus/selection changed more recently than the
+    // UI selection (e.g. "Cursor follows playback"), so the focused playlist item is shown
+    bool m_follow_playlist_focus = false;
 
     // Playlist focus tracking for rating display
     class PlaylistFocusCallback;
@@ -633,6 +636,7 @@ private:
     Gdiplus::Color m_text_secondary_color;
     Gdiplus::Color m_accent_color;
     Gdiplus::Color m_button_hover_color;
+    Gdiplus::Color m_placeholder_color;  // Missing-cover placeholder background
 
     // Cached theme colors from DUI/CUI for preference fallback
     COLORREF m_theme_highlight = RGB(0, 120, 215);  // DUI Highlight / CUI selection_bg
@@ -695,6 +699,7 @@ private:
     pfc::string8 m_layout_line2;
     pfc::string8 m_layout_line3;
     bool m_lines_have_dynamic_time = false;  // True if any line format references %playback_time*%
+    int m_dynamic_bitrate_digits = 0;        // Widest %bitrate*% seen for the playing track (display padding)
     metadb_handle_ptr m_selected_track;      // Explicitly selected track when stopped in Mode 0
 
     // Methods for title formatting

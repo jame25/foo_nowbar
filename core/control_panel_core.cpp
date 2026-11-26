@@ -11,6 +11,7 @@
 #include <fstream>
 #include <shellapi.h>
 #include <shlobj.h>
+#include <uxtheme.h>
 #include <string>
 #include <vector>
 #pragma comment(lib, "comdlg32.lib")
@@ -219,6 +220,45 @@ static std::wstring utf8_to_wide(const char *utf8) {
   return result;
 }
 
+// Encode unquoted '<' and '>' in a display format as $char(1) / $char(2) markers
+// (dim toward background / highlight), skipping quoted text, %fields% and // comments.
+// Metadata containing < or > stays literal. Same rules as Modern Playlist.
+static std::string display_pattern(const std::string& pattern) {
+  std::string out;
+  out.reserve(pattern.size());
+  bool quoted = false;
+  for (size_t i = 0; i < pattern.size(); ++i) {
+    const char c = pattern[i];
+    if (c == '\'') {
+      quoted = !quoted;
+      out += c;
+    } else if (!quoted && c == '/' && i + 1 < pattern.size() && pattern[i + 1] == '/') {
+      const size_t end = pattern.find_first_of("\r\n", i);
+      if (end == std::string::npos) { out.append(pattern, i, std::string::npos); break; }
+      out.append(pattern, i, end - i);
+      i = end - 1;
+    } else if (!quoted && c == '%') {
+      const size_t end = pattern.find('%', i + 1);
+      if (end == std::string::npos) { out.append(pattern, i, std::string::npos); break; }
+      out.append(pattern, i, end - i + 1);
+      i = end;
+    } else if (!quoted && (c == '<' || c == '>')) {
+      out += (c == '<') ? "$char(1)" : "$char(2)";
+    } else {
+      out += c;
+    }
+  }
+  return out;
+}
+
+// Remove dim/highlight markers for width measurement
+static std::wstring strip_level_markers(std::wstring text) {
+  text.erase(std::remove_if(text.begin(), text.end(),
+                            [](wchar_t c) { return c == 1 || c == 2; }),
+             text.end());
+  return text;
+}
+
 // Helper: point in rect
 static bool pt_in_rect(const RECT &r, int x, int y) {
   return x >= r.left && x < r.right && y >= r.top && y < r.bottom;
@@ -250,6 +290,7 @@ public:
   SelectionCallback(ControlPanelCore* owner) : m_owner(owner) {}
 
   void on_selection_changed(metadb_handle_list_cref) override {
+    m_owner->m_follow_playlist_focus = false;
     m_owner->on_selection_or_focus_changed();
   }
 
@@ -269,14 +310,17 @@ public:
       , m_owner(owner) {}
 
   void on_item_focus_change(t_size, t_size, t_size) override {
+    m_owner->m_follow_playlist_focus = true;
     m_owner->on_selection_or_focus_changed();
   }
 
   void on_items_selection_change(t_size, const bit_array&, const bit_array&) override {
+    m_owner->m_follow_playlist_focus = true;
     m_owner->on_selection_or_focus_changed();
   }
 
   void on_playlist_activate(t_size, t_size) override {
+    m_owner->m_follow_playlist_focus = true;
     m_owner->on_selection_or_focus_changed();
   }
 
@@ -342,6 +386,7 @@ ControlPanelCore::ControlPanelCore() {
   m_accent_color = Gdiplus::Color(255, 100, 180,
                                   255); // Light blue for active shuffle/repeat
   m_button_hover_color = Gdiplus::Color(40, 255, 255, 255);
+  m_placeholder_color = Gdiplus::Color(255, 60, 60, 60);
 }
 
 // Thread-pool timer callback — fires on a worker thread and posts a
@@ -530,6 +575,8 @@ void ControlPanelCore::set_dark_mode(bool dark) {
   // Track (unfilled bar) color: matches the artwork placeholder color
   // so the bar track blends with the empty artwork area
   m_track_color = dark ? RGB(60, 60, 60) : RGB(200, 200, 200);
+  m_placeholder_color = dark ? Gdiplus::Color(255, 60, 60, 60)
+                             : Gdiplus::Color(255, 200, 200, 200);
 
   // Invalidate caches
   m_bg_cache_valid = false;
@@ -767,10 +814,11 @@ void ControlPanelCore::apply_theme() {
   }
 
   // Special case: Custom theme + artwork background
-  // When stopped (no artwork visible), use DUI colors; when playing/paused, force dark
-  // (artwork backgrounds have dark overlays that require light text)
+  // When stopped or no artwork is drawn (no cover and no stub image), use DUI colors like
+  // Solid; otherwise force dark (artwork backgrounds have dark overlays that require light text)
   if (theme_mode == 3 && has_artwork_bg) {
-    if (is_stopped) {
+    bool artwork_drawn = (bg_style == 1) ? m_artwork_colors_valid : (m_artwork_thumbnail != nullptr);
+    if (is_stopped || !artwork_drawn) {
       // No artwork visible, use DUI color scheme
       apply_custom_colors();
     } else {
@@ -804,6 +852,12 @@ void ControlPanelCore::apply_theme() {
 
 void ControlPanelCore::on_settings_changed() {
   m_needs_full_repaint = true;
+
+  // Custom button tooltip follows foobar2000's dark/light mode
+  if (m_tooltip_hwnd) {
+    SetWindowTheme(m_tooltip_hwnd,
+                   ui_config_manager::g_is_dark_mode() ? L"DarkMode_Explorer" : L"Explorer", nullptr);
+  }
   m_spectrum_bg_cache_valid = false;
   m_bg_cache_valid = false;
 
@@ -976,6 +1030,15 @@ void ControlPanelCore::apply_custom_colors() {
         br + (r - br) * 20 / 100,
         bg_ + (g - bg_) * 20 / 100,
         bb + (b - bb) * 20 / 100);
+
+    // Cover placeholder: same color as Modern Playlist's missing-cover square, a 20/255
+    // text overlay on its group header background (background blended 12/255 toward text)
+    auto placeholder_channel = [](int back, int fore) {
+      int header = (back * 243 + fore * 12) / 255;
+      return (fore * 20 + header * 235 + 127) / 255;
+    };
+    m_placeholder_color = Gdiplus::Color(255,
+        placeholder_channel(br, r), placeholder_channel(bg_, g), placeholder_channel(bb, b));
 
     // Hover color - semi-transparent version of text color
     m_button_hover_color = Gdiplus::Color(40, GetRValue(text), GetGValue(text), GetBValue(text));
@@ -1513,9 +1576,9 @@ void ControlPanelCore::update_layout(const RECT &rect) {
       Gdiplus::StringFormat sf(Gdiplus::StringFormat::GenericTypographic());
       sf.SetFormatFlags(Gdiplus::StringFormatFlagsNoWrap | Gdiplus::StringFormatFlagsMeasureTrailingSpaces);
 
-      std::wstring line1 = utf8_to_wide(m_layout_line1.c_str());
-      std::wstring line2 = utf8_to_wide(m_layout_line2.c_str());
-      std::wstring line3 = utf8_to_wide(m_layout_line3.c_str());
+      std::wstring line1 = strip_level_markers(utf8_to_wide(m_layout_line1.c_str()));
+      std::wstring line2 = strip_level_markers(utf8_to_wide(m_layout_line2.c_str()));
+      std::wstring line3 = strip_level_markers(utf8_to_wide(m_layout_line3.c_str()));
 
       float max_w = 0.0f;
       if (m_font_title && !line1.empty()) {
@@ -1535,9 +1598,9 @@ void ControlPanelCore::update_layout(const RECT &rect) {
       }
       // Also guard against the actual formatted text exceeding the stabilized layout string
       if (m_lines_have_dynamic_time) {
-        std::wstring dyn1 = utf8_to_wide(m_formatted_line1.c_str());
-        std::wstring dyn2 = utf8_to_wide(m_formatted_line2.c_str());
-        std::wstring dyn3 = utf8_to_wide(m_formatted_line3.c_str());
+        std::wstring dyn1 = strip_level_markers(utf8_to_wide(m_formatted_line1.c_str()));
+        std::wstring dyn2 = strip_level_markers(utf8_to_wide(m_formatted_line2.c_str()));
+        std::wstring dyn3 = strip_level_markers(utf8_to_wide(m_formatted_line3.c_str()));
         if (m_font_title && !dyn1.empty()) {
           Gdiplus::RectF bounds;
           g.MeasureString(dyn1.c_str(), -1, m_font_title.get(), Gdiplus::PointF(0, 0), &sf, &bounds);
@@ -2662,10 +2725,7 @@ void ControlPanelCore::draw_artwork(Gdiplus::Graphics &g) {
         og.DrawImage(m_artwork_thumbnail.get(), destRect, cropX, cropY, cropW, cropH,
                      Gdiplus::UnitPixel);
       } else {
-        Gdiplus::Color placeholderBg = m_dark_mode
-            ? Gdiplus::Color(255, 60, 60, 60)
-            : Gdiplus::Color(255, 200, 200, 200);
-        Gdiplus::SolidBrush brush(placeholderBg);
+        Gdiplus::SolidBrush brush(m_placeholder_color);
         og.FillRectangle(&brush, 0, 0, w, h);
 
         bool is_stream = false;
@@ -2739,10 +2799,7 @@ void ControlPanelCore::draw_artwork(Gdiplus::Graphics &g) {
       g.DrawImage(m_artwork_thumbnail.get(), destRect, cropX, cropY, cropW, cropH,
                   Gdiplus::UnitPixel);
     } else {
-      Gdiplus::Color placeholderBg = m_dark_mode
-          ? Gdiplus::Color(255, 60, 60, 60)
-          : Gdiplus::Color(255, 200, 200, 200);
-      Gdiplus::SolidBrush brush(placeholderBg);
+      Gdiplus::SolidBrush brush(m_placeholder_color);
       Gdiplus::Rect artR(m_rect_artwork.left, m_rect_artwork.top, w, h);
       g.FillRectangle(&brush, artR);
 
@@ -2836,11 +2893,49 @@ void ControlPanelCore::draw_track_info(Gdiplus::Graphics &g) {
   std::wstring line2 = utf8_to_wide(m_formatted_line2.c_str());
   std::wstring line3 = utf8_to_wide(m_formatted_line3.c_str());
 
-  g.DrawString(line1.c_str(), -1, m_font_title.get(), titleRect, &sf,
-               &titleBrush);
+  // Draws a line split at \x01 (dim) / \x02 (highlight) markers. Each marker shifts the
+  // level by one step (clamped to 3); a step blends 1/4 toward the background (dim) or
+  // the highlight color, as in Modern Playlist. Lines without markers draw unchanged.
+  auto draw_line = [&](const std::wstring& text, Gdiplus::Font* font,
+                       const Gdiplus::RectF& rect, Gdiplus::SolidBrush* brush) {
+    if (text.find_first_of(L"\x01\x02") == std::wstring::npos) {
+      g.DrawString(text.c_str(), -1, font, rect, &sf, brush);
+      return;
+    }
+    Gdiplus::Color base;
+    brush->GetColor(&base);
+    const COLORREF bg = get_bg_colorref();
+    const float right = rect.X + rect.Width;
+    float x = rect.X;
+    int level = 0;
+    size_t i = 0;
+    while (i < text.size() && x < right) {
+      if (text[i] == 1 || text[i] == 2) {
+        level += (text[i] == 1) ? -1 : 1;
+        ++i;
+        continue;
+      }
+      size_t end = text.find_first_of(L"\x01\x02", i);
+      if (end == std::wstring::npos) end = text.size();
+      const int len = static_cast<int>(end - i);
+      const int amount = std::min(std::abs(level), 3);
+      const COLORREF target = (level < 0) ? bg : m_theme_highlight;
+      Gdiplus::SolidBrush runBrush(Gdiplus::Color(base.GetA(),
+          (base.GetR() * (4 - amount) + GetRValue(target) * amount + 2) / 4,
+          (base.GetG() * (4 - amount) + GetGValue(target) * amount + 2) / 4,
+          (base.GetB() * (4 - amount) + GetBValue(target) * amount + 2) / 4));
+      Gdiplus::RectF runRect(x, rect.Y, right - x, rect.Height);
+      g.DrawString(text.c_str() + i, len, font, runRect, &sf, &runBrush);
+      Gdiplus::RectF bounds;
+      g.MeasureString(text.c_str() + i, len, font, Gdiplus::PointF(0, 0), &sf, &bounds);
+      x += bounds.Width;
+      i = end;
+    }
+  };
+
+  draw_line(line1, m_font_title.get(), titleRect, &titleBrush);
   if (!line2.empty()) {
-    g.DrawString(line2.c_str(), -1, m_font_artist.get(), artistRect, &sf,
-                 &artistBrush);
+    draw_line(line2, m_font_artist.get(), artistRect, &artistBrush);
   }
 
   bool rating_on_line3_draw = (get_nowbar_rating_mode() == 2);
@@ -2863,8 +2958,7 @@ void ControlPanelCore::draw_track_info(Gdiplus::Graphics &g) {
         artistRect.Y + (float)artist_h + (float)text_gap,
         text_w,
         (float)line3_font_h);
-    g.DrawString(line3.c_str(), -1, m_font_line3.get(), line3Rect, &sf,
-                 line3BrushPtr);
+    draw_line(line3, m_font_line3.get(), line3Rect, line3BrushPtr);
   }
 
   // Rating stars on Line 3 mode — draw within track info area (when a track is loaded/selected)
@@ -7059,6 +7153,7 @@ void ControlPanelCore::show_autoplaylist_menu() {
     ID_SKIP_LOW_RATING_1,
     ID_SKIP_LOW_RATING_2,
     ID_SKIP_LOW_RATING_3,
+    ID_SKIP_CUSTOM_QUERY,
     // Selection Mode submenu IDs
     ID_SELECTION_MODE_PRIORITIZE_NOW_PLAYING,
     ID_SELECTION_MODE_FOLLOW_SELECTION,
@@ -7153,7 +7248,7 @@ void ControlPanelCore::show_autoplaylist_menu() {
     AppendMenuW(menu, MF_POPUP, (UINT_PTR)preview_submenu, L"Playback Preview");
   }
 
-  // Group 7: Skip Low Rating submenu
+  // Group 7: Skip Tracks submenu
   HMENU skip_submenu = CreatePopupMenu();
   if (skip_submenu) {
     bool skip_enabled = get_nowbar_skip_low_rating_enabled();
@@ -7163,17 +7258,22 @@ void ControlPanelCore::show_autoplaylist_menu() {
     UINT s1_flags = MF_STRING | (skip_enabled && skip_threshold == 1 ? MF_CHECKED : 0);
     UINT s2_flags = MF_STRING | (skip_enabled && skip_threshold == 2 ? MF_CHECKED : 0);
     UINT s3_flags = MF_STRING | (skip_enabled && skip_threshold == 3 ? MF_CHECKED : 0);
+    // Custom query is edited in Preferences; unavailable until one is set
+    UINT custom_flags = MF_STRING | (skip_enabled && skip_threshold == 4 ? MF_CHECKED : 0) |
+                        (get_nowbar_skip_custom_query().is_empty() ? MF_GRAYED : 0);
 
     AppendMenuW(skip_submenu, off_flags, ID_SKIP_LOW_RATING_OFF, L"Off");
     AppendMenuW(skip_submenu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(skip_submenu, s1_flags, ID_SKIP_LOW_RATING_1, L"Skip if rating = 1");
     AppendMenuW(skip_submenu, s2_flags, ID_SKIP_LOW_RATING_2, L"Skip if rating \x2264 2");
     AppendMenuW(skip_submenu, s3_flags, ID_SKIP_LOW_RATING_3, L"Skip if rating \x2264 3");
+    AppendMenuW(skip_submenu, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(skip_submenu, custom_flags, ID_SKIP_CUSTOM_QUERY, L"Skip if custom query matches");
 
-    AppendMenuW(menu, MF_POPUP, (UINT_PTR)skip_submenu, L"Skip Low Rating");
+    AppendMenuW(menu, MF_POPUP, (UINT_PTR)skip_submenu, L"Skip Tracks");
   }
 
-  // Separator between Skip Low Rating and Selection Mode
+  // Separator between Skip Tracks and Selection Mode
   AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
 
   // Group 8: Selection Mode submenu
@@ -7353,6 +7453,10 @@ void ControlPanelCore::show_autoplaylist_menu() {
     case ID_SKIP_LOW_RATING_3:
       set_nowbar_skip_low_rating_enabled(true);
       set_nowbar_skip_low_rating_threshold(3);
+      break;
+    case ID_SKIP_CUSTOM_QUERY:
+      set_nowbar_skip_low_rating_enabled(true);
+      set_nowbar_skip_low_rating_threshold(4);
       break;
     case ID_SELECTION_MODE_PRIORITIZE_NOW_PLAYING:
       set_nowbar_selection_mode(0);
@@ -7705,6 +7809,26 @@ void ControlPanelCore::update_mood_state() {
 }
 
 metadb_handle_ptr ControlPanelCore::get_selected_track() const {
+  auto get_focused_playlist_item = []() -> metadb_handle_ptr {
+    auto pm = playlist_manager::get();
+    t_size active = pm->get_active_playlist();
+    if (active != pfc_infinite) {
+      t_size focus = pm->playlist_get_focus_item(active);
+      metadb_handle_ptr track;
+      if (focus != pfc_infinite && pm->playlist_get_item_handle(track, active, focus) && track.is_valid()) {
+        return track;
+      }
+    }
+    return metadb_handle_ptr();
+  };
+
+  // The playlist cursor moved after the last UI selection change (e.g. "Cursor follows
+  // playback" on auto-advance), while another element may still hold the UI selection
+  if (m_follow_playlist_focus) {
+    metadb_handle_ptr track = get_focused_playlist_item();
+    if (track.is_valid()) return track;
+  }
+
   // 1. Try ui_selection_manager
   metadb_handle_list list;
   if (static_api_test_t<ui_selection_manager_v2>()) {
@@ -7717,19 +7841,7 @@ metadb_handle_ptr ControlPanelCore::get_selected_track() const {
   }
 
   // 2. Fall back to focused item in active playlist
-  auto pm = playlist_manager::get();
-  t_size active = pm->get_active_playlist();
-  if (active != pfc_infinite) {
-    t_size focus = pm->playlist_get_focus_item(active);
-    if (focus != pfc_infinite) {
-      metadb_handle_ptr track;
-      if (pm->playlist_get_item_handle(track, active, focus) && track.is_valid()) {
-        return track;
-      }
-    }
-  }
-
-  return metadb_handle_ptr();
+  return get_focused_playlist_item();
 }
 
 metadb_handle_ptr ControlPanelCore::get_display_track() const {
@@ -7973,6 +8085,7 @@ void ControlPanelCore::on_volume_changed(float volume_db) {
 
 void ControlPanelCore::on_track_changed() {
   m_selected_track.release();
+  m_dynamic_bitrate_digits = 0;
 
   // Sync local state from the manager.  on_playback_new_track() updates
   // current_track and track info in the manager but intentionally skips
@@ -8110,6 +8223,12 @@ void ControlPanelCore::set_artwork(album_art_data_ptr data) {
     }
   }
 
+  // Custom theme + artwork background switches between DUI colors and dark with artwork
+  if (get_nowbar_theme_mode() == 3) {
+    apply_theme();
+    nowbar_notify_color_changed();
+  }
+
   invalidate();
 }
 
@@ -8157,6 +8276,12 @@ void ControlPanelCore::set_artwork_from_hbitmap(HBITMAP bitmap) {
   // Re-evaluate title formats when new artwork is loaded to sync artist/title
   evaluate_title_formats();
 
+  // Custom theme + artwork background switches between DUI colors and dark with artwork
+  if (get_nowbar_theme_mode() == 3) {
+    apply_theme();
+    nowbar_notify_color_changed();
+  }
+
   invalidate();
 }
 
@@ -8175,6 +8300,13 @@ void ControlPanelCore::clear_artwork() {
   if (had_valid_colors) {
     nowbar_notify_color_changed();
   }
+
+  // Custom theme + artwork background switches between DUI colors and dark with artwork
+  if (get_nowbar_theme_mode() == 3) {
+    apply_theme();
+    nowbar_notify_color_changed();
+  }
+
   invalidate();
 }
 
@@ -9199,11 +9331,12 @@ void ControlPanelCore::update_title_formats() {
   m_titleformat_line2.release();
   m_titleformat_line3.release();
 
-  // Compile format strings (compile_safe_ex returns false on error but populates with fallback)
-  compiler->compile_safe_ex(m_titleformat_line1, line1_fmt.c_str());
-  compiler->compile_safe_ex(m_titleformat_line2, line2_fmt.c_str());
+  // Compile format strings (compile_safe_ex returns false on error but populates with fallback).
+  // Unquoted < and > become dim/highlight markers, as in Modern Playlist.
+  compiler->compile_safe_ex(m_titleformat_line1, display_pattern(line1_fmt.c_str()).c_str());
+  compiler->compile_safe_ex(m_titleformat_line2, display_pattern(line2_fmt.c_str()).c_str());
   if (line3_fmt.get_length() > 0)
-    compiler->compile_safe_ex(m_titleformat_line3, line3_fmt.c_str());
+    compiler->compile_safe_ex(m_titleformat_line3, display_pattern(line3_fmt.c_str()).c_str());
 
   // Detect dynamic fields (%playback_time*%, %bitrate*%) so on_playback_time_changed
   // and on_dynamic_info_changed know whether to re-evaluate dynamically.
@@ -9271,6 +9404,44 @@ private:
   t_int64 m_max_bitrate;
 };
 
+// Dynamic fields padded for display, see dynamic_field_padding_hook
+const char* const k_padded_fields[] = {
+    "bitrate", "bitrate_dynamic", "bitrate_peak",
+    "playback_time", "playback_time_remaining",
+    "playback_time_seconds", "playback_time_remaining_seconds"};
+constexpr size_t k_padded_field_count = sizeof(k_padded_fields) / sizeof(k_padded_fields[0]);
+
+// Titleformat hook that returns pre-evaluated dynamic field values left-padded with
+// figure spaces (U+2007, digit width) to a stable digit count, so text after a field
+// such as %bitrate% does not shift when the value changes width (e.g. 999 -> 1000).
+// Fields with an empty value fall through to normal evaluation.
+class dynamic_field_padding_hook : public titleformat_hook {
+public:
+  explicit dynamic_field_padding_hook(const pfc::string8* values) : m_values(values) {}
+
+  bool process_field(titleformat_text_out* p_out, const char* p_name,
+                     t_size p_name_length, bool& p_found_flag) override {
+    for (size_t i = 0; i < k_padded_field_count; ++i) {
+      if (pfc::stricmp_ascii_ex(p_name, p_name_length, k_padded_fields[i], SIZE_MAX) == 0) {
+        if (m_values[i].is_empty()) break;
+        p_out->write(titleformat_inputtypes::meta, m_values[i].c_str());
+        p_found_flag = true;
+        return true;
+      }
+    }
+    p_found_flag = false;
+    return false;
+  }
+
+  bool process_function(titleformat_text_out*, const char*, t_size,
+                        titleformat_hook_function_params*, bool&) override {
+    return false;
+  }
+
+private:
+  const pfc::string8* m_values;
+};
+
 } // namespace
 
 void ControlPanelCore::evaluate_title_formats() {
@@ -9298,9 +9469,57 @@ void ControlPanelCore::evaluate_title_formats() {
     }
   }
 
+  t_int64 nominal_bitrate = 0;
+  if (m_lines_have_dynamic_time) {
+    metadb_info_container::ptr info_ref = track->get_info_ref();
+    if (info_ref.is_valid()) {
+      nominal_bitrate = info_ref->info().info_get_bitrate();
+    }
+  }
+
+  // Pad live dynamic fields to a stable width: bitrate to the widest value seen for
+  // this track (at least the nominal bitrate), playback time to the track length.
+  pfc::string8 padded_values[k_padded_field_count];
+  dynamic_field_padding_hook padding_hook(padded_values);
+  titleformat_hook* display_hook = nullptr;
+  if (m_lines_have_dynamic_time && use_playback) {
+    static titleformat_object::ptr s_field_scripts[k_padded_field_count];
+    const double length = m_state.track_length;
+    for (size_t i = 0; i < k_padded_field_count; ++i) {
+      if (!s_field_scripts[i].is_valid()) {
+        pfc::string8 script;
+        script << "%" << k_padded_fields[i] << "%";
+        titleformat_compiler::get()->compile_safe(s_field_scripts[i], script);
+      }
+      pfc::string8 value;
+      pc->playback_format_title(nullptr, value, s_field_scripts[i], nullptr,
+                                playback_control::display_level_all);
+      const bool is_time = (i >= 3 && i <= 4);
+      if (value.is_empty() ||
+          strspn(value.c_str(), is_time ? "0123456789:" : "0123456789") != value.length()) {
+        continue;  // Not a plain number (e.g. "?"): leave to normal evaluation
+      }
+      size_t width = value.length();
+      if (i <= 2) {
+        size_t nominal_digits = nominal_bitrate > 0 ? std::to_string(nominal_bitrate).length() : 0;
+        m_dynamic_bitrate_digits = static_cast<int>(
+            std::max({static_cast<size_t>(m_dynamic_bitrate_digits), width, nominal_digits}));
+        width = static_cast<size_t>(m_dynamic_bitrate_digits);
+      } else if (length > 0.0) {
+        width = is_time ? format_time(length).length()
+                        : std::to_string(static_cast<t_int64>(length)).length();
+      }
+      for (size_t pad = value.length(); pad < width; ++pad) {
+        padded_values[i] << "\xE2\x80\x87";  // U+2007 FIGURE SPACE
+      }
+      padded_values[i] << value;
+    }
+    display_hook = &padding_hook;
+  }
+
   if (m_titleformat_line1.is_valid()) {
     if (use_playback) {
-      pc->playback_format_title(nullptr, m_formatted_line1,
+      pc->playback_format_title(display_hook, m_formatted_line1,
                                 m_titleformat_line1, nullptr,
                                 playback_control::display_level_all);
     } else {
@@ -9313,7 +9532,7 @@ void ControlPanelCore::evaluate_title_formats() {
 
   if (m_titleformat_line2.is_valid()) {
     if (use_playback) {
-      pc->playback_format_title(nullptr, m_formatted_line2,
+      pc->playback_format_title(display_hook, m_formatted_line2,
                                 m_titleformat_line2, nullptr,
                                 playback_control::display_level_all);
     } else {
@@ -9326,7 +9545,7 @@ void ControlPanelCore::evaluate_title_formats() {
 
   if (m_titleformat_line3.is_valid()) {
     if (use_playback) {
-      pc->playback_format_title(nullptr, m_formatted_line3,
+      pc->playback_format_title(display_hook, m_formatted_line3,
                                 m_titleformat_line3, nullptr,
                                 playback_control::display_level_all);
     } else {
@@ -9366,11 +9585,6 @@ void ControlPanelCore::evaluate_title_formats() {
   // bitrate) so update_layout() reserves a constant width while draw_track_info() renders
   // the live m_formatted_line* values.
   if (m_lines_have_dynamic_time) {
-    t_int64 nominal_bitrate = 0;
-    metadb_info_container::ptr info_ref = track->get_info_ref();
-    if (info_ref.is_valid()) {
-      nominal_bitrate = info_ref->info().info_get_bitrate();
-    }
     layout_width_titleformat_hook hook(nominal_bitrate);
 
     if (m_titleformat_line1.is_valid()) {
